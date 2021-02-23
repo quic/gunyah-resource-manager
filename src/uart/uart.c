@@ -21,7 +21,7 @@ rm_error_t
 register_uart(void)
 {
 	const char *dev	   = "/dev/console";
-	char *	    banner = "[RM]";
+	char *	    banner = "[RM] ";
 
 	rm_error_t e = RM_OK;
 

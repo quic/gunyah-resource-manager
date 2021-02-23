@@ -142,8 +142,7 @@ main(int argc, char *argv[])
 	rm_err = register_exit();
 	assert(rm_err == RM_OK);
 
-	err = platform_uart_create_me();
-	assert(err == OK);
+	platform_uart_setup(env_data);
 
 	err = platform_uart_map(env_data->addrspace_capid);
 	assert(err == OK);
@@ -289,4 +288,20 @@ rm_get_hlos_dt_base(void)
 {
 	assert(priv_env_data != NULL);
 	return priv_env_data->hlos_dt_base;
+}
+
+cap_id_t
+rm_get_restricted_hwirq(virq_t irq, vmid_t vmid)
+{
+	(void)irq;
+	(void)vmid;
+
+	return CSPACE_CAP_INVALID;
+}
+
+cap_id_t
+rm_get_uart_me(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->uart_me_capid;
 }

@@ -17,11 +17,13 @@
 
 #include "uart_qemu.h"
 
+static vmaddr_t uart_address;
+
 void
 uart_putc(const char c)
 {
-	volatile uint32_t *tfr = (uint32_t *)(UART_BASE + UART_TFR);
-	volatile uint32_t *dr  = (uint32_t *)(UART_BASE + UART_DR);
+	volatile uint32_t *tfr = (uint32_t *)(uart_address + UART_TFR);
+	volatile uint32_t *dr  = (uint32_t *)(uart_address + UART_DR);
 
 	while ((*tfr & ((uint32_t)1U << 5)) != 0U)
 		;
@@ -49,27 +51,10 @@ uart_write(const char *out, size_t size)
 	}
 }
 
-static cap_id_t uart_me = CSPACE_CAP_INVALID;
-
-error_t
-platform_uart_create_me(void)
+void
+platform_uart_setup(boot_env_data_t *env_data)
 {
-	error_t ret = OK;
-
-	if (uart_me == CSPACE_CAP_INVALID) {
-		cap_id_result_t res = memextent_create(UART_BASE, UART_SIZE,
-						       PGTABLE_ACCESS_RW,
-						       MEMEXTENT_MEMTYPE_DEVICE,
-						       rm_get_device_me());
-		if (res.e != OK) {
-			printf("UART memextent creation failed\n");
-			ret = res.e;
-		} else {
-			uart_me = res.r;
-		}
-	}
-
-	return ret;
+	uart_address = env_data->uart_address;
 }
 
 error_t
@@ -77,9 +62,7 @@ platform_uart_map(cap_id_t addrspace_cap)
 {
 	error_t ret = OK;
 
-	assert(uart_me != CSPACE_CAP_INVALID);
-
-	ret = memextent_map(uart_me, addrspace_cap, UART_BASE,
+	ret = memextent_map(rm_get_uart_me(), addrspace_cap, uart_address,
 			    PGTABLE_ACCESS_RW, MEMEXTENT_MEMTYPE_DEVICE);
 	if (ret != OK) {
 		printf("UART mapping failed\n");

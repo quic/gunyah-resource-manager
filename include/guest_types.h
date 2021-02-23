@@ -1,7 +1,6 @@
 // Automatically generated. Do not modify.
 //
 // © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
-//
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include <stdalign.h>
@@ -74,6 +73,8 @@ struct boot_env_data {
 	size_t		      hlos_vm_size;
 	vmaddr_t	      hlos_dt_base;
 	vmaddr_t	      hlos_ramfs_base;
+	cap_id_t	      uart_me_capid;
+	paddr_t		      uart_address;
 	cap_id_t	      partition_capid;
 	cap_id_t	      cspace_capid;
 	cap_id_t	      vcpu_capid;
