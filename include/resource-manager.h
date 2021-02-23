@@ -28,3 +28,6 @@ rm_get_hlos_dt_base(void);
 
 cap_id_t
 rm_get_restricted_hwirq(virq_t irq, vmid_t vmid);
+
+cap_id_t
+rm_get_uart_me(void);

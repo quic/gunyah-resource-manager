@@ -8,8 +8,8 @@ uart_putc(const char c);
 void
 uart_write(const char *out, size_t size);
 
-error_t
-platform_uart_create_me(void);
+void
+platform_uart_setup(boot_env_data_t *env_data);
 
 error_t
 platform_uart_map(cap_id_t addrspace_cap);
