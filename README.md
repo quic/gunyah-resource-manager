@@ -13,3 +13,9 @@ The Resource Manager is built as a bare metal VM with musl libc and requires the
 ## Limitations
 
 This release of the Resource Manager is limited to setting up a primary VM. Future releases will provide the ability to load and manage secondary VMs.
+
+## License
+
+SPDX-License-Identifier: BSD-3-Clause
+
+See [LICENSE](LICENSE) for the full license text.
