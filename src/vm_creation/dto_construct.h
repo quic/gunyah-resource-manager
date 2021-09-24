@@ -1,4 +1,6 @@
 // © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+//
+// SPDX-License-Identifier: BSD-3-Clause
 
 error_t
 dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle);
