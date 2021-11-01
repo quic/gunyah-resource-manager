@@ -175,7 +175,9 @@ struct vm_config_parser_data {
 	size_t	     affinity_map_cnt;
 	cpu_index_t *affinity_map;
 
-	size_t vcpu_cnt;
+	count_t vcpu_cnt;
+	bool	enable_vpm_psci;
+	uint8_t enable_vpm_psci_padding[3];
 
 	vector_t *rm_rpcs;
 	vector_t *doorbells;

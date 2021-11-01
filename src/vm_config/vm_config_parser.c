@@ -980,7 +980,8 @@ parse_vcpus(void *data, void *fdt, int node_ofs, ctx_t *ctx)
 	// create secondary vcpus only
 	int sub_node_ofs = 0;
 
-	size_t cpu_count = 0;
+	count_t cpu_count	 = 0;
+	count_t idle_state_count = 0;
 	fdt_for_each_subnode (sub_node_ofs, fdt, config_ofs) {
 		const char *device_type = (const char *)fdt_getprop(
 			fdt, sub_node_ofs, "device_type", &lenp);
@@ -988,12 +989,33 @@ parse_vcpus(void *data, void *fdt, int node_ofs, ctx_t *ctx)
 		if ((device_type != NULL) &&
 		    (strcmp(device_type, "cpu") == 0)) {
 			cpu_count++;
+
+			// Check if the cpu has idle states
+			const fdt32_t *idle_states =
+				(const fdt32_t *)fdt_getprop(fdt, sub_node_ofs,
+							     "cpu-idle-states",
+							     &lenp);
+			if (idle_states != NULL) {
+				idle_state_count++;
+			}
 		}
 	}
 
-	vd->vcpu_cnt = cpu_count;
+	if (cpu_count != vd->affinity_map_cnt) {
+		printf("parse_vcpus: cpu and affinity count don't match\n");
+		ret = RET_ERROR;
+		goto out;
+	}
 
-	// FIXME: should check vcpu count and affinity count?
+	if (cpu_count == idle_state_count) {
+		vd->enable_vpm_psci = true;
+	} else if (idle_state_count != 0) {
+		printf("parse_vcpus: invalid idle states count\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	vd->vcpu_cnt = cpu_count;
 
 out:
 	return ret;

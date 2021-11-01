@@ -1267,108 +1267,125 @@ out:
 error_t
 handle_vcpu(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 {
-	error_t ret = OK;
+	error_t	  ret  = OK;
+	cap_id_t *caps = NULL;
 
-	// Create the PSCI group
-
-	gunyah_hyp_partition_create_vpm_group_result_t vg;
-	vg = gunyah_hyp_partition_create_vpm_group(rm_get_rm_partition(),
-						   rm_get_rm_cspace());
-	if (vg.error != OK) {
-		ret = vg.error;
-		goto out;
+	if (data->vcpu_cnt > PLATFORM_MAX_CORES) {
+		printf("Error: invalid vcpu cnt(%u) vs max cores(%u)\n",
+		       data->vcpu_cnt, PLATFORM_MAX_CORES);
+		ret = ERROR_DENIED;
+		goto err_vcpu_cnt;
 	}
 
-	ret = gunyah_hyp_object_activate(vg.new_cap);
-	if (ret != OK) {
-		goto out;
-	}
-	vmcfg->vpm_group = vg.new_cap;
-
-	assert(vmcfg->vm != NULL);
-
-	// For SVM's vpm group we must reserve and bind a VIRQ to HLOS' vic
-	if (vmcfg->vm->vmid == VMID_SVM) {
-		vmid_t peer = VMID_HLOS;
-
-		irq_manager_get_free_virt_virq_ret_t free_irq_ret;
-		free_irq_ret = irq_manager_get_free_virt_virq(peer);
-		if (free_irq_ret.err != RM_OK) {
-			ret = ERROR_DENIED;
-			goto out;
+	if (data->enable_vpm_psci) {
+		// Create the PSCI group
+		gunyah_hyp_partition_create_vpm_group_result_t vg;
+		vg = gunyah_hyp_partition_create_vpm_group(
+			rm_get_rm_partition(), rm_get_rm_cspace());
+		if (vg.error != OK) {
+			ret = vg.error;
+			goto err_create_vpm;
 		}
 
-		virq_t vpm_virq = free_irq_ret.virq;
+		vmcfg->vpm_group = vg.new_cap;
 
-		rm_error_t rm_err =
-			irq_manager_reserve_virq(peer, vpm_virq, true);
-		if (rm_err != RM_OK) {
-			ret = ERROR_DENIED;
-			goto out;
-		}
-
-		ret = vm_config_add_vpm_group(vmcfg, peer, vmcfg->vpm_group,
-					      vpm_virq, 0U, NULL);
+		ret = gunyah_hyp_object_activate(vmcfg->vpm_group);
 		if (ret != OK) {
-			irq_manager_return_virq(peer, vpm_virq);
-			goto out;
+			goto err_active_vpm;
 		}
+
+		assert(vmcfg->vm != NULL);
+
+		// For SVM's vpm group we must reserve and bind a VIRQ to HLOS'
+		// vic
+		if (vmcfg->vm->vmid == VMID_SVM) {
+			vmid_t peer = VMID_HLOS;
+
+			irq_manager_get_free_virt_virq_ret_t free_irq_ret;
+			free_irq_ret = irq_manager_get_free_virt_virq(peer);
+			if (free_irq_ret.err != RM_OK) {
+				ret = ERROR_DENIED;
+				goto err_alloc_virq;
+			}
+
+			virq_t vpm_virq = free_irq_ret.virq;
+
+			rm_error_t rm_err =
+				irq_manager_reserve_virq(peer, vpm_virq, true);
+			if (rm_err != RM_OK) {
+				ret = ERROR_DENIED;
+				goto err_alloc_virq;
+			}
+
+			ret = vm_config_add_vpm_group(vmcfg, peer,
+						      vmcfg->vpm_group,
+						      vpm_virq, 0U, NULL);
+			if (ret != OK) {
+				irq_manager_return_virq(peer, vpm_virq);
+				goto err_alloc_virq;
+			}
+		}
+	} else {
+		vmcfg->vpm_group = CSPACE_CAP_INVALID;
 	}
 
-	cap_id_t caps[PLATFORM_MAX_CORES];
+	caps = calloc(data->vcpu_cnt, sizeof(caps[0]));
+	if (caps == NULL) {
+		ret = ERROR_NOMEM;
+		goto err_alloc_caps;
+	}
 
-	for (cpu_index_t i = 0U; i < PLATFORM_MAX_CORES; i++) {
+	for (cpu_index_t i = 0U; i < data->vcpu_cnt; i++) {
 		caps[i] = CSPACE_CAP_INVALID;
 	}
 
-	for (cpu_index_t i = 0; i < data->vcpu_cnt; i++) {
+	cpu_index_t idx;
+	for (idx = 0; idx < data->vcpu_cnt; idx++) {
 		gunyah_hyp_partition_create_thread_result_t vcpu;
 		vcpu = gunyah_hyp_partition_create_thread(vmcfg->partition,
 							  rm_get_rm_cspace());
 		if (vcpu.error != OK) {
-			goto out;
+			ret = vcpu.error;
+			goto err_create_thread;
 		}
 
-		caps[i] = vcpu.new_cap;
+		caps[idx] = vcpu.new_cap;
 
-		cpu_index_t affinity;
-		if (i < data->affinity_map_cnt) {
-			affinity = data->affinity_map[i];
-		} else {
-			affinity = i;
-		}
+		assert(idx < data->affinity_map_cnt);
+
+		cpu_index_t affinity = data->affinity_map[idx];
 
 		ret = gunyah_hyp_vcpu_set_affinity(vcpu.new_cap, affinity);
 		if (ret != OK) {
-			goto out;
+			goto err_create_thread;
 		}
 
-		// FIXME: should we check root cpu index is in the range
-		// of defined cpus?
-		bool boot_vcpu = (i == ROOT_VCPU_INDEX ? true : false);
+		bool boot_vcpu = (idx == ROOT_VCPU_INDEX ? true : false);
 		vm_config_add_vcpu(vmcfg, vcpu.new_cap, affinity, boot_vcpu);
 
 		ret = gunyah_hyp_cspace_attach_thread(vmcfg->cspace,
 						      vcpu.new_cap);
 		if (ret != OK) {
-			goto out;
+			goto err_create_thread;
 		}
 
 		ret = gunyah_hyp_addrspace_attach_thread(vmcfg->addrspace,
 							 vcpu.new_cap);
 		if (ret != OK) {
-			goto out;
+			goto err_create_thread;
 		}
 
-		ret = gunyah_hyp_vpm_group_attach_vcpu(vmcfg->vpm_group,
-						       vcpu.new_cap, i);
-		if (ret != OK) {
-			goto out;
+		if (vmcfg->vpm_group != CSPACE_CAP_INVALID) {
+			ret = gunyah_hyp_vpm_group_attach_vcpu(
+				vmcfg->vpm_group, vcpu.new_cap, idx);
+			if (ret != OK) {
+				goto err_create_thread;
+			}
 		}
 
-		ret = gunyah_hyp_vic_attach_vcpu(vmcfg->vic, vcpu.new_cap, i);
+		ret = gunyah_hyp_vic_attach_vcpu(vmcfg->vic, vcpu.new_cap, idx);
 		if (ret != OK) {
-			goto out;
+			goto err_create_thread;
 		}
 	}
 
@@ -1379,11 +1396,31 @@ handle_vcpu(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	for (index_t i = 0; i < data->vcpu_cnt; i++) {
 		ret = gunyah_hyp_object_activate(caps[i]);
 		if (ret != OK) {
-			goto out;
+			goto err_create_thread;
 		}
 	}
 
-out:
+err_create_thread:
+	if (ret != OK) {
+		do {
+			(void)gunyah_hyp_cspace_delete_cap_from(
+				rm_get_rm_cspace(), caps[idx]);
+			idx--;
+		} while (idx != 0);
+	}
+
+err_alloc_caps:
+err_alloc_virq:
+err_active_vpm:
+	if ((ret != OK) && (vmcfg->vpm_group != CSPACE_CAP_INVALID)) {
+		(void)gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+							vmcfg->vpm_group);
+		vmcfg->vpm_group = CSPACE_CAP_INVALID;
+	}
+err_create_vpm:
+	free(caps);
+err_vcpu_cnt:
+
 	return ret;
 }
 
