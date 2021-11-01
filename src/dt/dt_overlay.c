@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <dt_overlay.h>
+#include <util.h>
 #include <utils/list.h>
 
 #pragma clang diagnostic push
@@ -183,7 +184,18 @@ dto_init(void *external_memory, size_t memory_size)
 
 		dto->use_external_memory = false;
 	} else {
-		dto->fdt    = external_memory;
+		dto->fdt = external_memory;
+
+		if (memory_size > DTBO_MAX_SIZE) {
+			e = ERROR_ARGUMENT_SIZE;
+			goto err1;
+		}
+
+		if (util_add_overflows((uintptr_t)external_memory,
+				       memory_size)) {
+			e = ERROR_ADDR_OVERFLOW;
+			goto err1;
+		}
 		dto->fdt_sz = memory_size;
 
 		dto->use_external_memory = true;

@@ -19,6 +19,7 @@
 #include <irq_message.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
+#include <util.h>
 #include <utils/dict.h>
 #include <utils/list.h>
 #include <utils/vector.h>
@@ -989,6 +990,13 @@ irq_manager_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		if ((req->flags & 1U) != 0U) {
 			rm_irq_notify_lent_req_t *lent_req =
 				(rm_irq_notify_lent_req_t *)buf;
+			if (len < sizeof(*lent_req)) {
+				printf("Error: invalid msg, len(%zu) < %zu\n",
+				       len, sizeof(*lent_req));
+				ret = false;
+				break;
+			}
+
 			size_t notify_vmids_size =
 				lent_req->notify_vmid_entries *
 				sizeof(lent_req->notify_vmids[0]);
@@ -1023,9 +1031,30 @@ irq_manager_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	case VM_IRQ_UNMAP: {
 		rm_irq_unmap_req_t *req = (rm_irq_unmap_req_t *)buf;
 
-		if (len != sizeof(*req)) {
+		if (len < sizeof(*req)) {
 			printf("Error: invalid msg, len(%zu) != %zu\n", len,
 			       sizeof(*req));
+			ret = false;
+			break;
+		}
+		if (util_mult_integer_overflows(req->virq_entry_cnt,
+						sizeof(req->virq_nums[0]))) {
+			printf("Error: invalid msg, virq_entry_cnt = %zu, virq_nums = %u\n",
+			       req->virq_entry_cnt, req->virq_nums[0]);
+			ret = false;
+			break;
+		}
+		size_t unmap_virqs_size =
+			req->virq_entry_cnt * sizeof(req->virq_nums[0]);
+
+		if (util_add_overflows(sizeof(*req), unmap_virqs_size)) {
+			printf("Error: invalid msg, len overflows. req size = %zu, unmap_virqs_size = %zu\n",
+			       sizeof(*req), unmap_virqs_size);
+		}
+
+		if (len != (sizeof(*req) + unmap_virqs_size)) {
+			printf("Error: invalid msg, len(%zu) != %zu\n", len,
+			       sizeof(*req) + unmap_virqs_size);
 			ret = false;
 			break;
 		}

@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#define MAX_LIST_ENTRIES 512
+
 typedef uint32_t      mem_handle_t;
 typedef struct vector vector_t;
 

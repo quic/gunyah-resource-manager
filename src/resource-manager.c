@@ -185,10 +185,22 @@ main(int argc, char *argv[])
 	}
 
 	// FIXME: 1:1 mapping for now
-	hlos_vm->mem_base   = env_data->hlos_vm_base;
-	hlos_vm->mem_size   = env_data->hlos_vm_size;
-	hlos_vm->ipa_base   = env_data->hlos_vm_base;
-	hlos_vm->dtb_offset = env_data->hlos_dt_base - env_data->hlos_vm_base;
+	hlos_vm->mem_base = env_data->hlos_vm_base;
+	hlos_vm->mem_size = env_data->hlos_vm_size;
+	hlos_vm->ipa_base = env_data->hlos_vm_base;
+
+	hlos_vm->dtb_region_offset =
+		env_data->hlos_dt_base - env_data->hlos_vm_base;
+	if (env_data->hlos_ramfs_base > env_data->hlos_dt_base) {
+		hlos_vm->dtb_region_size =
+			env_data->hlos_ramfs_base - env_data->hlos_dt_base;
+	} else if (env_data->entry_hlos > env_data->hlos_dt_base) {
+		hlos_vm->dtb_region_size =
+			env_data->entry_hlos - env_data->hlos_dt_base;
+	} else {
+		printf("Error: cannot determine hlos_vm->dtb_region_size\n");
+		goto out;
+	}
 	hlos_vm->ramfs_offset =
 		env_data->hlos_ramfs_base - env_data->hlos_vm_base;
 

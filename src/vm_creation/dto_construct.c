@@ -329,9 +329,16 @@ dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
 		goto err_node_begin;
 	}
 
-	char *c[] = { "qcom,gunyah-shm-doorbell" };
+	const count_t compatible_count = 1;
 
-	e = add_compatibles(node, c, util_array_size(c), dto);
+	char *compatible = NULL;
+	if (cfg->is_plain_shm) {
+		compatible = "qcom,shared-memory";
+	} else {
+		compatible = "qcom,gunyah-shm-doorbell";
+	}
+
+	e = add_compatibles(node, &compatible, compatible_count, dto);
 	if (e != OK) {
 		goto out;
 	}

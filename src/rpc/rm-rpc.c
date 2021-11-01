@@ -181,8 +181,8 @@ start_xmit(vmid_t vm_id, uint8_t msg_type, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	size_t num_fragments = (len > 0) ? ((len + RM_RPC_MESSAGE_SIZE - 1) /
-					    RM_RPC_MESSAGE_SIZE) -
+	size_t num_fragments = (len > 0) ? ((len + RM_RPC_MAX_CONTENT - 1) /
+					    RM_RPC_MAX_CONTENT) -
 						   1
 					 : 0;
 	assert(num_fragments <= RM_RPC_MAX_FRAGMENTS);
@@ -208,16 +208,23 @@ static rm_error_t
 do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 {
 	rm_error_t err;
+	uint8_t *  recv_buf    = transport_buf;
 	size_t	   len	       = RM_RPC_MESSAGE_SIZE;
 	bool	   do_callback = false;
 
-	err = rm_rpc_recv_packet(rx_data, transport_buf, &len);
+	err = rm_rpc_recv_packet(rx_data, recv_buf, &len);
 	if (err != RM_OK) {
 		goto do_recv_return;
 	}
 
+	if (len < RM_RPC_HEADER_SIZE) {
+		// Packet too small, drop it
+		err = RM_OK;
+		goto do_recv_return;
+	}
+
 	rm_rpc_header_t hdr;
-	err = read_rpc_header(transport_buf, &hdr);
+	err = read_rpc_header(recv_buf, &hdr);
 	if (err != RM_OK) {
 		// Invalid header, drop packet
 		err = RM_OK;
@@ -228,9 +235,9 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 	uint16_t seq_num       = hdr.seq_num;
 	uint8_t	 num_fragments = hdr.num_fragments;
 	uint8_t	 msg_type      = hdr.msg_type;
-	size_t	 offset	       = hdr.header_words * 4U;
 
-	// printf("%u %u %u %u\n", msg_id, seq_num, num_fragments, msg_type);
+	recv_buf += RM_RPC_HEADER_SIZE;
+	len -= RM_RPC_HEADER_SIZE;
 
 	if (msg_type != RM_RPC_MSG_TYPE_CONTINUED) {
 		if (rx_data->partial) {
@@ -242,9 +249,10 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 		if (len > 0) {
 			size_t alloc_size =
 				(num_fragments + 1) * RM_RPC_MAX_CONTENT;
-			uint8_t *buf = malloc(alloc_size);
+			assert(len <= alloc_size);
 
-			if (buf == NULL) {
+			uint8_t *data_buf = malloc(alloc_size);
+			if (data_buf == NULL) {
 				printf("rm-rpc: Failed to allocate recv buffer "
 				       "for VM %lx, message ID %lx\n",
 				       (unsigned long)vm_id,
@@ -253,7 +261,7 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 				goto do_recv_return;
 			}
 
-			memcpy(buf, transport_buf + offset, len - offset);
+			memcpy(data_buf, recv_buf, len);
 
 			if (num_fragments == 0) {
 				do_callback = true;
@@ -263,14 +271,13 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 				rx_data->partial       = true;
 			}
 
-			rx_data->buf	    = buf;
-			rx_data->len	    = len - offset;
+			rx_data->buf	    = data_buf;
+			rx_data->len	    = len;
 			rx_data->alloc_size = alloc_size;
 		} else {
 			rx_data->buf	    = NULL;
 			rx_data->len	    = 0;
 			rx_data->alloc_size = 0;
-			do_callback	    = true;
 		}
 
 		rx_data->msg_id	  = msg_id;
@@ -292,10 +299,12 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 			goto do_recv_return;
 		}
 
-		uint8_t *buf = rx_data->buf + rx_data->len;
-		memcpy(buf, transport_buf + offset, len - offset);
+		assert((rx_data->len + len) <= rx_data->alloc_size);
+
+		uint8_t *data_buf = rx_data->buf + rx_data->len;
+		memcpy(data_buf, recv_buf, len);
 		rx_data->rem_fragments--;
-		rx_data->len += len - offset;
+		rx_data->len += len;
 
 		if (rx_data->rem_fragments == 0) {
 			do_callback	 = true;
