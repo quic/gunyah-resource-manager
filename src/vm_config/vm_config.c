@@ -1681,7 +1681,7 @@ vm_config_get_rm_rpc_msg_queue_info(vmid_t self, vmid_t peer_id)
 		};
 	} else {
 		ret = (vm_config_get_rm_rpc_msg_queue_info_ret){
-			.err = RM_ERROR_INVALID,
+			.err = RM_ERROR_NORESOURCE,
 		};
 	}
 

@@ -238,7 +238,7 @@ vm_console_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			handle_open(client_id, seq_num, req->target);
 		} else {
 			rm_standard_reply(client_id, msg_id, seq_num,
-					  RM_ERROR_INVALID);
+					  RM_ERROR_MSG_INVALID);
 		}
 
 		break;
@@ -250,7 +250,7 @@ vm_console_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			handle_close(client_id, seq_num, req->target);
 		} else {
 			rm_standard_reply(client_id, msg_id, seq_num,
-					  RM_ERROR_INVALID);
+					  RM_ERROR_MSG_INVALID);
 		}
 
 		break;
@@ -264,7 +264,7 @@ vm_console_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 				     req->num_bytes, content);
 		} else {
 			rm_standard_reply(client_id, msg_id, seq_num,
-					  RM_ERROR_INVALID);
+					  RM_ERROR_MSG_INVALID);
 		}
 
 		break;
@@ -276,7 +276,7 @@ vm_console_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			handle_flush(client_id, seq_num, req->target);
 		} else {
 			rm_standard_reply(client_id, msg_id, seq_num,
-					  RM_ERROR_INVALID);
+					  RM_ERROR_MSG_INVALID);
 		}
 
 		break;

@@ -158,7 +158,7 @@ vm_mgnt_handle_allocate(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		uint8_t *buf8 = (uint8_t *)buf;
 		vmid	      = buf8[0] | (vmid_t)((vmid_t)buf8[1] << 8);
 	} else {
-		ret = RM_ERROR_INVALID;
+		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -228,7 +228,7 @@ vm_mgnt_handle_start(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	}
 
 	if (len != 4) {
-		ret = RM_ERROR_INVALID;
+		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -295,22 +295,14 @@ vm_mgnt_handle_get_state(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		uint8_t *buf8 = (uint8_t *)buf;
 		vmid	      = buf8[0] | (vmid_t)((vmid_t)buf8[1] << 8);
 
-		// Allow HLOS to lookup secondary VMs, or VM to get its own
-		// state.
-		// TODO: lookup the VM and check if vm->owner == client_id
-		// instead of hard coding VMID_HLOS.
-		if ((client_id != VMID_HLOS) && (vmid != client_id)) {
-			ret = RM_ERROR_INVALID;
-			goto out;
-		}
-		if (vmid != VMID_SVM) {
-			ret = RM_ERROR_ARGUMENT_INVALID;
-			goto out;
-		}
-
 		vm_t *vm = vm_lookup(vmid);
 		if (vm == NULL) {
 			ret = RM_ERROR_NORESOURCE;
+			goto out;
+		}
+
+		if ((vmid != client_id) && (vm->owner != client_id)) {
+			ret = RM_ERROR_DENIED;
 			goto out;
 		}
 
@@ -321,7 +313,7 @@ vm_mgnt_handle_get_state(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		rm_reply(client_id, msg_id, seq_num, &status_ret, 4);
 		ret = RM_OK;
 	} else {
-		ret = RM_ERROR_INVALID;
+		ret = RM_ERROR_MSG_INVALID;
 	}
 
 out:
@@ -415,7 +407,7 @@ vm_mgnt_handle_set_state(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		rm_standard_reply(client_id, msg_id, seq_num, RM_OK);
 		ret = RM_OK;
 	} else {
-		ret = RM_ERROR_INVALID;
+		ret = RM_ERROR_MSG_INVALID;
 	}
 
 out:
@@ -431,7 +423,7 @@ vm_mgnt_handle_get_type(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	rm_error_t ret;
 
 	if (len != 0) {
-		ret = RM_ERROR_INVALID;
+		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
