@@ -1232,7 +1232,7 @@ handle_notify(vmid_t client_id, uint16_t seq_num, virq_handle_t handle,
 
 		if (get_ret.info->is_borrowed) {
 			// Can't notify release when the IRQ is still borrowed
-			notify_err = RM_ERROR_DENIED;
+			notify_err = RM_ERROR_IRQ_INUSE;
 			goto out;
 		}
 
@@ -1252,7 +1252,7 @@ handle_notify(vmid_t client_id, uint16_t seq_num, virq_handle_t handle,
 
 		if (!get_ret.info->is_borrowed) {
 			// IRQ not currently accepted
-			notify_err = RM_ERROR_INVALID;
+			notify_err = RM_ERROR_IRQ_RELEASED;
 			goto out;
 		}
 

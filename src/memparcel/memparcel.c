@@ -122,7 +122,7 @@ memparcel_read_lists(uint8_t *buf, size_t len, uint32_t *acl_entries,
 	curr += (*acl_entries * sizeof(acl_entry_t)) + 4U;
 
 	if ((curr + 4U) > (start + len)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -138,7 +138,7 @@ memparcel_read_lists(uint8_t *buf, size_t len, uint32_t *acl_entries,
 	}
 
 	if ((curr + 4U) > (start + len)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -146,7 +146,7 @@ memparcel_read_lists(uint8_t *buf, size_t len, uint32_t *acl_entries,
 	*attr_list    = (attr_entry_t *)(curr + 4U);
 	curr += (*attr_entries * sizeof(attr_entry_t)) + 4U;
 
-	err = (curr == (start + len)) ? RM_OK : RM_ERROR_INVALID;
+	err = (curr == (start + len)) ? RM_OK : RM_ERROR_MSG_INVALID;
 out:
 	return err;
 }
@@ -482,7 +482,7 @@ memparcel_construct(vmid_t owner_vmid, uint32_t acl_entries,
 		cap_ret = memextent_create(sgl[i].ipa, sgl[i].size, access,
 					   me_memtype, parent);
 		if (cap_ret.e != OK) {
-			err = RM_ERROR_INVALID;
+			err = RM_ERROR_MEM_INUSE;
 			goto out;
 		}
 
@@ -593,7 +593,7 @@ memparcel_create(vmid_t src_vmid, vmid_t owner_vmid, uint32_t msg_id,
 	}
 
 	if (len < sizeof(memparcel_create_req_t)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -667,7 +667,7 @@ memparcel_accept(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	uint16_t		     sgl_entries = 0U;
 
 	if (len < sizeof(memparcel_accept_req_t)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -812,7 +812,7 @@ memparcel_do_accept(vmid_t vmid, uint32_t acl_entries, uint16_t sgl_entries,
 	cap_id_t addrspace = vm->vm_config->addrspace;
 
 	if (map_vm->vmid == mp->owner_vmid) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_DENIED;
 		goto out;
 	}
 
@@ -985,7 +985,7 @@ memparcel_release(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	rm_error_t err = RM_OK;
 
 	if (len < sizeof(memparcel_release_req_t)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -1010,7 +1010,7 @@ memparcel_release(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	}
 
 	if (vm_info->vmid == mp->owner_vmid) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_DENIED;
 		goto out;
 	}
 
@@ -1172,7 +1172,7 @@ memparcel_reclaim(vmid_t src_vmid, vmid_t owner_vmid, uint16_t seq_num,
 	bool	   hyp_assign = (src_vmid == VMID_HYP);
 
 	if (len < sizeof(memparcel_reclaim_req_t)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -1208,7 +1208,7 @@ memparcel_notify_shared(memparcel_t *mp, vmid_t src_vmid, uint8_t *buf,
 	}
 
 	if (len < sizeof(memparcel_notify_req_t) + 4U) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -1305,7 +1305,8 @@ memparcel_notify_owner(memparcel_t *mp, vmid_t vmid, bool accepted)
 	}
 
 	if (accepted != vm_info->shared) {
-		err = RM_ERROR_INVALID;
+		err = vm_info->shared ? RM_ERROR_MEM_INUSE
+				      : RM_ERROR_MEM_RELEASED;
 		goto out;
 	}
 
@@ -1330,7 +1331,7 @@ memparcel_notify(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	mem_handle_t handle = MEMPARCEL_INVALID_HANDLE;
 
 	if (len < sizeof(memparcel_notify_req_t)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 

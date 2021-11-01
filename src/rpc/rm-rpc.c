@@ -80,7 +80,7 @@ read_rpc_header(uint8_t *buf, rm_rpc_header_t *hdr)
 	if ((hdr->api_version != RM_RPC_API_VERSION) ||
 	    (hdr->header_words != RM_RPC_HEADER_WORDS) ||
 	    (hdr->num_fragments > RM_RPC_MAX_FRAGMENTS)) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 	}
 
 	return err;
@@ -172,7 +172,7 @@ start_xmit(vmid_t vm_id, uint8_t msg_type, uint32_t msg_id, uint16_t seq_num,
 	rm_error_t	  err;
 	rm_rpc_tx_data_t *tx_data = rm_rpc_get_tx_data(vm_id);
 	if (tx_data == NULL) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
@@ -352,7 +352,7 @@ rm_rpc_send_notification(vmid_t vm_id, uint32_t notification_id, void *buf,
 				 notification_id, get_next_seq_num(), buf, len,
 				 alloc_size);
 	} else {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 	}
 
 	return err;
@@ -365,7 +365,7 @@ rm_rpc_reply(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, void *buf,
 	rm_error_t err;
 
 	if (len > RM_RPC_MAX_MSG_SIZE) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_MSG_INVALID;
 		goto rpc_reply_return;
 	}
 

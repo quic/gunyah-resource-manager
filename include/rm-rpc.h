@@ -9,7 +9,7 @@ typedef uint32_t rm_error_t;
 #define RM_ERROR_NOMEM		  ((rm_error_t)0x1U)
 #define RM_ERROR_NORESOURCE	  ((rm_error_t)0x2U)
 #define RM_ERROR_DENIED		  ((rm_error_t)0x3U)
-#define RM_ERROR_INVALID	  ((rm_error_t)0x4U)
+#define RM_ERROR_MSG_INVALID	  ((rm_error_t)0x4U)
 #define RM_ERROR_BUSY		  ((rm_error_t)0x5U)
 #define RM_ERROR_ARGUMENT_INVALID ((rm_error_t)0x6U)
 #define RM_ERROR_HANDLE_INVALID	  ((rm_error_t)0x7U)

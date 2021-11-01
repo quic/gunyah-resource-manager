@@ -27,7 +27,7 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	vmid_t	   vmid;
 
 	if (len != 4) {
-		ret = RM_ERROR_INVALID;
+		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 

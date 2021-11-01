@@ -204,7 +204,7 @@ rm_rpc_send_packet(rm_rpc_tx_data_t *tx, void *buf, size_t len)
 				       offsetof(rm_rpc_transport_t, tx_data));
 
 	if (len > RM_RPC_MESSAGE_SIZE) {
-		rm_err = RM_ERROR_INVALID;
+		rm_err = RM_ERROR_MSG_INVALID;
 		goto send_packet_return;
 	}
 
@@ -245,7 +245,7 @@ rm_rpc_recv_packet(rm_rpc_rx_data_t *rx, void *buf, size_t *len)
 				       offsetof(rm_rpc_transport_t, rx_data));
 
 	if (*len < RM_RPC_MESSAGE_SIZE) {
-		rm_err = RM_ERROR_INVALID;
+		rm_err = RM_ERROR_MSG_INVALID;
 		goto recv_packet_return;
 	}
 
@@ -404,7 +404,7 @@ rm_rpc_server_remove_link(vmid_t client_id)
 	rm_error_t	    err = RM_OK;
 	rm_rpc_transport_t *t	= rm_rpc_get_transport(client_id);
 	if (t == NULL) {
-		err = RM_ERROR_INVALID;
+		err = RM_ERROR_DENIED;
 		goto out;
 	}
 
