@@ -81,9 +81,8 @@ vm_config_add_doorbell(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
 		       const char *generate, bool export_to_dt);
 static void
 vm_config_add_msgqueue(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
-		       bool tx, uint16_t queue_depth, uint16_t msg_size,
-		       virq_t vm_virq, virq_t peer_virq, uint32_t label,
-		       const char *generate, bool export_to_dt);
+		       bool tx, virq_t vm_virq, virq_t peer_virq,
+		       const msg_queue_data_t *data, bool export_to_dt);
 static error_t
 vm_config_add_rm_rpc(vm_config_t *vmcfg, rm_rpc_data_t *data, cap_id_t rx,
 		     cap_id_t tx);
@@ -104,6 +103,11 @@ static error_t
 add_msgqueue(vm_config_t *vmcfg, msg_queue_data_t *data, bool is_sender,
 	     virq_t self_virq, bool alloc_self_virq, virq_t peer_virq,
 	     bool alloc_peer_virq);
+
+static error_t
+handle_compatibles(vdevice_node_t *vdevice, const general_data_t *data);
+static void
+free_compatibles(vdevice_node_t *vdevice);
 
 static error_t
 get_vdev_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node, vector_t *descs)
@@ -518,9 +522,8 @@ out:
 
 void
 vm_config_add_msgqueue(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
-		       bool tx, uint16_t queue_depth, uint16_t msg_size,
-		       virq_t vm_virq, virq_t peer_virq, uint32_t label,
-		       const char *generate, bool export_to_dt)
+		       bool tx, virq_t vm_virq, virq_t peer_virq,
+		       const msg_queue_data_t *data, bool export_to_dt)
 {
 	vm_config_t *tx_cfg = NULL, *rx_cfg = NULL;
 
@@ -538,6 +541,8 @@ vm_config_add_msgqueue(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
 	node->type	   = VDEV_MSG_QUEUE;
 	node->export_to_dt = export_to_dt;
 	node->visible	   = true;
+
+	const char *generate = data->general.generate;
 	if (generate != NULL) {
 		node->generate = strdup(generate);
 		if (node->generate == NULL) {
@@ -547,6 +552,12 @@ vm_config_add_msgqueue(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
 		}
 	} else {
 		node->generate = "/hypervisor/qcom,message-queue";
+	}
+
+	err = handle_compatibles(node, &data->general);
+	if (err != OK) {
+		printf("Failed: save compatible in msgqueue node\n");
+		goto out;
 	}
 
 	struct vdevice_msg_queue *cfg = calloc(1, sizeof(*cfg));
@@ -618,9 +629,9 @@ vm_config_add_msgqueue(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
 	cfg->peer	 = peer;
 	cfg->tx		 = tx;
 	cfg->master_cap	 = rm_cap;
-	cfg->queue_depth = queue_depth;
-	cfg->msg_size	 = msg_size;
-	cfg->label	 = label;
+	cfg->queue_depth = data->queue_depth;
+	cfg->msg_size	 = data->msg_size;
+	cfg->label	 = data->general.label;
 	if (tx) {
 		cfg->vm_cap    = tx_cap;
 		cfg->vm_virq   = tx_virq;
@@ -650,6 +661,7 @@ out:
 		}
 
 		free(node->config);
+		free_compatibles(node);
 		free(node->generate);
 		free(node);
 	}
@@ -922,14 +934,10 @@ vm_config_add_shm(vm_config_t *vmcfg, shm_data_t *data, vdevice_node_t *db,
 		node->generate = "/hypervisor/qcom,shm";
 	}
 
-	node->push_compatible_num = data->general.push_compatible_num;
-	for (index_t i = 0; i < data->general.push_compatible_num; ++i) {
-		node->push_compatible[i] =
-			strdup(data->general.push_compatible[i]);
-		if (node->push_compatible[i] == NULL) {
-			ret = ERROR_NOMEM;
-			goto out;
-		}
+	ret = handle_compatibles(node, &data->general);
+	if (ret != OK) {
+		printf("Failed: save compatible in shm node\n");
+		goto out;
 	}
 
 	struct vdevice_shm *cfg = calloc(1, sizeof(*cfg));
@@ -974,6 +982,7 @@ out:
 		for (index_t i = 0; i < node->push_compatible_num; ++i) {
 			free(node->push_compatible[i]);
 		}
+		free_compatibles(node);
 		free(node->generate);
 		free(node->config);
 		free(node);
@@ -1114,9 +1123,7 @@ add_msgqueue(vm_config_t *vmcfg, msg_queue_data_t *data, bool is_sender,
 		goto out;
 	}
 
-	vm_config_add_msgqueue(vmcfg, VMID_HLOS, mq.r, is_sender,
-			       data->queue_depth, data->msg_size, svirq, pvirq,
-			       data->general.label, data->general.generate,
+	vm_config_add_msgqueue(vmcfg, peer, mq.r, is_sender, svirq, pvirq, data,
 			       true);
 
 out:
@@ -1188,6 +1195,12 @@ handle_doorbell(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 			!d->defined_irq, true);
 		if (add_ret.err != OK) {
 			ret = add_ret.err;
+			goto out;
+		}
+
+		ret = handle_compatibles(add_ret.node, &d->general);
+		if (ret != OK) {
+			printf("Failed: save compatible in doorbell node\n");
 			goto out;
 		}
 	}
@@ -1911,6 +1924,36 @@ handle_segments(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	assert(vm != NULL);
 
 	vm->ramfs_idx = data->ramfs_idx;
+
+	return ret;
+}
+
+void
+free_compatibles(vdevice_node_t *vdevice)
+{
+	for (index_t i = 0; i < vdevice->push_compatible_num; ++i) {
+		free(vdevice->push_compatible[i]);
+	}
+}
+
+error_t
+handle_compatibles(vdevice_node_t *vdevice, const general_data_t *data)
+{
+	error_t ret = OK;
+
+	vdevice->push_compatible_num = data->push_compatible_num;
+	for (index_t i = 0; i < data->push_compatible_num; ++i) {
+		vdevice->push_compatible[i] = strdup(data->push_compatible[i]);
+		if (vdevice->push_compatible[i] == NULL) {
+			ret = ERROR_NOMEM;
+			goto out;
+		}
+	}
+
+out:
+	if (ret != OK) {
+		free_compatibles(vdevice);
+	}
 
 	return ret;
 }

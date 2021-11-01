@@ -113,40 +113,123 @@ memparcel_read_lists(uint8_t *buf, size_t len, uint32_t *acl_entries,
 		     acl_entry_t **acl, sgl_entry_t **sgl,
 		     attr_entry_t **attr_list, bool attr_required)
 {
-	uintptr_t  curr	 = (uintptr_t)buf;
-	uintptr_t  start = curr;
 	rm_error_t err;
 
-	*acl_entries = *(uint32_t *)curr;
-	*acl	     = (acl_entry_t *)(curr + 4U);
-	curr += (*acl_entries * sizeof(acl_entry_t)) + 4U;
+	assert(buf != NULL);
+	assert(!util_add_overflows((uintptr_t)buf, len));
 
-	if ((curr + 4U) > (start + len)) {
+	uintptr_t curr	     = (uintptr_t)buf;
+	uintptr_t start	     = curr;
+	size_t	  array_size = 0;
+	size_t	  buffer_end = start + len;
+
+	if (util_add_overflows((uintptr_t)curr, sizeof(uint32_t))) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	if (buffer_end < (curr + sizeof(uint32_t))) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	*acl_entries = *(uint32_t *)curr;
+	curr += sizeof(uint32_t);
+
+	if (*acl_entries > MAX_LIST_ENTRIES) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	array_size = (*acl_entries * sizeof(acl_entry_t));
+
+	if (util_add_overflows((uintptr_t)curr, array_size)) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	if (buffer_end < (curr + array_size)) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	*acl = (acl_entry_t *)curr;
+	curr += array_size;
+
+	if (util_add_overflows((uintptr_t)curr, sizeof(uint32_t))) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	if (buffer_end < (curr + sizeof(uint32_t))) {
 		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
 	*sgl_entries = *(uint16_t *)curr;
-	*sgl	     = (sgl_entry_t *)(curr + 4U);
-	curr += (*sgl_entries * sizeof(sgl_entry_t)) + 4U;
+	curr += sizeof(uint32_t);
 
-	if (!attr_required && (curr == (start + len))) {
+	if (*sgl_entries > MAX_LIST_ENTRIES) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	array_size = (*sgl_entries * sizeof(sgl_entry_t));
+
+	if (util_add_overflows((uintptr_t)curr, array_size)) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	if (buffer_end < (curr + array_size)) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	*sgl = (sgl_entry_t *)curr;
+	curr += array_size;
+
+	if (!attr_required && (curr == buffer_end)) {
 		*attr_entries = 0U;
 		*attr_list    = NULL;
 		err	      = RM_OK;
 		goto out;
 	}
 
-	if ((curr + 4U) > (start + len)) {
+	if (util_add_overflows((uintptr_t)curr, sizeof(uint32_t))) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	if (buffer_end < (curr + sizeof(uint32_t))) {
 		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
 
 	*attr_entries = *(uint16_t *)curr;
-	*attr_list    = (attr_entry_t *)(curr + 4U);
-	curr += (*attr_entries * sizeof(attr_entry_t)) + 4U;
+	curr += sizeof(uint32_t);
 
-	err = (curr == (start + len)) ? RM_OK : RM_ERROR_MSG_INVALID;
+	if (*attr_entries > MAX_LIST_ENTRIES) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	array_size = (*attr_entries * sizeof(attr_entry_t));
+
+	if (util_add_overflows((uintptr_t)curr, array_size)) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	if (buffer_end < (curr + array_size)) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	*attr_list = (attr_entry_t *)curr;
+	curr += array_size;
+
+	err = (curr == buffer_end) ? RM_OK : RM_ERROR_MSG_INVALID;
 out:
 	return err;
 }
@@ -347,6 +430,12 @@ memparcel_construct(vmid_t owner_vmid, uint32_t acl_entries,
 	vm_meminfo_t *owner_info     = NULL;
 
 	if ((acl_entries == 0U) || (sgl_entries == 0U)) {
+		err = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	if (acl_entries > MAX_LIST_ENTRIES || sgl_entries > MAX_LIST_ENTRIES ||
+	    attr_entries > MAX_LIST_ENTRIES) {
 		err = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -764,7 +853,8 @@ memparcel_do_accept(vmid_t vmid, uint32_t acl_entries, uint16_t sgl_entries,
 	}
 
 	if ((flags & MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR) != 0U) {
-		if (acl_entries != mp->num_vms) {
+		if ((acl_entries != mp->num_vms) ||
+		    (attr_entries != mp->num_attrs)) {
 			err = RM_ERROR_VALIDATE_FAILED;
 			goto out;
 		}
@@ -1207,7 +1297,8 @@ memparcel_notify_shared(memparcel_t *mp, vmid_t src_vmid, uint8_t *buf,
 		goto out;
 	}
 
-	if (len < sizeof(memparcel_notify_req_t) + 4U) {
+	size_t vmid_list_offset = sizeof(memparcel_notify_req_t) + 4U;
+	if (len < vmid_list_offset) {
 		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -1219,9 +1310,18 @@ memparcel_notify_shared(memparcel_t *mp, vmid_t src_vmid, uint8_t *buf,
 		goto out;
 	}
 
+	if (len < (vmid_list_offset + (sizeof(vmid_entry_t) * vmid_entries))) {
+		err = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	if (vmid_entries > mp->num_vms) {
+		err = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
 	vmid_entry_t *vmid_list =
-		(vmid_entry_t *)((uintptr_t)buf +
-				 sizeof(memparcel_notify_req_t) + 4U);
+		(vmid_entry_t *)((uintptr_t)buf + vmid_list_offset);
 	for (uint16_t i = 0U; i < vmid_entries; i++) {
 		vm_meminfo_t *vm_info = lookup_vm_info(mp, vmid_list[i].vmid);
 		if (vm_info == NULL) {

@@ -40,7 +40,7 @@
 
 #include "dto_construct.h"
 
-#define DTBO_MAX_SIZE (4 * PAGE_SIZE)
+#define TEMP_DTB_MAP_VADDR (0xe0000000U)
 
 static error_t
 process_dtb(vm_t *vm);
@@ -82,15 +82,8 @@ get_random_seed(void);
 static error_t
 patch_chosen_node(dto_t *dto, vm_t *vm);
 
-typedef struct {
-	size_t mapped_size;
-
-	error_t err;
-	uint8_t err_padding[4];
-} map_dtb_ret_t;
-
-static map_dtb_ret_t
-map_dtb(uintptr_t vaddr, size_t dtb_offset, uint32_t mp_handle,
+static error_t
+map_dtb(uintptr_t vaddr, size_t dtb_offset, size_t dtb_size, uint32_t mp_handle,
 	size_t ipa_size);
 
 static error_t
@@ -142,52 +135,65 @@ out:
 	return handled;
 }
 
-map_dtb_ret_t
-map_dtb(uintptr_t vaddr, size_t dtb_offset, uint32_t mp_handle, size_t ipa_size)
+error_t
+map_dtb(uintptr_t vaddr, size_t dtb_offset, size_t dtb_size, uint32_t mp_handle,
+	size_t ipa_size)
 {
-	map_dtb_ret_t ret = { .err = OK };
+	error_t ret = OK;
 
-	void *temp_dtb_ptr = (void *)vaddr;
+	void * temp_dtb_ptr = (void *)vaddr;
+	size_t mapped_size  = PAGE_SIZE + DTBO_MAX_SIZE;
 
-	ret.err = memparcel_map_rm(mp_handle, dtb_offset, vaddr, PAGE_SIZE);
-	if (ret.err != OK) {
+	if ((dtb_offset > ipa_size) ||
+	    (mapped_size > (ipa_size - dtb_offset))) {
+		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
-	size_t mapped_size = PAGE_SIZE + DTBO_MAX_SIZE;
+
+	if (util_add_overflows(dtb_offset, dtb_size - 1)) {
+		ret = ERROR_ADDR_OVERFLOW;
+		goto out;
+	}
+
+	if (util_add_overflows(vaddr, dtb_offset + dtb_size - 1)) {
+		ret = ERROR_ADDR_OVERFLOW;
+		goto out;
+	}
+
+	if ((dtb_offset > ipa_size) || (dtb_size > (ipa_size - dtb_offset))) {
+		ret = ERROR_ADDR_INVALID;
+		goto out;
+	}
+
+	ret = memparcel_map_rm(mp_handle, dtb_offset, vaddr, dtb_size);
+	if (ret != OK) {
+		printf("map_dtb: memparcel_map_rm failed\n");
+		goto out;
+	}
 
 	if (fdt_check_header(temp_dtb_ptr) != 0) {
-		ret.err = ERROR_ARGUMENT_INVALID;
+		printf("map_dtb: invalid dtb\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out_unmap;
+	}
+
+	size_t fdt_size = fdt_totalsize(temp_dtb_ptr);
+	if (fdt_size > dtb_size) {
+		printf("map_dtb: fdt_totalsize (%zu) > DTB region size(%zu)\n",
+		       fdt_size, dtb_size);
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out_unmap;
+	}
+
+out_unmap:
+	if (ret != OK) {
 		(void)memparcel_unmap_rm(mp_handle);
-		goto out;
 	}
-
-	size_t fdt_size = fdt_totalsize(temp_dtb_ptr) + DTBO_MAX_SIZE;
-	if (fdt_size > mapped_size) {
-		if (fdt_size > (ipa_size - dtb_offset)) {
-			ret.err = ERROR_ARGUMENT_INVALID;
-			(void)memparcel_unmap_rm(mp_handle);
-			goto out;
-		}
-
-		ret.err = memparcel_unmap_rm(mp_handle);
-		if (ret.err != OK) {
-			(void)memparcel_unmap_rm(mp_handle);
-			goto out;
-		}
-
-		size_t map_size = util_balign_up(fdt_size, PAGE_SIZE);
-
-		ret.err = memparcel_map_rm(mp_handle, dtb_offset, vaddr,
-					   map_size);
-		if (ret.err != OK) {
-			goto out;
-		}
-		mapped_size = map_size;
-	}
-
-	ret.mapped_size = mapped_size;
-
 out:
+	if (ret != OK) {
+		printf("map_dtb(%p, %zu, %zu) : failed, ret=%d\n", temp_dtb_ptr,
+		       dtb_offset, dtb_size, (int)ret);
+	}
 	return ret;
 }
 
@@ -205,64 +211,108 @@ process_dtb(vm_t *vm)
 
 	assert(vm != NULL);
 
-	size_t	 ipa_size   = vm->mem_size;
-	size_t	 dtb_offset = vm->dtb_offset;
-	uint32_t mp_handle  = vm->mem_mp_handle;
+	size_t	 ipa_size	   = vm->mem_size;
+	size_t	 dtb_region_offset = vm->dtb_region_offset;
+	size_t	 dtb_region_size   = vm->dtb_region_size;
+	uint32_t mp_handle	   = vm->mem_mp_handle;
 
-	uintptr_t dt_base = (uintptr_t)(vm->mem_base + dtb_offset);
-	void *	  dtb_ptr = (void *)dt_base;
+	// FIXME: this address needs to be allocated safely
+	uintptr_t temp_addr    = TEMP_DTB_MAP_VADDR;
+	void *	  temp_dtb_ptr = (void *)temp_addr;
 
-	if ((dtb_offset + PAGE_SIZE) >= ipa_size) {
-		ret = ERROR_NOMEM;
+	error_t map_ret = map_dtb(temp_addr, dtb_region_offset, dtb_region_size,
+				  mp_handle, ipa_size);
+	if (map_ret != OK) {
+		ret = map_ret;
 		goto out_unmapped;
 	}
-
-	map_dtb_ret_t map_ret =
-		map_dtb(dt_base, dtb_offset, mp_handle, ipa_size);
-	if (map_ret.err != OK) {
-		ret = map_ret.err;
-		goto out_unmapped;
-	}
-
-	size_t mapped_size = map_ret.mapped_size;
 
 	// NOTE: integrate with vm config, generate dtbo.
-	create_dtbo_ret_t dtbo_ret = create_dtbo(vm, dtb_ptr);
+	create_dtbo_ret_t dtbo_ret = create_dtbo(vm, temp_dtb_ptr);
 
 	ret = dtbo_ret.err;
 	if (ret == OK) {
-		// Create a memory region contains the final dtb. We can assume
-		// that the final DTB will be no larger than the sum of the
-		// sizes of the base DTB and the generated DTBO.
-		size_t final_dtb_size = mapped_size;
-		void * final_dtb      = malloc(final_dtb_size);
-		if (final_dtb == NULL) {
-			ret = ERROR_NOMEM;
+		int apply_ret = -FDT_ERR_NOSPACE;
+
+		void *final_dtb = NULL;
+
+		size_t final_dtb_size = fdt_totalsize(temp_addr);
+		// sanity check size is reasonable
+		if ((final_dtb_size > dtb_region_size) ||
+		    (final_dtb_size > (256 * 1024U))) {
+			printf("process_dtb: dtb size (%zu) invalid\n",
+			       final_dtb_size);
+			ret = ERROR_ARGUMENT_INVALID;
 			goto out;
 		}
+		// guess a final dtb size after applying the overlay
+		final_dtb_size += dtbo_ret.size;
+		do {
+			if (final_dtb_size > dtb_region_size) {
+				final_dtb_size = dtb_region_size;
+			}
 
-		int open_ret =
-			fdt_open_into(dtb_ptr, final_dtb, (int)final_dtb_size);
-		if (open_ret != 0) {
+			final_dtb = malloc(final_dtb_size);
+			if (final_dtb == NULL) {
+				ret = ERROR_NOMEM;
+				goto out;
+			}
+
+			int open_ret = fdt_open_into(temp_dtb_ptr, final_dtb,
+						     (int)final_dtb_size);
+			if (open_ret != 0) {
+				ret = RM_ERROR_DENIED;
+				goto out;
+			}
+
+			// apply dtbo to dt
+			apply_ret = fdt_overlay_apply(final_dtb, dtbo_ret.dtbo);
+			if (apply_ret == -FDT_ERR_NOSPACE) {
+				free(final_dtb);
+
+				// break the loop if final dtb is too
+				// big
+				if (final_dtb_size == dtb_region_size) {
+					apply_ret = -FDT_ERR_TRUNCATED;
+				} else {
+					final_dtb_size += dtbo_ret.size;
+				}
+			}
+		} while (apply_ret == -FDT_ERR_NOSPACE);
+
+		if (apply_ret != 0) {
+			printf("Error: Failed to apply device tree overlay");
 			ret = RM_ERROR_DENIED;
 			goto out;
 		}
-
-		// apply dtbo to dt
-		int apply_ret = fdt_overlay_apply(final_dtb, dtbo_ret.dtbo);
-		assert(apply_ret == 0);
 
 		fdt_pack(final_dtb);
 
 		size_t total_size = fdt_totalsize(final_dtb);
-		if (total_size > mapped_size) {
-			ret = RM_ERROR_DENIED;
-			goto out;
+		if (total_size > dtb_region_size) {
+			if (vm->segment_offset_after_dtb >=
+			    total_size + dtb_region_offset) {
+				printf("Warning: DTB region size(%zu) cannot "
+				       "hold final DTB size (%zu), but it "
+				       "seems there is a space to fit it. DTB "
+				       "segment offset is (%zu), Next "
+				       "segment offset at (%zu)\n",
+				       total_size, dtb_region_size,
+				       dtb_region_offset,
+				       vm->segment_offset_after_dtb);
+			} else {
+				printf("Error: DTB region size(%zu) cannot "
+				       "hold final DTB size (%zu), it will "
+				       "overwrite the next segment, "
+				       "the offset is at (%zu)\n",
+				       total_size, dtb_region_size,
+				       vm->segment_offset_after_dtb);
+				ret = RM_ERROR_DENIED;
+			}
 		}
-		memcpy(dtb_ptr, final_dtb, total_size);
 
+		memcpy(temp_dtb_ptr, final_dtb, total_size);
 		free(final_dtb);
-
 		dto_deinit(dtbo_ret.constructed_object);
 	}
 
@@ -275,6 +325,9 @@ out:
 		ret = unmap_err;
 	}
 out_unmapped:
+	if (ret != OK) {
+		printf("process_dtb failed, ret = %d\n", (int)ret);
+	}
 	return ret;
 }
 
@@ -591,8 +644,8 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 			goto out;
 		}
 
-		// Patch the region node with the memparcel's RM handle, and
-		// add a phandle if none already exists
+		// Patch the region node with the memparcel's RM handle, and add
+		// a phandle if none already exists
 		const char *name = fdt_get_name(base_dtb, region_node, NULL);
 		assert(name != NULL);
 

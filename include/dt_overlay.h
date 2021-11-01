@@ -10,6 +10,7 @@
 // sequential write style.
 
 #define DTB_NODE_NAME_MAX 128
+#define DTBO_MAX_SIZE	  (4 * PAGE_SIZE)
 
 typedef struct dto dto_t;
 

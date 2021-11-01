@@ -21,6 +21,11 @@
 #define util_is_p2aligned(x, b)	 (((x) & ~(util_bit(b) - 1)) == 0U)
 #define util_add_overflows(a, b) ((a) > ~(b))
 
+#define util_mult_integer_overflows(a, b)                                      \
+	(bool)_Generic((a) * (b), uint32_t                                     \
+		       : (((uint64_t)(a) * (b)) > UINT32_MAX), uint64_t        \
+		       : (((__uint128_t)(a) * (b)) > UINT64_MAX))
+
 // Align up or down to bytes (which must be a power of two)
 #define util_balign_down(x, a)                                                 \
 	(assert(util_is_p2(a)), (x) & ~((__typeof__(x))(a)-1U))

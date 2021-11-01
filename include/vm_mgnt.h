@@ -59,8 +59,9 @@ struct vm {
 
 	paddr_t entry_offset;
 
-	paddr_t dtb_offset;
+	paddr_t dtb_region_offset;
 	size_t	dtb_region_size;
+	paddr_t segment_offset_after_dtb;
 
 	vmaddr_t ipa_base;
 

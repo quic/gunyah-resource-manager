@@ -39,9 +39,13 @@
 		type * _curr = (curr);                                         \
 		type * _node = (node);                                         \
 		assert(_curr != NULL);                                         \
-		_node->prefix##next = _curr->prefix##next;                     \
+		type *_next	    = (_curr->prefix##next);                   \
+		_node->prefix##next = _next;                                   \
 		_node->prefix##prev = _curr;                                   \
 		_curr->prefix##next = _node;                                   \
+		if (_next != NULL) {                                           \
+			_next->prefix##prev = _node;                           \
+		}                                                              \
 		if (curr == (*_head)->prefix##prev) {                          \
 			(*_head)->prefix##prev = _node;                        \
 		}                                                              \

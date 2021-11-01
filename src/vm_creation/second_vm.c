@@ -175,7 +175,7 @@ svm_poweron(vmid_t vmid)
 
 	ret = gunyah_hyp_vcpu_poweron(svm->primary_vcpu_cap,
 				      svm->ipa_base + svm->entry_offset,
-				      svm->ipa_base + svm->dtb_offset);
+				      svm->ipa_base + svm->dtb_region_offset);
 out:
 	return ret;
 }
