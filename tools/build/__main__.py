@@ -33,6 +33,21 @@ logger = logging.getLogger(__name__)
 build_dir = graph.build_dir
 config_file_name = "build.conf"
 
+
+# Extract command line parameter "platform" to select specific
+# configuration file [platform_name].build.conf from directory "config"
+
+platform_name = graph.get_argument('platform', 'qemu')
+
+if os.path.isfile(config_file_name):
+    os.remove(config_file_name)
+
+platform_cfg_name = os.path.join( os.getcwd(), "config",
+platform_name+".build.conf")
+
+os.symlink(platform_cfg_name, config_file_name)
+
+
 #
 # Build rules
 #
