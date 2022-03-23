@@ -13,11 +13,14 @@
 
 #include <rm-rpc.h>
 
+#include <resource-manager.h>
+
 #include <event.h>
 #include <guest_interface.h>
 #include <irq_manager.h>
 #include <irq_message.h>
-#include <resource-manager.h>
+#include <memparcel_msg.h>
+#include <platform_vm_config.h>
 #include <rm-rpc-fifo.h>
 #include <util.h>
 #include <utils/dict.h>
@@ -151,7 +154,7 @@ create_irq_mapping(vm_irq_manager_t *manager, virq_t virq_num, cap_id_t hwirq,
 
 RM_PADDED(typedef struct {
 	irq_mapping_info_t *info;
-	vm_irq_manager_t *  manager;
+	vm_irq_manager_t	 *manager;
 	rm_error_t	    err;
 } irq_manager_get_ret_t)
 
@@ -762,6 +765,8 @@ create_irq_mapping(vm_irq_manager_t *manager, virq_t virq_num, cap_id_t hwirq,
 			goto out;
 		}
 		irq_info->virq = virq_num;
+		// do this for free irq_info later, fixes SA false-positive
+		irq_info->is_reserved = false;
 	}
 
 	irq_info->is_valid = true;
@@ -1221,7 +1226,7 @@ handle_notify(vmid_t client_id, uint16_t seq_num, virq_handle_t handle,
 	printf("handle_notify: handle(0x%x) flags(0x%x), vmids_cnt(%lu), vmids[",
 	       handle, flags, vmids_cnt);
 	for (index_t i = 0; i < vmids_cnt; ++i) {
-		printf("0x%x, ", vmids[i].vmid);
+		printf("%d, ", (int)vmids[i].vmid);
 	}
 	printf("]\n");
 
@@ -1320,7 +1325,7 @@ dump(vm_irq_manager_t *manager)
 {
 	if (manager != NULL) {
 		printf("=== irq mappings ===\n");
-		dict_t *	    dict     = manager->mapping_dict;
+		dict_t	       *dict     = manager->mapping_dict;
 		irq_mapping_info_t *map_info = NULL;
 		int		    fmt_cnt  = 0;
 		const int	    item_cnt = 14;
@@ -1397,7 +1402,7 @@ dump(vm_irq_manager_t *manager)
 
 	printf("=== irq handles ===\n");
 
-	dict_t *	    dict	= handle_manager.handle_dict;
+	dict_t	       *dict	= handle_manager.handle_dict;
 	virq_handle_info_t *handle_info = NULL;
 	for (dict_key_t handle = 0; handle < dict->capacity; ++handle) {
 		handle_info = (virq_handle_info_t *)dict_get(dict, handle);

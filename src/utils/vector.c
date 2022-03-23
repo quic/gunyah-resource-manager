@@ -253,12 +253,12 @@ vector_swap_threadsafe(vector_t *vector, index_t idx1, index_t idx2, void *tmp)
 	size_t	  offset2 = idx2 * vector->element_sz;
 
 	// 1 -> tmp
-	memcpy(tmp, (void *)(base + offset1), vector->element_sz);
+	memmove(tmp, (void *)(base + offset1), vector->element_sz);
 	// 2 -> 1
-	memcpy((void *)(base + offset1), (void *)(base + offset2),
-	       vector->element_sz);
+	memmove((void *)(base + offset1), (void *)(base + offset2),
+		vector->element_sz);
 	// tmp -> 2
-	memcpy((void *)(base + offset2), tmp, vector->element_sz);
+	memmove((void *)(base + offset2), tmp, vector->element_sz);
 
 out:
 	return;

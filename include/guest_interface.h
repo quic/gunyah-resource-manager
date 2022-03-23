@@ -161,7 +161,7 @@ typedef struct gunyah_hyp_msgqueue_send_result {
 
 gunyah_hyp_msgqueue_send_result_t
 gunyah_hyp_msgqueue_send(cap_id_t msgqueue, size_t size, user_ptr_t data,
-			 uint64_t send_flags);
+			 msgqueue_send_flags_t send_flags);
 
 typedef struct gunyah_hyp_msgqueue_receive_result {
 	error_t _Alignas(register_t) error;
@@ -217,7 +217,8 @@ error_t
 gunyah_hyp_hwirq_unbind_virq(cap_id_t hwirq);
 
 error_t
-gunyah_hyp_vic_configure(cap_id_t vic, count_t max_vcpus, count_t max_virqs);
+gunyah_hyp_vic_configure(cap_id_t vic, count_t max_vcpus, count_t max_virqs,
+			 vic_option_flags_t vic_options, count_t max_msis);
 
 error_t
 gunyah_hyp_vic_attach_vcpu(cap_id_t vic, cap_id_t vcpu, index_t index);
@@ -242,6 +243,10 @@ error_t
 gunyah_hyp_addrspace_configure(cap_id_t addrspace, vmid_t vmid);
 
 error_t
+gunyah_hyp_addrspace_attach_vdma(cap_id_t addrspace, cap_id_t dma_device,
+				 index_t index);
+
+error_t
 gunyah_hyp_memextent_unmap_all(cap_id_t memextent);
 
 error_t
@@ -263,6 +268,12 @@ gunyah_hyp_vcpu_poweron(cap_id_t cap_id, uint64_t entry_point,
 
 error_t
 gunyah_hyp_vcpu_poweroff(cap_id_t cap_id);
+
+error_t
+gunyah_hyp_vcpu_kill(cap_id_t cap_id);
+
+error_t
+gunyah_hyp_scheduler_yield(scheduler_yield_control_t control, uint64_t arg1);
 
 error_t
 gunyah_hyp_vpm_group_attach_vcpu(cap_id_t vpm_group, cap_id_t vcpu,
@@ -303,3 +314,25 @@ gunyah_hyp_vcpu_set_priority(cap_id_t cap_id, priority_t priority);
 
 error_t
 gunyah_hyp_vcpu_set_timeslice(cap_id_t cap_id, nanoseconds_t timeslice);
+
+error_t
+gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source);
+
+typedef struct gunyah_hyp_prng_get_entropy_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	uint32_t _Alignas(register_t) data0;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+	uint32_t _Alignas(register_t) data1;
+	uint8_t _pad2[4]; // Pad for struct static zero initialization
+	uint32_t _Alignas(register_t) data2;
+	uint8_t _pad3[4]; // Pad for struct static zero initialization
+	uint32_t _Alignas(register_t) data3;
+	uint8_t _pad4[4]; // Pad for struct static zero initialization
+} gunyah_hyp_prng_get_entropy_result_t;
+
+gunyah_hyp_prng_get_entropy_result_t
+gunyah_hyp_prng_get_entropy(count_t num_bytes);
+
+error_t
+gunyah_hyp_cspace_revoke_caps_from(cap_id_t src_cspace, cap_id_t master_cap);

@@ -9,9 +9,9 @@ typedef enum {
 	RSC_MSG_QUEUE_RECV = 3,
 	RSC_VIRTUAL_CPU	   = 4,
 	RSC_VIRTUAL_PM	   = 5,
+	RSC_VIRTIO_MMIO	   = 6,
 } resource_type_t;
 
-typedef uint32_t resource_handle_t;
 typedef uint32_t resource_label_t;
 
 struct rm_hyp_resource_resp {
@@ -27,6 +27,12 @@ struct rm_hyp_resource_resp {
 
 	uint32_t resource_virq_handle;
 	uint32_t resource_virq_number;
+
+	uint32_t resource_base_address_low;
+	uint32_t resource_base_address_high;
+
+	uint32_t resource_size_low;
+	uint32_t resource_size_high;
 };
 
 typedef struct rm_hyp_resource_resp rm_hyp_resource_resp_t;

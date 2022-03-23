@@ -30,3 +30,12 @@ struct irq_set_trigger_req {
 	int irq;
 	int trigger;
 };
+
+rm_error_t
+register_isr(virq_t virq, int trigger, isr_t isr, void *data);
+
+rm_error_t
+register_event_isr(virq_t virq, event_t *event);
+
+rm_error_t
+deregister_isr(virq_t virq);

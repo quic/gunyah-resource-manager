@@ -31,8 +31,7 @@ vector_deinit(vector_t *vector);
 error_t
 vector_push_back_internal(vector_t *vector, const void *val);
 
-#define vector_pop_back(type, vector)                                          \
-	(*(type *)vector_pop_back_internal(vector))
+#define vector_pop_back(type, vector) ((type *)vector_pop_back_internal(vector))
 
 void *
 vector_pop_back_internal(vector_t *vector);

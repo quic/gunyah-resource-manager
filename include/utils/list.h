@@ -6,7 +6,7 @@
 #define list_append(type, head, node, prefix)                                  \
 	do {                                                                   \
 		type **_head = (head);                                         \
-		type * _node = (node);                                         \
+		type  *_node = (node);                                         \
 		if (*_head == NULL) {                                          \
 			_node->prefix##next = NULL;                            \
 			_node->prefix##prev = _node;                           \
@@ -23,7 +23,7 @@
 #define list_insert_head(type, head, node, prefix)                             \
 	do {                                                                   \
 		type **_head = (head);                                         \
-		type * _node = (node);                                         \
+		type  *_node = (node);                                         \
 		assert(*_head != NULL);                                        \
 		type *_tail	       = (*_head)->prefix##prev;               \
 		_node->prefix##prev    = _tail;                                \
@@ -36,8 +36,8 @@
 #define list_insert_after(type, head, curr, node, prefix)                      \
 	do {                                                                   \
 		type **_head = (head);                                         \
-		type * _curr = (curr);                                         \
-		type * _node = (node);                                         \
+		type  *_curr = (curr);                                         \
+		type  *_node = (node);                                         \
 		assert(_curr != NULL);                                         \
 		type *_next	    = (_curr->prefix##next);                   \
 		_node->prefix##next = _next;                                   \
@@ -55,9 +55,9 @@
 #define list_remove(type, head, node, prefix)                                  \
 	do {                                                                   \
 		type **_head = (head);                                         \
-		type * _node = (node);                                         \
-		type * _next = _node->prefix##next;                            \
-		type * _prev = _node->prefix##prev;                            \
+		type  *_node = (node);                                         \
+		type  *_next = _node->prefix##next;                            \
+		type  *_prev = _node->prefix##prev;                            \
 		if (_next) {                                                   \
 			_next->prefix##prev = _prev;                           \
 		}                                                              \

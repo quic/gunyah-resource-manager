@@ -11,28 +11,41 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <resource-manager.h>
+
 #include <memextent.h>
 #include <platform.h>
-#include <resource-manager.h>
 
 #include "uart_qemu.h"
 
+static bool	g_uart_log_en = false;
 static vmaddr_t uart_address;
 
 void
 uart_putc(const char c)
 {
+	if (!g_uart_log_en) {
+		goto out;
+	}
+
 	volatile uint32_t *tfr = (uint32_t *)(uart_address + UART_TFR);
 	volatile uint32_t *dr  = (uint32_t *)(uart_address + UART_DR);
 
 	while ((*tfr & ((uint32_t)1U << 5)) != 0U)
 		;
 	*dr = c;
+
+out:
+	return;
 }
 
 void
 uart_write(const char *out, size_t size)
 {
+	if (!g_uart_log_en) {
+		goto out;
+	}
+
 	size_t	    remain = size;
 	const char *pos	   = out;
 
@@ -49,27 +62,29 @@ uart_write(const char *out, size_t size)
 		pos++;
 		remain--;
 	}
+
+out:
+	return;
 }
 
 void
-platform_uart_setup(boot_env_data_t *env_data)
-{
-	uart_address = env_data->uart_address;
-}
-
-error_t
-platform_uart_map(cap_id_t addrspace_cap)
+platform_uart_map(boot_env_data_t *env_data)
 {
 	error_t ret = OK;
 
-	ret = memextent_map(rm_get_uart_me(), addrspace_cap, uart_address,
-			    PGTABLE_ACCESS_RW, MEMEXTENT_MEMTYPE_DEVICE);
-	if (ret != OK) {
-		printf("UART mapping failed\n");
-		goto out;
-	}
+	if (env_data->uart_address != 0U) {
+		ret = memextent_map(rm_get_uart_me(), env_data->addrspace_capid,
+				    env_data->uart_address, PGTABLE_ACCESS_RW,
+				    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
+		if (ret != OK) {
+			printf("UART mapping failed\n");
+			exit(1);
+		}
 
-	ret = OK;
-out:
-	return ret;
+		uart_address  = env_data->uart_address;
+		g_uart_log_en = true;
+	} else {
+		printf("No uart_address configured");
+		g_uart_log_en = false;
+	}
 }

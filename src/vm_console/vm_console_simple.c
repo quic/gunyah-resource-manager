@@ -11,11 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <asm/arm_smccc.h>
 #include <rm-rpc.h>
 
+#include <resource-manager.h>
+
+#include <platform.h>
 #include <rm-rpc-fifo.h>
 #include <utils/vector.h>
+#include <vendor_hyp_call.h>
 #include <vm_config.h>
 #include <vm_console.h>
 #include <vm_console_message.h>
@@ -32,17 +35,6 @@ struct vm_console {
 };
 
 #pragma clang diagnostic pop
-
-bool console_allowed = false;
-
-rm_error_t
-console_init(void)
-{
-	// Debug enabled
-	console_allowed = true;
-
-	return RM_OK;
-}
 
 rm_error_t
 vm_console_init(void)
@@ -152,19 +144,13 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 		goto out;
 	}
 
-	if (!is_console_open(console, !is_owner)) {
-		// FIXME: drop message for now
-		err = RM_OK;
-		goto out;
-	}
-
-	if (!console_allowed) {
+	if (platform_get_security_state()) {
 		err = RM_OK;
 		goto out;
 	}
 
 	size_t notif_size = sizeof(vm_console_chars_notify_t) + num_bytes;
-	char * notif_buf  = malloc(notif_size);
+	char  *notif_buf  = malloc(notif_size);
 	if (notif_buf == NULL) {
 		err = RM_ERROR_NOMEM;
 		goto out;
@@ -176,6 +162,14 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 	};
 
 	vmid_t to = (target == 0U) ? console->owner : console->self;
+
+	if (to == VMID_RM) {
+		/* if the console owner is resource manager ''itself'', which is
+		 * considered as invalid recipient for the console, then
+		 * loopback the message to the requester. */
+
+		to = console->self;
+	}
 
 	memcpy(notif_buf, &notif, sizeof(notif));
 	memcpy(notif_buf + sizeof(notif), content, num_bytes);
@@ -214,7 +208,7 @@ handle_flush(vmid_t requester, uint16_t seq_num, vmid_t target)
 		goto out;
 	}
 
-	if (!console_allowed) {
+	if (platform_get_security_state()) {
 		err = RM_OK;
 	}
 

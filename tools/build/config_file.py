@@ -33,9 +33,6 @@ class Configuration:
     * arch_source: arch_source armv8 pgtable.c
     graph.add_target(xxx)
 
-    * board_source: board_source qemu pgtable.c
-    set source for specific board
-
     * test_source: test_source testcase.c
 
     * source: source idle.c
@@ -47,8 +44,6 @@ class Configuration:
     * arch include: arch_include armv8 dir
     set include directory to global cflags if current architecture is armv8
 
-    * board include: board_include qemu dir
-
     * local include: local_include dir
     set include directory in env dict with LOCAL_CPPFLAGS key. The dir should
     be a relative path based on where build.conf located.
@@ -59,19 +54,13 @@ class Configuration:
     * arch flags: arch_flags aarch64 -O -g
     set env dict with LOCAL_CPPFLAGS
 
-    * board flags: board_flags qemu -O -g
-    set env for specific board
-
     * base target architecture: arch aarch64
-
-    * board target set: board qemu
-    set target board
 
     * target triple: target_triple aarch64-linux-gnu
     set target_triple
 
-    * include sub directory: sub_directory relative_path_to_subdirectory
-    include build.conf in that sub directory
+    * include sub directory: sub_directory path_to_subdirectory
+    include build.conf in that sub directory (relative to source root)
 
     * link script: link_script armv8 file
     specify link specify file for a specific architecture
@@ -104,12 +93,17 @@ class Configuration:
     sub directories by order of configuration file.
     """
 
-    def __init__(self, file_name, graph):
+    def __init__(self, file_name, graph, platform=None, quality=None):
         self.file_name = file_name
         self.graph = graph
         self.target_triple = None
-        self.arch = None
-        self.board = None
+        self.archs = set()
+        if platform is None:
+            raise Exception('Please specify platform=<name>')
+        self.platform = platform
+        if quality is None:
+            raise Exception('Please specify quality=<name>')
+        self.quality = quality
         self.linker_script = None
         # the name of current configuration target
         self.binary_name = None
@@ -119,6 +113,11 @@ class Configuration:
         self.local_env = {}
         self.compdb_file_name = "compile_commands.json"
         self.child_configs = []
+        self._root_dir = os.path.dirname(self.file_name)
+        self._config_dir = os.path.join(self._root_dir, 'config')
+        self._quality_dir = os.path.join(self._config_dir, 'quality')
+        self._platform_dir = os.path.join(self._config_dir, 'platform')
+        self._arch_dir = os.path.join(self._config_dir, 'arch')
 
     def process(self):
         """
@@ -126,10 +125,13 @@ class Configuration:
         """
         # read top level config file first, handle line by line.
         config_file = self.file_name
-        self.graph.add_gen_source(config_file)
 
         self.set_default_rule()
         self._set_version()
+        quality_config = os.path.join(self._quality_dir, self.quality +
+                                      '.conf')
+        self._parse_config(quality_config)
+        self._add_arch(self.platform, self._platform_dir)
         self._parse_config(config_file)
         self._setup_toolchain()
 
@@ -143,10 +145,16 @@ class Configuration:
                     self.graph.build_dir,
                     "include")))
 
+    def _add_arch(self, arch_name, cur_dir):
+        self.archs.add(arch_name)
+        arch_config = os.path.join(cur_dir, arch_name + '.conf')
+        self._parse_config(arch_config)
+
     def _relpath(self, path):
         return os.path.relpath(path, start=self.graph.root_dir)
 
     def _parse_config(self, config_file):
+        self.graph.add_gen_source(config_file)
         cur_dir = os.path.dirname(config_file)
 
         # clear all local configuration
@@ -158,27 +166,19 @@ class Configuration:
                 if not words or words[0].startswith('#'):
                     # Skip comments or blank lines
                     pass
-                elif words[0] == "arch":
-                    self.arch = words[1]
-                    # FIXME: should we load arch configuration files? Not now.
-                elif words[0] == "board":
-                    self.board = words[1]
+                elif words[0] == "base_arch":
+                    self._add_arch(words[1], self._arch_dir)
                 elif words[0] == "source":
                     for w in words[1:]:
                         # Add the version header file as a dependency
                         self._add_source(
-                            cur_dir, w, version_header, self.local_env)
+                            cur_dir, w, self.version_header, self.local_env)
                 elif words[0] == "include":
                     for w in words[1:]:
                         d = self._relpath(os.path.join(cur_dir, w))
                         self.graph.append_env("CFLAGS", "-I " + d)
                 elif words[0] == "arch_include":
-                    if self.arch is not None and words[1] == self.arch:
-                        for w in words[2:]:
-                            d = self._relpath(os.path.join(cur_dir, w))
-                            self.graph.append_env("CFLAGS", "-I " + d)
-                elif words[0] == "board_include":
-                    if self.board is not None and words[1] == self.board:
+                    if words[1] in self.archs:
                         for w in words[2:]:
                             d = self._relpath(os.path.join(cur_dir, w))
                             self.graph.append_env("CFLAGS", "-I " + d)
@@ -195,14 +195,10 @@ class Configuration:
                     self.target_triple = words[1]
                     self.graph.add_env('TARGET_TRIPLE', self.target_triple)
                 elif words[0] == "link_script":
-                    if self.arch is not None and words[1] == self.arch:
+                    if words[1] in self.archs:
                         self._set_link_script(cur_dir, words[2])
                 elif words[0] == "arch_source":
-                    if self.arch is not None and words[1] == self.arch:
-                        for w in words[2:]:
-                            self._add_source(cur_dir, w, None, self.local_env)
-                elif words[0] == "board_source":
-                    if self.board is not None and words[1] == self.board:
+                    if words[1] in self.archs:
                         for w in words[2:]:
                             self._add_source(cur_dir, w, None, self.local_env)
                 elif words[0] == "program":
@@ -234,10 +230,13 @@ class Configuration:
                 elif words[0] == "ldflags":
                     self.graph.append_env("LDFLAGS", ' '.join(words[1:]))
                 elif words[0] == "sub_directory":
-                    sub_config_file = os.path.join(cur_dir, words[1],
-                                                   self.file_name)
+                    subdir = os.path.relpath(os.path.join(self._root_dir,
+                                                          words[1]))
+                    sub_config_file = os.path.join(subdir, self.file_name)
                     self._parse_config(sub_config_file)
                     self.graph.add_gen_source(sub_config_file)
+                else:
+                    logger.error("Unknown config directive: %s", words[0])
 
     def _setup_toolchain(self):
         try:
@@ -253,6 +252,7 @@ class Configuration:
             logger.error("Missing environment: $LOCAL_SYSROOT")
             sys.exit(1)
 
+        # Use a QC prebuilt LLVM
         self.graph.add_env('CLANG', os.path.join(llvm_root, 'bin', 'clang'))
 
         # FIXME: manually add the toolchain header file. Remove it.
@@ -359,26 +359,23 @@ class Configuration:
         self.graph.add_default_target(bin_file)
 
     def _set_version(self):
-        global version_header
-        global version_file
-
-        version_header = os.path.join(self.graph.build_dir, version_header)
+        self.version_header = os.path.join(self.graph.build_dir,
+                                           version_header)
         if os.path.exists(version_file):
             self.graph.add_rule('version_copy', 'cp ${in} ${out}')
             self.graph.add_target(
-                [version_header],
+                [self.version_header],
                 'version_copy',
                 [version_file])
         else:
-            script = self._relpath(
-                "cd {:s} && tools/build/gen_ver.sh".format(
-                    self._relpath('.')))
+            script = "cd {:s} && tools/build/gen_ver.sh".format(
+                self._relpath('.'))
             self.graph.add_rule('version_gen', script + ' > ${out}')
             import subprocess
             gitdir = subprocess.check_output(['git', 'rev-parse', '--git-dir'])
             gitdir = gitdir.decode('utf-8').strip()
             self.graph.add_target(
-                [version_header], 'version_gen', [
+                [self.version_header], 'version_gen', [
                     '{:s}/logs/HEAD'.format(gitdir)], always=True)
 
     def set_default_rule(self):

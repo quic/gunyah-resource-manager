@@ -89,6 +89,7 @@ dict_get_first_free_key_from(dict_t *dict, dict_key_t from)
 		}
 	}
 
+	// should increate the dict
 	expand(dict);
 
 	return key;

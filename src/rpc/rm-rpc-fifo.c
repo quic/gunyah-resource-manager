@@ -28,7 +28,7 @@ typedef struct pending_notif {
 	struct pending_notif *notif_next;
 
 	uint32_t notif_id;
-	void *	 buf;
+	void    *buf;
 	size_t	 len;
 	size_t	 alloc_size;
 } pending_notif_t;
@@ -42,7 +42,7 @@ typedef struct {
 	// We only keep one pending reply, as VMs
 	// should wait to receive the reply before
 	// making another request.
-	void *	 reply_buf;
+	void    *reply_buf;
 	uint32_t reply_msg_id;
 	uint16_t reply_seq_num;
 	size_t	 reply_len;
@@ -73,7 +73,7 @@ rm_rpc_fifo_init(void)
 {
 	rm_error_t e = RM_OK;
 
-	mngr.fifo_status = vector_init(fifo_status_t, 4U, 4U);
+	mngr.fifo_status = vector_init(fifo_status_t *, 4U, 4U);
 	if (mngr.fifo_status == NULL) {
 		e = RM_ERROR_NOMEM;
 	}
@@ -84,13 +84,19 @@ rm_rpc_fifo_init(void)
 rm_error_t
 rm_rpc_fifo_create(vmid_t peer)
 {
-	fifo_status_t fifo = {
-		.vm_id = peer,
-	};
-
 	rm_error_t e = RM_OK;
 
-	error_t ret_push = vector_push_back(mngr.fifo_status, fifo);
+	error_t ret_push = ERROR_NOMEM;
+
+	fifo_status_t *fifo = calloc(1, sizeof(*fifo));
+	if (fifo == NULL) {
+		e = RM_ERROR_NOMEM;
+		goto err;
+	}
+
+	fifo->vm_id = peer;
+
+	ret_push = vector_push_back(mngr.fifo_status, fifo);
 	if (ret_push != OK) {
 		e = RM_ERROR_NOMEM;
 		goto err;
@@ -102,10 +108,17 @@ rm_rpc_fifo_create(vmid_t peer)
 	error_t ret_event = event_register(&ret.status->send_pending_event,
 					   send_pending_cb, ret.status);
 	if (ret_event != OK) {
-		vector_delete(mngr.fifo_status, ret.idx);
 		e = RM_ERROR_DENIED;
 	}
 err:
+	if (e != RM_OK) {
+		if (ret_push == OK) {
+			e = rm_rpc_fifo_destroy(peer);
+		} else {
+			free(fifo);
+		}
+	}
+
 	return e;
 }
 
@@ -113,10 +126,15 @@ rm_error_t
 rm_rpc_fifo_destroy(vmid_t peer)
 {
 	find_fifo_status_ret_t ret = find_fifo_status(peer);
-	assert(ret.status != NULL);
+	if (ret.status == NULL) {
+		goto out;
+	}
 
 	vector_delete(mngr.fifo_status, ret.idx);
 
+	free(ret.status);
+
+out:
 	return RM_OK;
 }
 
@@ -138,10 +156,15 @@ send_pending_reply(fifo_status_t *status)
 }
 
 static void
-delete_pending_notif(fifo_status_t *status, pending_notif_t *n)
+delete_pending_notif(fifo_status_t *status, pending_notif_t *n, bool sent)
 {
 	status->pending_notif_count--;
 	list_remove(pending_notif_t, &status->pending_notif_list, n, notif_);
+	if (!sent) {
+		// If the notification was sent, it will be freed in the RPC
+		// TX callback, so we only need to free here if dropped.
+		free(n->buf);
+	}
 	free(n);
 }
 
@@ -158,7 +181,7 @@ send_pending_notifications(fifo_status_t *status)
 			break;
 		}
 
-		delete_pending_notif(status, n);
+		delete_pending_notif(status, n, true);
 	}
 }
 
@@ -181,8 +204,8 @@ rm_rpc_fifo_reply(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, void *buf,
 		e = send_pending_reply(status);
 		// If we couldn't send the pending reply, drop it
 		if (e != RM_OK) {
-			printf("rm-rpc-fifo: Dropped pending reply for VM %x!\n",
-			       vm_id);
+			printf("rm-rpc-fifo: Dropped pending reply for VM %d!\n",
+			       (int)vm_id);
 			free(status->reply_buf);
 			status->reply_buf = NULL;
 		}
@@ -227,10 +250,10 @@ rm_rpc_fifo_send_notification(vmid_t vm_id, uint32_t notif_id, void *buf,
 	if ((e == RM_ERROR_BUSY) && allow_pending) {
 		// If we are at max notif count, drop the oldest notification
 		if (status->pending_notif_count == MAX_NOTIFICATION_PENDING) {
-			printf("rm-rpc-fifo: Dropped pending notif for VM %x!\n",
-			       vm_id);
-			delete_pending_notif(status,
-					     status->pending_notif_list);
+			printf("rm-rpc-fifo: Dropped pending notif for VM %d!\n",
+			       (int)vm_id);
+			delete_pending_notif(status, status->pending_notif_list,
+					     false);
 		}
 
 		pending_notif_t *n = calloc(1, sizeof(*n));
@@ -275,10 +298,12 @@ rm_rpc_fifo_deinit(void)
 	size_t cnt = vector_size(mngr.fifo_status);
 	for (index_t i = 0; i < cnt; ++i) {
 		fifo_status_t *s =
-			vector_at_ptr(fifo_status_t, mngr.fifo_status, i);
+			vector_at(fifo_status_t *, mngr.fifo_status, i);
 		while (s->pending_notif_list != NULL) {
-			delete_pending_notif(s, s->pending_notif_list);
+			delete_pending_notif(s, s->pending_notif_list, false);
 		}
+
+		free(s);
 	}
 
 	vector_deinit(mngr.fifo_status);
@@ -292,7 +317,7 @@ find_fifo_status(vmid_t peer)
 	size_t cnt = vector_size(mngr.fifo_status);
 	for (index_t i = 0; i < cnt; ++i) {
 		fifo_status_t *fs =
-			vector_at_ptr(fifo_status_t, mngr.fifo_status, i);
+			vector_at(fifo_status_t *, mngr.fifo_status, i);
 		if (fs->vm_id == peer) {
 			ret.status = fs;
 			ret.idx	   = i;
@@ -329,7 +354,7 @@ rm_reply_error(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	}
 
 	size_t size    = len + sizeof(rm_standard_rep_t);
-	char * out_buf = malloc(size);
+	char  *out_buf = malloc(size);
 
 	if (out_buf == NULL) {
 		printf("OOM: fail to alloc rm_reply\n");

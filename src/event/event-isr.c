@@ -60,7 +60,7 @@ flush_pending_list(void)
 		ev->pending = false;
 
 		event_callback_t cb   = ev->callback;
-		void *		 data = ev->data;
+		void	     *data = ev->data;
 
 		preempt_enable();
 		cb(ev, data);
@@ -169,6 +169,12 @@ event_wait_pending(int timeout)
 	return pending;
 }
 
+bool
+event_is_registered(event_t *event)
+{
+	return (event->callback != NULL);
+}
+
 error_t
 event_register(event_t *event, event_callback_t callback, void *data)
 {
@@ -223,6 +229,10 @@ event_deregister(event_t *event)
 	}
 
 	preempt_enable();
+
+	event->callback = NULL;
+	event->data	= NULL;
+	event->fd	= -1;
 
 	return was_pending;
 }

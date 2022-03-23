@@ -12,6 +12,8 @@
 
 #include <rm-rpc.h>
 
+#include <resource-manager.h>
+
 #include <regex.h>
 #include <utils/vector.h>
 #include <vm_config.h>
@@ -50,11 +52,15 @@ check_listeners(void *data, dtb_listener_t *listeners, size_t listener_cnt,
 
 static listener_return_t
 check_path_listener(void *data, dtb_listener_t *listener, void *fdt,
-		    int node_ofs, char path[], ctx_t *ctx);
+		    int node_ofs, ctx_t *ctx);
 
 static listener_return_t
 check_strings_prop_listener(void *data, dtb_listener_t *listener, void *fdt,
 			    int node_ofs, ctx_t *ctx);
+
+static listener_return_t
+check_compatible_listener(void *data, dtb_listener_t *listener, void *fdt,
+			  int node_ofs, ctx_t *ctx);
 
 // FIXME: might define it in configuration
 const char *gunyah_api_version = "1-0";
@@ -128,6 +134,17 @@ out:
 	return ret;
 }
 
+error_t
+dtb_parser_free(dtb_parser_ops_t *ops, void *data)
+{
+	assert(ops != NULL);
+	assert(data != NULL);
+
+	ops->free(data);
+
+	return OK;
+}
+
 void
 dtb_parser_update_ctx(void *fdt, int node_ofs, ctx_t *parent, ctx_t *child)
 {
@@ -194,6 +211,36 @@ check_listeners(void *data, dtb_listener_t *listeners, size_t listener_cnt,
 {
 	listener_return_t ret = RET_CONTINUE;
 
+	for (index_t i = 0; i < listener_cnt; ++i) {
+		dtb_listener_t   *cur_listener = listeners + i;
+		listener_return_t act;
+
+		if (cur_listener->type == BY_PATH) {
+			act = check_path_listener(data, cur_listener, fdt,
+						  node_ofs, ctx);
+		} else if (cur_listener->type == BY_STRING_PROP) {
+			act = check_strings_prop_listener(data, cur_listener,
+							  fdt, node_ofs, ctx);
+		} else if (cur_listener->type == BY_COMPATIBLE) {
+			act = check_compatible_listener(data, cur_listener, fdt,
+							node_ofs, ctx);
+		} else {
+			act = RET_CONTINUE;
+		}
+		if (act == RET_CLAIMED) {
+			break;
+		}
+	}
+
+	return ret;
+}
+
+listener_return_t
+check_path_listener(void *data, dtb_listener_t *listener, void *fdt,
+		    int node_ofs, ctx_t *ctx)
+{
+	listener_return_t ret = RET_CONTINUE;
+
 	char path[MAX_PATH_LEN];
 	int  path_ret = fdt_get_path(fdt, node_ofs, path, MAX_PATH_LEN);
 	if (path_ret != 0) {
@@ -201,30 +248,8 @@ check_listeners(void *data, dtb_listener_t *listeners, size_t listener_cnt,
 		goto out_get_path_failure;
 	}
 
-	for (index_t i = 0; i < listener_cnt; ++i) {
-		dtb_listener_t *cur_listener = listeners + i;
-		if (cur_listener->type == BY_PATH) {
-			ret = check_path_listener(data, cur_listener, fdt,
-						  node_ofs, path, ctx);
-		} else if (cur_listener->type == BY_STRING_PROP) {
-			ret = check_strings_prop_listener(data, cur_listener,
-							  fdt, node_ofs, ctx);
-		}
-	}
-
-out_get_path_failure:
-	return ret;
-}
-
-listener_return_t
-check_path_listener(void *data, dtb_listener_t *listener, void *fdt,
-		    int node_ofs, char path[], ctx_t *ctx)
-{
-	listener_return_t ret = RET_CONTINUE;
-
 	regex_t regex;
-
-	int reg_ret = regcomp(&regex, listener->expected_path, REG_NOSUB);
+	int	reg_ret = regcomp(&regex, listener->expected_path, REG_NOSUB);
 	if (reg_ret != 0) {
 		ret = RET_ERROR;
 		goto out_regcomp_failure;
@@ -243,6 +268,7 @@ check_path_listener(void *data, dtb_listener_t *listener, void *fdt,
 	regfree(&regex);
 
 out_regcomp_failure:
+out_get_path_failure:
 	return ret;
 }
 
@@ -269,6 +295,25 @@ check_strings_prop_listener(void *data, dtb_listener_t *listener, void *fdt,
 		ret = RET_CONTINUE;
 	}
 out:
+	return ret;
+}
+
+listener_return_t
+check_compatible_listener(void *data, dtb_listener_t *listener, void *fdt,
+			  int node_ofs, ctx_t *ctx)
+{
+	listener_return_t ret = RET_CONTINUE;
+
+	int fdt_ret = fdt_node_check_compatible(fdt, node_ofs,
+						listener->compatible_string);
+
+	if (fdt_ret == 0) {
+		// match
+		ret = listener->action(data, fdt, node_ofs, ctx);
+	} else {
+		ret = RET_CONTINUE;
+	}
+
 	return ret;
 }
 
@@ -327,5 +372,24 @@ fdt_read_num(const fdt32_t *data, size_t cell_cnt)
 		++data;
 	}
 
+	return ret;
+}
+
+error_t
+fdt_read_u32_array(const fdt32_t *data, int lenp, uint32_t *array,
+		   size_t array_len)
+{
+	error_t ret = OK;
+
+	if ((size_t)lenp != sizeof(array[0]) * array_len) {
+		printf("Error: invalid fdt32_t array length\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	for (index_t i = 0; i < array_len; ++i) {
+		array[i] = fdt32_to_cpu(*(data + i));
+	}
+out:
 	return ret;
 }

@@ -9,7 +9,12 @@
 
 #include <rm-rpc.h>
 
+#include <resource-manager.h>
+
+#include <event.h>
 #include <memparcel.h>
+#include <memparcel_msg.h>
+#include <platform_vm_config.h>
 #include <util.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
@@ -31,7 +36,7 @@
 #include "dto_construct.h"
 
 static char *
-get_name_from_generate(const char *generate);
+dto_construct_append_capid(const char *generate, cap_id_t cap_id);
 
 static error_t
 add_compatibles(struct vdevice_node *node, char *compatibles[],
@@ -44,19 +49,13 @@ dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle)
 
 	struct vdevice_doorbell *cfg = (struct vdevice_doorbell *)node->config;
 
-	char *base_name = get_name_from_generate(node->generate);
-	if (base_name == NULL) {
-		e = ERROR_ARGUMENT_INVALID;
-		goto err_base_name;
+	char *path = dto_construct_append_capid(node->generate, cfg->vm_cap);
+	if (path == NULL) {
+		e = ERROR_NOMEM;
+		goto err_begin;
 	}
 
-	char name[DTB_NODE_NAME_MAX];
-	int  snp_name_ret = snprintf(name, DTB_NODE_NAME_MAX, "%s@%lx",
-				     base_name, cfg->vm_cap);
-	(void)snp_name_ret;
-	assert(snp_name_ret <= DTB_NODE_NAME_MAX);
-
-	e = dto_node_begin(dto, name);
+	e = dto_construct_begin_path(dto, path);
 	if (e != OK) {
 		goto err_begin;
 	}
@@ -103,16 +102,23 @@ dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle)
 		goto err;
 	}
 
+	e = dto_property_add_u32(dto, "label", cfg->label);
+	if (e != OK) {
+		goto err;
+	}
+
 err:
 	(void)0;
 
 	error_t ret;
-	ret = dto_node_end(dto, name);
+	ret = dto_construct_end_path(dto, path);
 	if (e == OK) {
 		e = ret;
 	}
+
 err_begin:
-err_base_name:
+	free(path);
+
 	return e;
 }
 
@@ -124,19 +130,13 @@ dto_create_msg_queue(struct vdevice_node *node, dto_t *dto)
 	struct vdevice_msg_queue *cfg =
 		(struct vdevice_msg_queue *)node->config;
 
-	char *base_name = get_name_from_generate(node->generate);
-	if (base_name == NULL) {
-		e = ERROR_ARGUMENT_INVALID;
-		goto err_base_name;
+	char *path = dto_construct_append_capid(node->generate, cfg->vm_cap);
+	if (path == NULL) {
+		e = ERROR_NOMEM;
+		goto err_begin;
 	}
 
-	char name[DTB_NODE_NAME_MAX];
-	int  snp_name_ret = snprintf(name, DTB_NODE_NAME_MAX, "%s@%lx",
-				     base_name, cfg->vm_cap);
-	(void)snp_name_ret;
-	assert(snp_name_ret <= DTB_NODE_NAME_MAX);
-
-	e = dto_node_begin(dto, name);
+	e = dto_construct_begin_path(dto, path);
 	if (e != OK) {
 		goto err_begin;
 	}
@@ -180,18 +180,53 @@ dto_create_msg_queue(struct vdevice_node *node, dto_t *dto)
 		goto err;
 	}
 
+	e = dto_property_add_u32(dto, "label", cfg->label);
+	if (e != OK) {
+		goto err;
+	}
+
 err:
 	(void)0;
 
 	error_t ret;
-
-	ret = dto_node_end(dto, name);
+	ret = dto_construct_end_path(dto, path);
 	if (e == OK) {
 		e = ret;
 	}
+
 err_begin:
-err_base_name:
+	free(path);
+
 	return e;
+}
+
+error_t
+dto_guid_to_string(uint8_t *guid, size_t guid_len, char *output,
+		   size_t output_len)
+{
+	error_t ret = OK;
+
+	if (guid_len < 16) {
+		printf("Error: invalid guid len %zu\n", guid_len);
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	int p_ret = snprintf(output, output_len,
+			     "%02x%02x%02x%02x-%02x%02x-%02x%02x-"
+			     "%02x%02x-%02x%02x%02x%02x%02x%02x",
+			     guid[0], guid[1], guid[2], guid[3], guid[4],
+			     guid[5], guid[6], guid[7], guid[8], guid[9],
+			     guid[10], guid[11], guid[12], guid[13], guid[14],
+			     guid[15]);
+	if ((p_ret < 0) || ((size_t)p_ret >= output_len)) {
+		printf("Error: failed to convert guid to string\n");
+		ret = ERROR_DENIED;
+		goto out;
+	}
+
+out:
+	return ret;
 }
 
 error_t
@@ -202,19 +237,13 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 	struct vdevice_msg_queue_pair *cfg =
 		(struct vdevice_msg_queue_pair *)node->config;
 
-	char *base_name = get_name_from_generate(node->generate);
-	if (base_name == NULL) {
-		e = ERROR_ARGUMENT_INVALID;
-		goto err_base_name;
+	char *path = dto_construct_append_capid(node->generate, cfg->rx_vm_cap);
+	if (path == NULL) {
+		e = ERROR_NOMEM;
+		goto err_begin;
 	}
 
-	char name[DTB_NODE_NAME_MAX];
-	int  snp_name_ret = snprintf(name, DTB_NODE_NAME_MAX, "%s@%lx",
-				     base_name, cfg->rx_vm_cap);
-	(void)snp_name_ret;
-	assert(snp_name_ret <= DTB_NODE_NAME_MAX);
-
-	e = dto_node_begin(dto, name);
+	e = dto_construct_begin_path(dto, path);
 	if (e != OK) {
 		goto err_begin;
 	}
@@ -238,6 +267,13 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 	e = dto_property_add_u32array(dto, "interrupts", interrupts, 6);
 	if (e != OK) {
 		goto err;
+	}
+
+	if (cfg->has_peer_vdevice && cfg->has_valid_peer) {
+		e = dto_property_add_u32(dto, "qcom,peer-vmid", cfg->peer);
+		if (e != OK) {
+			goto err;
+		}
 	}
 
 	// dto_property_add_empty(dto, "qcom,console-dev");	// for SVM
@@ -275,80 +311,56 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 		goto err;
 	}
 
-	// FIXME: double check rm-rpc doesn't have label
+	e = dto_property_add_u32(dto, "qcom,vdevice-handle", node->handle);
+	if (e != OK) {
+		goto err;
+	}
+
+	// only generate peer info for message queue pair and skip for rm rpc
+	if ((node->type == VDEV_MSG_QUEUE_PAIR) && (cfg->has_peer_vdevice)) {
+		e = dto_property_add_string(dto, "peer", cfg->peer_id);
+		if (e != OK) {
+			goto err;
+		}
+	}
+
+	if (node->type == VDEV_MSG_QUEUE_PAIR) {
+		e = dto_property_add_u32(dto, "qcom,label", cfg->label);
+		if (e != OK) {
+			goto err;
+		}
+
+		e = dto_property_add_u32(dto, "label", cfg->label);
+		if (e != OK) {
+			goto err;
+		}
+	}
 
 err:
 	(void)0;
 
 	error_t ret;
-	ret = dto_node_end(dto, name);
+	ret = dto_construct_end_path(dto, path);
 	if (e == OK) {
 		e = ret;
 	}
+
 err_begin:
-err_base_name:
+	free(path);
+
 	return e;
 }
 
-error_t
-dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
+static error_t
+dtbo_add_memory_region(dto_t *dto, vmid_t self, label_t label)
 {
 	error_t e = OK;
-
-	struct vdevice_shm *cfg = (struct vdevice_shm *)node->config;
-
-	// FIXME: only support memparcel way
-	assert(!cfg->need_allocate);
-
-	uint32_t db_src_phandle = 0U, db_phandle = 0U;
-
-	// create doorbells if needed
-	if (!cfg->is_plain_shm) {
-		assert(cfg->db_src != NULL);
-		assert(cfg->db != NULL);
-
-		e = dto_create_doorbell(cfg->db_src, dto, &db_src_phandle);
-		if (e != OK) {
-			goto err_create_doorbell;
-		}
-
-		e = dto_create_doorbell(cfg->db, dto, &db_phandle);
-		if (e != OK) {
-			goto err_create_doorbell;
-		}
-	}
-
-	char *base_name = get_name_from_generate(node->generate);
-	if (base_name == NULL) {
-		e = ERROR_ARGUMENT_INVALID;
-		goto err_base_name;
-	}
-
-	// create shm
-	e = dto_node_begin(dto, base_name);
-	if (e != OK) {
-		goto err_node_begin;
-	}
-
-	const count_t compatible_count = 1;
-
-	char *compatible = NULL;
-	if (cfg->is_plain_shm) {
-		compatible = "qcom,shared-memory";
-	} else {
-		compatible = "qcom,gunyah-shm-doorbell";
-	}
-
-	e = add_compatibles(node, &compatible, compatible_count, dto);
-	if (e != OK) {
-		goto out;
-	}
 
 	bool is_external = false;
 
 	memparcel_t *mp;
 	foreach_memparcel_by_target_vmid (mp, self) {
-		if (memparcel_get_label(mp) == cfg->label) {
+		if (memparcel_get_label(mp) == label) {
 			// FIXME: do we need to check multiple buffer with same
 			// label?
 			break;
@@ -381,6 +393,55 @@ dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
 		e = dto_property_ref_internal(dto, "memory-region",
 					      mem_phandle);
 	}
+out:
+	return e;
+}
+
+error_t
+dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
+{
+	error_t e = OK;
+
+	struct vdevice_shm *cfg = (struct vdevice_shm *)node->config;
+
+	uint32_t db_src_phandle = 0U, db_phandle = 0U;
+
+	// create doorbells if needed
+	if (!cfg->is_plain_shm) {
+		assert(cfg->db_src != NULL);
+		assert(cfg->db != NULL);
+
+		e = dto_create_doorbell(cfg->db_src, dto, &db_src_phandle);
+		if (e != OK) {
+			goto err_create_doorbell;
+		}
+
+		e = dto_create_doorbell(cfg->db, dto, &db_phandle);
+		if (e != OK) {
+			goto err_create_doorbell;
+		}
+	}
+
+	e = dto_construct_begin_path(dto, node->generate);
+	if (e != OK) {
+		goto err_node_begin;
+	}
+
+	const count_t compatible_count = 1;
+
+	char *compatible = NULL;
+	if (cfg->is_plain_shm) {
+		compatible = "qcom,shared-memory";
+	} else {
+		compatible = "qcom,gunyah-shm-doorbell";
+	}
+
+	e = add_compatibles(node, &compatible, compatible_count, dto);
+	if (e != OK) {
+		goto out;
+	}
+
+	e = dtbo_add_memory_region(dto, self, cfg->label);
 	if (e != OK) {
 		goto out;
 	}
@@ -391,6 +452,11 @@ dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
 	}
 
 	e = dto_property_add_u32(dto, "qcom,label", cfg->label);
+	if (e != OK) {
+		goto out;
+	}
+
+	e = dto_property_add_u32(dto, "label", cfg->label);
 	if (e != OK) {
 		goto out;
 	}
@@ -407,17 +473,23 @@ dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
 		}
 	}
 
+	if (cfg->dma_base != (uint64_t)(-1)) {
+		e = dto_property_add_u64(dto, "dma_base", cfg->dma_base);
+		if (e != OK) {
+			goto out;
+		}
+	}
+
 out:
 	(void)0;
 
 	error_t ret;
-	ret = dto_node_end(dto, base_name);
+	ret = dto_construct_end_path(dto, node->generate);
 	if (e == OK) {
 		e = ret;
 	}
 
 err_node_begin:
-err_base_name:
 err_create_doorbell:
 	return e;
 }
@@ -465,23 +537,119 @@ err_alloc_compatibles:
 }
 
 char *
-get_name_from_generate(const char *generate)
+dto_construct_append_capid(const char *generate, cap_id_t cap_id)
 {
-	size_t sz  = strlen(generate);
-	char * ret = NULL;
+	error_t err = OK;
 
-	// not allowed generate tailing with '/'
-	if (generate[sz - 1] == '/') {
-		goto out;
-	}
+	size_t sz = strlen(generate) + DTB_NODE_NAME_MAX;
 
-	// find the last '/'
-	ret = strrchr(generate, '/');
+	char *ret = (char *)malloc(sz);
 	if (ret == NULL) {
+		printf("Error: failed to allocate path for %s\n", generate);
+		err = ERROR_NOMEM;
 		goto out;
 	}
-	ret++;
+
+	int snp_name_ret = snprintf(ret, sz, "%s@%lx", generate, cap_id);
+	assert((size_t)snp_name_ret <= sz);
+out:
+	if (err != OK) {
+		free(ret);
+		ret = NULL;
+	}
+
+	return ret;
+}
+
+error_t
+dto_construct_begin_path(dto_t *dto, const char *path)
+{
+	error_t ret = OK;
+
+	char *target = strdup(path);
+	if (target == NULL) {
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	const char separator = '/';
+
+	assert(target[0] == separator);
+
+	char *name_start = target + 1;
+
+	assert(*name_start != '\0');
+
+	dto_modify_begin_by_path(dto, "/");
+
+	char *name_end = NULL;
+	do {
+		name_end = strchr(name_start, separator);
+		if (name_end == NULL) {
+			break;
+		}
+
+		*name_end = '\0';
+
+		ret = dto_node_begin(dto, name_start);
+		if (ret != OK) {
+			goto out;
+		}
+
+		name_start = name_end + 1;
+	} while (name_end != NULL);
+
+	// the generate should specify a node name
+	// we can change it to return error latter
+	assert(*name_start != '\0');
+
+	// create the last node
+	ret = dto_node_begin(dto, name_start);
 
 out:
+	free(target);
+	return ret;
+}
+
+error_t
+dto_construct_end_path(dto_t *dto, const char *path)
+{
+	error_t ret = OK;
+
+	size_t sz = strlen(path);
+
+	char *target = strdup(path);
+	if (target == NULL) {
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	const char separator = '/';
+
+	assert(target[0] == separator);
+
+	// should have a node name
+	assert(target[sz - 1] != '/');
+
+	// remove the node name
+	char *name_start = NULL;
+
+	do {
+		name_start = strrchr(target, separator);
+		if (name_start == NULL) {
+			break;
+		}
+
+		*name_start = '\0';
+
+		ret = dto_node_end(dto, &name_start[1]);
+		if (ret != OK) {
+			goto out;
+		}
+	} while (name_start != NULL);
+
+	dto_modify_end_by_path(dto, "/");
+out:
+	free(target);
 	return ret;
 }

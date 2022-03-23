@@ -21,11 +21,11 @@ rm_error_t
 register_uart(void)
 {
 	const char *dev	   = "/dev/console";
-	char *	    banner = "[RM] ";
+	char	     *banner = "[RM]";
 
 	rm_error_t e = RM_OK;
 
-	if (uart_registered || !console_allowed) {
+	if (uart_registered || platform_get_security_state()) {
 		goto err;
 	}
 

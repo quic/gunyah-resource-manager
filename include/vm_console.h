@@ -8,11 +8,6 @@ typedef struct vm_console vm_console_t;
 struct vm;
 typedef struct vm vm_t;
 
-extern bool console_allowed;
-
-rm_error_t
-console_init(void);
-
 rm_error_t
 vm_console_init(void);
 

@@ -208,7 +208,7 @@ static rm_error_t
 do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 {
 	rm_error_t err;
-	uint8_t *  recv_buf    = transport_buf;
+	uint8_t	*recv_buf    = transport_buf;
 	size_t	   len	       = RM_RPC_MESSAGE_SIZE;
 	bool	   do_callback = false;
 
@@ -254,9 +254,8 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 			uint8_t *data_buf = malloc(alloc_size);
 			if (data_buf == NULL) {
 				printf("rm-rpc: Failed to allocate recv buffer "
-				       "for VM %lx, message ID %lx\n",
-				       (unsigned long)vm_id,
-				       (unsigned long)msg_id);
+				       "for VM %d, message ID %lx\n",
+				       (int)vm_id, (unsigned long)msg_id);
 				err = RM_OK;
 				goto do_recv_return;
 			}

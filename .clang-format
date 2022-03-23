@@ -1,3 +1,7 @@
+# © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+#
 # Gunyah Coding Style - requires Clang Format >= 9
 #
 # For more information, see:
@@ -8,15 +12,17 @@
 Language:        Cpp
 AccessModifierOffset: -8
 AlignAfterOpenBracket: Align
-AlignConsecutiveMacros: true
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
+AlignArrayOfStructures: None
+AlignConsecutiveMacros: Consecutive
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveBitFields: None
+AlignConsecutiveDeclarations: Consecutive
 AlignEscapedNewlines: Right
-AlignOperands:   true
+AlignOperands:   Align
 AlignTrailingComments: true
 AllowAllArgumentsOnNextLine: true
-AllowAllConstructorInitializersOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortEnumsOnASingleLine: true
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
@@ -27,12 +33,15 @@ AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: All
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: MultiLine
+AttributeMacros:
+  - _Atomic
+  - alignas
 BinPackArguments: true
 BinPackParameters: true
 BraceWrapping:
   AfterCaseLabel:  false
   AfterClass:      true
-  AfterControlStatement: false
+  AfterControlStatement: Never
   AfterEnum:       false
   AfterFunction:   true
   AfterNamespace:  true
@@ -42,11 +51,14 @@ BraceWrapping:
   AfterExternBlock: false
   BeforeCatch:     false
   BeforeElse:      false
+  BeforeLambdaBody: false
+  BeforeWhile:     false
   IndentBraces:    false
   SplitEmptyFunction: true
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
 BreakBeforeBinaryOperators: None
+BreakBeforeConceptDeclarations: true
 BreakBeforeBraces: Custom
 BreakBeforeInheritanceComma: false
 BreakInheritanceList: BeforeComma
@@ -58,52 +70,84 @@ BreakStringLiterals: false
 ColumnLimit:     80
 CommentPragmas:  '^ FIXME:'
 CompactNamespaces: false
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 8
 ContinuationIndentWidth: 8
 Cpp11BracedListStyle: false
+DeriveLineEnding: false
 DerivePointerAlignment: false
 DisableFormat:   false
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
 ExperimentalAutoDetectBinPacking: false
+PackConstructorInitializers: BinPack
 FixNamespaceComments: true
-ForEachMacros: [
-    'foreach_memparcel_by_target_vmid',
-    'foreach_vector_ptr',
-    'fdt_for_each_subnode',
-    'fdt_for_each_property_offset']
+ForEachMacros:
+    - foreach_memparcel_by_target_vmid
+    - foreach_vector_ptr
+    - fdt_for_each_subnode
+    - fdt_for_each_property_offset
+IfMacros: []
 IncludeBlocks:   Regroup
 IncludeCategories:
   - Regex:           '^<guest_types\.h>$'
     Priority:        -150
-  - Regex:           '^<(assert|limits|string|std.*|sys/.*)\.h>$'
+    SortPriority:    0
+    CaseSensitive:   true
+  - Regex:           '^<(assert|endian|limits|string|std.*|sys/.*)\.h>$'
     Priority:        -100
+    SortPriority:    0
+    CaseSensitive:   true
   - Regex:           '^<(type|error)'
     Priority:        -70
+    SortPriority:    0
+    CaseSensitive:   true
   - Regex:           '^<asm/'
     Priority:        -50
+    SortPriority:    0
+    CaseSensitive:   true
   - Regex:           '^<asm-generic/'
     Priority:        -75
+    SortPriority:    0
+    CaseSensitive:   true
   - Regex:           '^<rm-rpc.h>'
     Priority:        -50
+    SortPriority:    0
+    CaseSensitive:   true
+  - Regex:           '^<resource-manager.h>'
+    Priority:        -40
+    SortPriority:    0
+    CaseSensitive:   true
   - Regex:           '^<'
     Priority:        -20
+    SortPriority:    0
+    CaseSensitive:   true
   - Regex:           '^"'
     Priority:        -1
+    SortPriority:    0
+    CaseSensitive:   true
 IncludeIsMainRegex: '(Test)?$'
+IncludeIsMainSourceRegex: ''
+IndentAccessModifiers: false
 IndentCaseLabels: false
+IndentCaseBlocks: false
 IndentGotoLabels: true
 IndentPPDirectives: None
+IndentExternBlock: AfterExternBlock
+IndentRequires:  false
 IndentWidth:     8
 IndentWrappedFunctionNames: false
+InsertTrailingCommas: None
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true
 KeepEmptyLinesAtTheStartOfBlocks: false
+LambdaBodyIndentation: Signature
 MacroBlockBegin: '^BITMAP_(ATOMIC_)?FOREACH_(SET|CLEAR)_BEGIN$'
 MacroBlockEnd:   '^BITMAP_(ATOMIC_)?FOREACH_(SET|CLEAR)_END$'
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 ObjCBinPackProtocolList: Auto
 ObjCBlockIndentWidth: 2
+ObjCBreakBeforeNestedBlockParam: true
 ObjCSpaceAfterProperty: false
 ObjCSpaceBeforeProtocolList: true
 PenaltyBreakAssignment: 10
@@ -114,29 +158,47 @@ PenaltyBreakString: 10
 PenaltyBreakTemplateDeclaration: 10
 PenaltyExcessCharacter: 100
 PenaltyReturnTypeOnItsOwnLine: 0
+PenaltyIndentedWhitespace: 0
 PointerAlignment: Right
+PPIndentWidth:   -1
+ReferenceAlignment: Pointer
 ReflowComments:  true
-SortIncludes:    true
+ShortNamespaceLines: 1
+SortIncludes:    CaseSensitive
+SortJavaStaticImport: Before
 SortUsingDeclarations: false
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
 SpaceAfterTemplateKeyword: true
 SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
 SpaceBeforeCpp11BracedList: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
+SpaceAroundPointerQualifiers: Default
 SpaceBeforeRangeBasedForLoopColon: false
 SpaceInEmptyBlock: true
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 1
-SpacesInAngles:  false
+SpacesInAngles:  Never
+SpacesInConditionalStatement: false
 SpacesInContainerLiterals: false
 SpacesInCStyleCastParentheses: false
+SpacesInLineCommentPrefix:
+  Minimum:         1
+  Maximum:         1
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-Standard:        Cpp03
-StatementMacros: ['_Pragma', 'RM_PADDED(|_BEGIN|_END)']
+SpaceBeforeSquareBrackets: false
+BitFieldColonSpacing: Both
+Standard:        Latest
+StatementAttributeLikeMacros: []
+StatementMacros:
+    - _Pragma
+    - RM_PADDED_(BEGIN|END)
 TabWidth:        8
+UseCRLF:         false
 UseTab:          Always
+WhitespaceSensitiveMacros: []
 ...

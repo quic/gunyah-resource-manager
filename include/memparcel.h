@@ -52,8 +52,11 @@ memparcel_is_shared(const memparcel_t *mp, vmid_t vmid);
 error_t
 memparcel_get_shared_vmids(const memparcel_t *mp, vector_t *vmids);
 
+size_t
+memparcel_get_size(const memparcel_t *mp);
+
 size_result_t
-memparcel_get_size(const memparcel_t *mp, count_t region_index);
+memparcel_get_region_size(const memparcel_t *mp, count_t region_index);
 
 memparcel_t *
 memparcel_iter_by_target_vmid(memparcel_t *after, vmid_t vmid);
@@ -65,8 +68,17 @@ void
 memparcel_set_phandle(memparcel_t *mp, vmid_t vmid, uint32_t phandle,
 		      bool is_external);
 
+uint8_result_t
+memparcel_get_vm_rights(const memparcel_t *mp, vmid_t vmid);
+
+uint16_result_t
+memparcel_get_vm_attrs(memparcel_t *mp, vmid_t vmid);
+
 uint32_t
 memparcel_get_phandle(memparcel_t *mp, vmid_t vmid, bool *is_external);
+
+void
+memparcel_set_mem_info_tag(memparcel_t *mp, label_t tag);
 
 #define foreach_memparcel_by_target_vmid(mp, vmid)                             \
 	for ((mp) = memparcel_iter_by_target_vmid(NULL, (vmid)); (mp) != NULL; \

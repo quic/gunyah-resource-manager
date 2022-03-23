@@ -6,20 +6,22 @@
 // condition.
 
 typedef struct {
-	size_t addr_cells;
-	size_t size_cells;
-	size_t interrupt_cells;
+	count_t addr_cells;
+	count_t size_cells;
+	count_t interrupt_cells;
 } ctx_t;
 
 typedef enum {
 	BY_PATH,
 	BY_STRING_PROP,
+	BY_COMPATIBLE,
 } listener_trigger_type_t;
 
 typedef enum {
 	RET_CONTINUE,
 	RET_ERROR,
 	RET_STOP,
+	RET_CLAIMED,
 } listener_return_t;
 
 typedef listener_return_t (*action_t)(void *data, void *fdt, int node_ofs,
@@ -33,10 +35,14 @@ typedef struct {
 	listener_trigger_type_t type;
 	uint8_t			type_padding[4];
 
-	char *expected_path;
-
-	char *string_prop_name;
-	char *expected_string;
+	union {
+		char *expected_path;
+		struct {
+			char *string_prop_name;
+			char *expected_string;
+		};
+		char *compatible_string;
+	};
 
 	action_t action;
 } dtb_listener_t;
@@ -62,6 +68,9 @@ typedef struct {
 dtb_parser_parse_dtb_ret_t
 dtb_parser_parse_dtb(void *fdt, const dtb_parser_ops_t *ops);
 
+error_t
+dtb_parser_free(dtb_parser_ops_t *ops, void *data);
+
 // utilities
 
 void
@@ -72,3 +81,7 @@ fdt_match_strings(const char *strings, int lenp, const char *expect);
 
 uint64_t
 fdt_read_num(const fdt32_t *data, size_t cell_cnt);
+
+error_t
+fdt_read_u32_array(const fdt32_t *data, int lenp, uint32_t *array,
+		   size_t array_len);

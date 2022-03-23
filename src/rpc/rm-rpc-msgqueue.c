@@ -13,6 +13,8 @@
 
 #include <rm-rpc.h>
 
+#include <resource-manager.h>
+
 #include <event.h>
 #include <fcntl.h>
 #include <guest_interface.h>
@@ -46,12 +48,6 @@ typedef struct rm_rpc_transport rm_rpc_transport_t;
 static rm_rpc_transport_t *transport_list;
 
 static vmid_t transport_id;
-
-static rm_error_t
-register_isr(virq_t virq, event_t *event);
-
-static rm_error_t
-deregister_isr(virq_t virq);
 
 static void
 takedown_transport(rm_rpc_transport_t *transport, vmid_t my_id,
@@ -99,7 +95,7 @@ init_transport(rm_rpc_transport_t *transport, vmid_t my_id, vmid_t other_id)
 		goto err_out;
 	}
 
-	err = register_isr(info_ret.tx_virq, &transport->tx_event);
+	err = register_event_isr(info_ret.tx_virq, &transport->tx_event);
 	if (err != RM_OK) {
 		goto err_tx_event;
 	}
@@ -111,7 +107,7 @@ init_transport(rm_rpc_transport_t *transport, vmid_t my_id, vmid_t other_id)
 		goto err_rx_virq;
 	}
 
-	err = register_isr(info_ret.rx_virq, &transport->rx_event);
+	err = register_event_isr(info_ret.rx_virq, &transport->rx_event);
 	if (err != RM_OK) {
 		goto err_rx_event;
 	}
@@ -169,7 +165,7 @@ rm_rpc_get_transport(vmid_t vm_id)
 rm_rpc_rx_data_t *
 rm_rpc_get_rx_data(vmid_t vm_id)
 {
-	rm_rpc_rx_data_t *  data      = NULL;
+	rm_rpc_rx_data_t	 *data      = NULL;
 	rm_rpc_transport_t *transport = rm_rpc_get_transport(vm_id);
 
 	if (transport != NULL) {
@@ -182,7 +178,7 @@ rm_rpc_get_rx_data(vmid_t vm_id)
 rm_rpc_tx_data_t *
 rm_rpc_get_tx_data(vmid_t vm_id)
 {
-	rm_rpc_tx_data_t *  data      = NULL;
+	rm_rpc_tx_data_t	 *data      = NULL;
 	rm_rpc_transport_t *transport = rm_rpc_get_transport(vm_id);
 
 	if (transport != NULL) {
@@ -210,9 +206,10 @@ rm_rpc_send_packet(rm_rpc_tx_data_t *tx, void *buf, size_t len)
 
 	if (transport->vm_id != VMID_HYP) {
 		gunyah_hyp_msgqueue_send_result_t send_ret;
-		send_ret = gunyah_hyp_msgqueue_send(transport->tx_capid, len,
-						    (user_ptr_t)buf, 0);
-		err	 = send_ret.error;
+		send_ret = gunyah_hyp_msgqueue_send(
+			transport->tx_capid, len, (user_ptr_t)buf,
+			msgqueue_send_flags_default());
+		err = send_ret.error;
 	} else {
 		err = ERROR_ARGUMENT_INVALID;
 	}
@@ -273,102 +270,6 @@ rm_rpc_recv_packet(rm_rpc_rx_data_t *rx, void *buf, size_t *len)
 
 recv_packet_return:
 	return rm_err;
-}
-
-static bool
-msg_queue_isr(int virq_num, void *data)
-{
-	bool ret = false;
-
-	(void)virq_num;
-
-	event_t *event = (event_t *)data;
-	if (event == NULL) {
-		goto out;
-	}
-
-	event_trigger(event);
-	ret = true;
-
-out:
-	return true;
-}
-
-rm_error_t
-register_isr(virq_t virq, event_t *event)
-{
-	const char *dev = "/dev/gicv3";
-
-	rm_error_t e = RM_OK;
-	// simple solution to open it multiple times
-	int fd = open(dev, O_RDWR);
-	if (fd == -1) {
-		e = RM_ERROR_DENIED;
-		goto err;
-	}
-
-	struct irq_set_trigger_req req_set_trigger = {
-		.irq	 = (int)virq,
-		.trigger = IRQ_TRIGGER_EDGE_RISING,
-	};
-
-	int ret = 0;
-	ret = ioctl(fd, IOCTL_SET_IRQ_TRIGGER, (unsigned long)&req_set_trigger);
-	if (ret != 0) {
-		e = RM_ERROR_DENIED;
-		goto err1;
-	}
-
-	struct register_isr_req req_register_isr = {
-		.isr  = msg_queue_isr,
-		.irq  = (int)virq,
-		.data = event,
-	};
-
-	ret = ioctl(fd, IOCTL_REGISTER_ISR, (unsigned long)&req_register_isr);
-	if (ret != 0) {
-		e = RM_ERROR_DENIED;
-		goto err1;
-	}
-
-	ret = ioctl(fd, IOCTL_ENABLE_IRQ, (unsigned long)&virq);
-	if (ret != 0) {
-		e = RM_ERROR_DENIED;
-	}
-
-err1:
-	close(fd);
-err:
-	return e;
-}
-
-rm_error_t
-deregister_isr(virq_t virq)
-{
-	const char *dev = "/dev/gicv3";
-
-	rm_error_t e = RM_OK;
-
-	// simple solution to open it multiple times
-	int fd = open(dev, O_RDWR);
-	if (fd == -1) {
-		e = RM_ERROR_DENIED;
-		goto err;
-	}
-
-	int ret = ioctl(fd, IOCTL_DISABLE_IRQ, (unsigned long)&virq);
-	if (ret != 0) {
-		e = RM_ERROR_DENIED;
-	}
-
-	ret = ioctl(fd, IOCTL_DEREGISTER_ISR, (unsigned long)&virq);
-	if (ret != 0) {
-		e = RM_ERROR_DENIED;
-	}
-
-	close(fd);
-err:
-	return e;
 }
 
 rm_error_t

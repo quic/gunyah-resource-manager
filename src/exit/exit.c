@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 
-#include <asm/arm_smccc.h>
 #include <rm-rpc.h>
 
 #include <exit_dev.h>
@@ -15,17 +14,7 @@
 #include <platform.h>
 #include <uapi/exit_dev.h>
 #include <unistd.h>
-
-static noreturn void
-exit_handler(int exit_code)
-{
-	(void)exit_code;
-
-	printf("exit: Abort in RM\n");
-
-	while (1)
-		;
-}
+#include <vendor_hyp_call.h>
 
 rm_error_t
 register_exit(void)
@@ -41,7 +30,7 @@ register_exit(void)
 	}
 
 	struct register_exit_req req_register_exit = {
-		.exit_func = exit_handler,
+		.exit_func = platform_exit_handler,
 	};
 	int ret = ioctl(fd, IOCTL_REGISTER_EXIT,
 			(unsigned long)&req_register_exit);

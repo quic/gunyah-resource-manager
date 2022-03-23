@@ -331,7 +331,7 @@ out:
 rm_rpc_rx_data_t *
 rm_rpc_get_rx_data(vmid_t vm_id)
 {
-	rm_rpc_rx_data_t *  data      = NULL;
+	rm_rpc_rx_data_t	 *data      = NULL;
 	rm_rpc_transport_t *transport = rm_rpc_get_transport(vm_id);
 
 	if (transport != NULL) {
@@ -344,7 +344,7 @@ rm_rpc_get_rx_data(vmid_t vm_id)
 rm_rpc_tx_data_t *
 rm_rpc_get_tx_data(vmid_t vm_id)
 {
-	rm_rpc_tx_data_t *  data      = NULL;
+	rm_rpc_tx_data_t	 *data      = NULL;
 	rm_rpc_transport_t *transport = rm_rpc_get_transport(vm_id);
 
 	if (transport != NULL) {

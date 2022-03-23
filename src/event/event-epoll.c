@@ -157,7 +157,7 @@ static event_t *
 get_next_pending_event(void)
 {
 	event_t **head = &event_data.head;
-	event_t * ev;
+	event_t	*ev;
 
 	assert(*head != NULL);
 

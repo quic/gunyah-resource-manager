@@ -10,6 +10,9 @@
 
 #include <rm-rpc.h>
 
+#include <resource-manager.h>
+
+#include <memparcel.h>
 #include <rm-rpc-fifo.h>
 #include <utils/vector.h>
 #include <vm_config.h>
@@ -40,7 +43,7 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	vector_t *descs = vector_init(rm_hyp_resource_resp_t, 16, 16);
 	if (descs == NULL) {
 		ret = RM_ERROR_NOMEM;
-		goto out;
+		goto out_deinit;
 	}
 
 	error_t err = vm_config_get_resource_descs(client_id, vmid, descs);
@@ -52,10 +55,10 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		break;
 	case ERROR_NOMEM:
 		ret = RM_ERROR_NOMEM;
-		goto out;
+		goto out_deinit;
 	case ERROR_ARGUMENT_INVALID:
 		ret = RM_ERROR_VMID_INVALID;
-		goto out;
+		goto out_deinit;
 	default:
 		printf("rm internal err %d", err);
 		exit(1);
@@ -69,7 +72,7 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	char *resp = calloc(1, resp_size);
 	if (resp == NULL) {
 		ret = RM_ERROR_NOMEM;
-		goto out;
+		goto out_deinit;
 	}
 
 	memcpy(resp, &ret, sizeof(ret));
@@ -78,14 +81,17 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	memcpy(resp + (2 * sizeof(uint32_t)), vector_raw_data(descs),
 	       resource_entries * sizeof(rm_hyp_resource_resp_t));
 
-	vector_deinit(descs);
-
 	rm_error_t rpc_err = rm_rpc_fifo_reply(client_id, msg_id, seq_num, resp,
 					       resp_size, resp_size);
 	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
 		printf("get_hyp_resources: err(%d)\n", rpc_err);
 		exit(1);
+	}
+
+out_deinit:
+	if (descs != NULL) {
+		vector_deinit(descs);
 	}
 
 out:

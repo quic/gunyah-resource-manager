@@ -614,7 +614,7 @@ dto_property_ref_external(dto_t *dto, const char *property_name,
 	}
 
 	const int who_sz = 256;
-	char *	  who	 = malloc((size_t)who_sz);
+	char     *who	 = malloc((size_t)who_sz);
 	if (who == NULL) {
 		e = ERROR_NOMEM;
 		goto err2;
@@ -806,7 +806,7 @@ error_t
 add_local_fixup(dto_t *dto, const char *label)
 {
 	error_t e	  = OK;
-	char *	saved_ptr = NULL;
+	char   *saved_ptr = NULL;
 
 	char *cur_pwd = strdup(dto->pwd);
 	if (cur_pwd == NULL) {
@@ -816,13 +816,13 @@ add_local_fixup(dto_t *dto, const char *label)
 
 	// for each node in pwd
 	const char *delim	  = "/";
-	char *	    cur_node_name = strtok_r(cur_pwd, delim, &saved_ptr);
+	char	     *cur_node_name = strtok_r(cur_pwd, delim, &saved_ptr);
 	if (cur_node_name == NULL) {
 		e = ERROR_NOMEM;
 		goto err1;
 	}
 
-	local_fixup_node_t * cur_node	   = NULL;
+	local_fixup_node_t  *cur_node	   = NULL;
 	local_fixup_node_t **cur_node_list = &dto->local_fixup_list;
 	while (cur_node_name != NULL) {
 		// allocate local fixup node if needed

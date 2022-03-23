@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 typedef struct memparcel memparcel_t;
+typedef struct sgl_entry sgl_entry_t;
 
 typedef enum {
 	// two message queues to communicate with resource manager
@@ -15,6 +16,7 @@ typedef enum {
 	VDEV_MSG_QUEUE_PAIR,
 	VDEV_SHM,
 	VDEV_VIRTUAL_PM,
+	VDEV_IOMEM,
 } vdevice_type_t;
 
 #pragma clang diagnostic push
@@ -44,6 +46,12 @@ struct vdevice_msg_queue_pair {
 
 	size_t tx_max_msg_size;
 	size_t rx_max_msg_size;
+
+	bool	 has_peer_vdevice;
+	bool	 has_valid_peer;
+	uint32_t label;
+
+	char *peer_id;
 };
 
 struct vdevice_doorbell {
@@ -58,9 +66,6 @@ struct vdevice_doorbell {
 	virq_t	 peer_virq;
 
 	uint32_t label;
-
-	// only valid if it's associtated with a shm
-	memparcel_t *related_mp;
 };
 
 struct vdevice_virtual_pm {
@@ -105,10 +110,40 @@ struct vdevice_shm {
 
 	vmaddr_t base_ipa;
 
-	size_t sz;
+	uint64_t dma_base;
+};
 
-	// FIXME: might be better to use handle for external module
-	memparcel_t *mp;
+struct vdevice_watchdog {
+	virq_t bark_virq;
+	virq_t bite_virq;
+};
+
+// index definition for iomem vdevice node validation member's index
+enum iomem_validation_index {
+	IOMEM_VALIDATION_SELF_IDX = 0,
+	IOMEM_VALIDATION_PEER_IDX,
+	IOMEM_VALIDATION_NUM_IDXS,
+};
+
+struct vdevice_iomem {
+	uint32_t rm_acl[IOMEM_VALIDATION_NUM_IDXS];
+	uint32_t rm_attrs[IOMEM_VALIDATION_NUM_IDXS];
+
+	sgl_entry_t *rm_sglist;
+	size_t	     rm_sglist_len;
+
+	vmid_t peer;
+
+	uint32_t label;
+
+	uint32_t mem_info_tag;
+
+	bool mem_info_tag_set;
+
+	bool need_allocate;
+
+	bool validate_acl;
+	bool validate_attrs;
 };
 
 #define VDEVICE_MAX_COMPATIBLE_LEN   256U
@@ -126,12 +161,14 @@ struct vdevice_node {
 	bool visible; // visible to queries
 
 	count_t push_compatible_num;
-	char *	push_compatible[VDEVICE_MAX_PUSH_COMPATIBLES];
+	char   *push_compatible[VDEVICE_MAX_PUSH_COMPATIBLES];
 
 	char *generate;
 
 	// type specific configuration
 	void *config;
+
+	resource_handle_t handle;
 };
 
 struct vm_config {
@@ -154,10 +191,13 @@ struct vm_config {
 	cap_id_t addrspace;
 	cap_id_t vic;
 	cap_id_t vpm_group;
+	cap_id_t watchdog;
 
 	vm_console_t *console;
 
 	vm_irq_manager_t *irq_manager;
+
+	platform_vm_config_t platform;
 };
 
 #pragma clang diagnostic pop

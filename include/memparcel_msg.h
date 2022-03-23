@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#define MEM_DONATE  0x51000010U
 #define MEM_ACCEPT  0x51000011U
 #define MEM_LEND    0x51000012U
 #define MEM_SHARE   0x51000013U
@@ -29,6 +30,8 @@
 #define MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR  2U
 #define MEM_ACCEPT_FLAG_VALIDATE_LABEL	   4U
 #define MEM_ACCEPT_FLAG_MAP_OTHER	   8U
+#define MEM_ACCEPT_FLAG_MAP_CONTIGUOUS	   16U
+#define MEM_ACCEPT_FLAG_SANITIZE	   32U
 #define MEM_ACCEPT_FLAG_DONE		   128U
 
 #define MEM_RELEASE_FLAG_SANITIZE 1U
@@ -48,13 +51,13 @@
 #define MEM_ATTR_UNCACHED 2U
 #define MEM_ATTR_CACHED	  3U
 
-typedef struct {
+typedef struct acl_entry {
 	vmid_t	vmid;
 	uint8_t rights;
 	uint8_t res0;
 } acl_entry_t;
 
-typedef struct {
+typedef struct sgl_entry {
 	uint64_t ipa;
 	uint64_t size;
 } sgl_entry_t;
@@ -185,8 +188,8 @@ typedef struct {
 typedef uint32_t mem_handle_t;
 
 void
-memparcel_create(vmid_t src_vmid, vmid_t owner_vmid, uint32_t msg_id,
-		 uint16_t seq_num, uint8_t *buf, size_t len);
+memparcel_create(vmid_t vmid, uint32_t msg_id, uint16_t seq_num, uint8_t *buf,
+		 size_t len);
 
 void
 memparcel_accept(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
@@ -195,8 +198,7 @@ void
 memparcel_release(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
 
 void
-memparcel_reclaim(vmid_t src_vmid, vmid_t owner_vmid, uint16_t seq_num,
-		  uint8_t *buf, size_t len);
+memparcel_reclaim(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
 
 void
 memparcel_notify(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
@@ -232,5 +234,4 @@ memparcel_sgl_do_lookup(vmid_t vmid, uint32_t acl_entries, uint16_t sgl_entries,
 			uint32_t label, uint8_t mem_type, bool hyp_unassign);
 
 rm_error_t
-memparcel_do_reclaim(vmid_t owner_vmid, mem_handle_t handle, uint8_t flags,
-		     bool hyp_assign);
+memparcel_do_reclaim(vmid_t vmid, mem_handle_t handle, uint8_t flags);

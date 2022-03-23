@@ -12,11 +12,11 @@ typedef void (*event_callback_t)(event_t *event, void *data);
 #pragma clang diagnostic ignored "-Wpadded"
 
 struct event {
-	event_t *	 next;
-	event_t *	 prev;
+	event_t		*next;
+	event_t		*prev;
 	event_callback_t callback;
 	bool		 pending;
-	void *		 data;
+	void	     *data;
 	int		 fd;
 };
 
@@ -36,6 +36,9 @@ event_loop_exit(void);
 
 bool
 event_is_pending(void);
+
+bool
+event_is_registered(event_t *event);
 
 void
 event_flush_pending(void);

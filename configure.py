@@ -36,9 +36,6 @@ import runpy
 import json
 
 
-_constructor_path = os.path.join('tools', 'build')
-
-
 class ClangCompDB(object):
 
     def __init__(self, path, var_subst):
@@ -109,8 +106,7 @@ class AbstractBuildGraph(object):
 
         if not self._variants:
             try:
-                runpy.run_path(_constructor_path, init_globals={'graph': self},
-                               run_name='__main__')
+                runpy.run_module('tools.build', init_globals={'graph': self})
             except SystemExit as e:
                 if e.code:
                     raise
@@ -476,7 +472,7 @@ class NinjaBuild(AbstractBuildGraph):
 
     @property
     def _phony_always(self):
-        return os.path.join(_constructor_path, '.should-not-exist')
+        return os.path.join('tools', 'build', '.should-not-exist')
 
     def __call__(self, gen_cmd=None, **kwargs):
         super(NinjaBuild, self).__call__(**kwargs)

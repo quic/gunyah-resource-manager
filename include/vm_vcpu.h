@@ -15,7 +15,8 @@ struct vcpu {
 
 	uint32_t affinity_index;
 
-	bool boot_vcpu;
+	bool  boot_vcpu;
+	char *patch;
 };
 typedef struct vcpu vcpu_t;
 

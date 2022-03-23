@@ -4,9 +4,10 @@
 
 #include <guest_types.h>
 
+#include <resource-manager.h>
+
 #include <guest_interface.h>
 #include <memextent.h>
-#include <resource-manager.h>
 
 cap_id_result_t
 memextent_create(paddr_t phy_base, size_t size, pgtable_access_t access,
@@ -28,6 +29,7 @@ memextent_create(paddr_t phy_base, size_t size, pgtable_access_t access,
 	memextent_attrs_set_memtype(&mem_attrs, memtype);
 
 	if (parent != CSPACE_CAP_INVALID) {
+		// To configure derive extents, the phys_base must be the offset
 		ret = gunyah_hyp_memextent_configure_derive(
 			me_ret.new_cap, parent, phy_base, size, mem_attrs);
 	} else {
@@ -53,16 +55,8 @@ out:
 
 error_t
 memextent_map(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
-	      pgtable_access_t access, memextent_memtype_t memtype)
+	      pgtable_access_t access, pgtable_vm_memtype_t memtype_map)
 {
-	pgtable_vm_memtype_t memtype_map;
-
-	if (memtype == MEMEXTENT_MEMTYPE_DEVICE) {
-		memtype_map = PGTABLE_VM_MEMTYPE_DEVICE_NGNRE;
-	} else {
-		memtype_map = PGTABLE_VM_MEMTYPE_NORMAL_WB;
-	}
-
 	memextent_mapping_attrs_t map_attrs = memextent_mapping_attrs_default();
 
 	memextent_mapping_attrs_set_user_access(&map_attrs, access);
@@ -73,10 +67,25 @@ memextent_map(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 					map_attrs);
 }
 
+error_t
+memextent_update_access(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
+			pgtable_access_t access)
+{
+	memextent_access_attrs_t access_attrs =
+		memextent_access_attrs_default();
+
+	memextent_access_attrs_set_user_access(&access_attrs, access);
+	memextent_access_attrs_set_kernel_access(&access_attrs, access);
+
+	return gunyah_hyp_addrspace_update_access(addrspace_cap, me_cap, vbase,
+						  access_attrs);
+}
+
 cap_id_result_t
 memextent_create_and_map(cap_id_t addrspace_cap, paddr_t phy_base,
 			 vmaddr_t vbase, size_t size, pgtable_access_t access,
-			 memextent_memtype_t memtype, cap_id_t parent)
+			 memextent_memtype_t  memtype,
+			 pgtable_vm_memtype_t memtype_map, cap_id_t parent)
 {
 	cap_id_result_t cap_ret =
 		memextent_create(phy_base, size, access, memtype, parent);
@@ -84,8 +93,8 @@ memextent_create_and_map(cap_id_t addrspace_cap, paddr_t phy_base,
 		goto out;
 	}
 
-	error_t ret =
-		memextent_map(cap_ret.r, addrspace_cap, vbase, access, memtype);
+	error_t ret = memextent_map(cap_ret.r, addrspace_cap, vbase, access,
+				    memtype_map);
 	if (ret != OK) {
 		cap_ret = cap_id_result_error(ret);
 	}

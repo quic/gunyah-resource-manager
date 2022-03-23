@@ -7,12 +7,12 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include <asm/arm_smccc.h>
 #include <rm-rpc.h>
+
+#include <resource-manager.h>
 
 #include <guest_interface.h>
 #include <inttypes.h>
-#include <resource-manager.h>
 #include <time.h>
 
 #pragma clang diagnostic push
@@ -27,19 +27,26 @@
 
 #include <dt_overlay.h>
 #include <dtb_parser.h>
+#include <log.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
+#include <platform_dt.h>
+#include <platform_vm_config.h>
 #include <rm-rpc-fifo.h>
 #include <util.h>
 #include <utils/list.h>
 #include <utils/vector.h>
+#include <vendor_hyp_call.h>
+#include <vm_client.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
 #include <vm_creation.h>
 #include <vm_mgnt.h>
 #include <vm_mgnt_message.h>
+#include <vm_vcpu.h>
 
 #include "dto_construct.h"
+#include "vm_creation_message.h"
 
 #define TEMP_DTB_MAP_VADDR (0xe0000000U)
 
@@ -47,8 +54,8 @@ static error_t
 process_dtb(vm_t *vm);
 
 typedef struct {
-	dto_t * constructed_object;
-	void *	dtbo;
+	dto_t  *constructed_object;
+	void   *dtbo;
 	size_t	size;
 	error_t err;
 	uint8_t err_padding[4];
@@ -58,10 +65,17 @@ static create_dtbo_ret_t
 create_dtbo(vm_t *vmid, const void *base_dtb);
 
 static error_t
-create_hypervisor_node(dto_t *dto, vmid_t vmid);
+create_dt_nodes(dto_t *dto, vmid_t vmid);
+
+static error_t
+create_iomem_nodes(dto_t *dto, vmid_t vmid);
 
 static error_t
 accept_memparcel(vmid_t vmid, const memparcel_t *mp);
+
+static error_t
+accept_iomem_memparcel(vmid_t vmid, memparcel_t *mp,
+		       struct vdevice_iomem *config);
 
 static error_t
 accept_memparcel_fixed(vmid_t vmid, const memparcel_t *mp, vmaddr_t ipa,
@@ -98,12 +112,17 @@ vm_creation_process_resource(vmid_t vmid)
 	vm_t *vm = vm_lookup(vmid);
 	assert(vm != NULL);
 
-	ret = process_dtb(vm);
+	ret = process_memparcels(vmid);
 	if (ret != OK) {
+		printf("process_memparcels: ret %d\n", ret);
 		goto out;
 	}
 
-	ret = process_memparcels(vmid);
+	ret = process_dtb(vm);
+	if (ret != OK) {
+		printf("process_dtb: ret %d\n", ret);
+		goto out;
+	}
 
 out:
 	return ret;
@@ -113,26 +132,29 @@ bool
 vm_creation_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			void *buf, size_t len)
 {
-	bool handled = false;
+	bool	   handled = false;
+	rm_error_t err;
 
 	(void)len;
 	(void)seq_num;
 	(void)buf;
 
 	if (client_id != VMID_HYP) {
+		err = RM_ERROR_UNIMPLEMENTED;
 		goto out;
 	}
 
 	switch (msg_id) {
 	default:
+		err = ERROR_DENIED;
 		break;
 	}
 
-out:
 	if (handled) {
-		rm_standard_reply(client_id, msg_id, seq_num, RM_OK);
+		rm_standard_reply(client_id, msg_id, seq_num, err);
 	}
 
+out:
 	return handled;
 }
 
@@ -142,14 +164,7 @@ map_dtb(uintptr_t vaddr, size_t dtb_offset, size_t dtb_size, uint32_t mp_handle,
 {
 	error_t ret = OK;
 
-	void * temp_dtb_ptr = (void *)vaddr;
-	size_t mapped_size  = PAGE_SIZE + DTBO_MAX_SIZE;
-
-	if ((dtb_offset > ipa_size) ||
-	    (mapped_size > (ipa_size - dtb_offset))) {
-		ret = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
+	void *temp_dtb_ptr = (void *)vaddr;
 
 	if (util_add_overflows(dtb_offset, dtb_size - 1)) {
 		ret = ERROR_ADDR_OVERFLOW;
@@ -192,8 +207,8 @@ out_unmap:
 	}
 out:
 	if (ret != OK) {
-		printf("map_dtb(%p, %zu, %zu) : failed, ret=%d\n", temp_dtb_ptr,
-		       dtb_offset, dtb_size, (int)ret);
+		printf("map_dtb(%lx, %zu, %zu) : failed, ret=%d\n",
+		       (uintptr_t)temp_dtb_ptr, dtb_offset, dtb_size, (int)ret);
 	}
 	return ret;
 }
@@ -219,12 +234,13 @@ process_dtb(vm_t *vm)
 
 	// FIXME: this address needs to be allocated safely
 	uintptr_t temp_addr    = TEMP_DTB_MAP_VADDR;
-	void *	  temp_dtb_ptr = (void *)temp_addr;
+	void     *temp_dtb_ptr = (void *)temp_addr;
 
 	error_t map_ret = map_dtb(temp_addr, dtb_region_offset, dtb_region_size,
 				  mp_handle, ipa_size);
 	if (map_ret != OK) {
 		ret = map_ret;
+		printf("map_dtb: ret %d\n", ret);
 		goto out_unmapped;
 	}
 
@@ -262,7 +278,8 @@ process_dtb(vm_t *vm)
 			int open_ret = fdt_open_into(temp_dtb_ptr, final_dtb,
 						     (int)final_dtb_size);
 			if (open_ret != 0) {
-				ret = RM_ERROR_DENIED;
+				printf("fdt_open_into ret=%d\n", open_ret);
+				ret = ERROR_DENIED;
 				goto out;
 			}
 
@@ -271,8 +288,7 @@ process_dtb(vm_t *vm)
 			if (apply_ret == -FDT_ERR_NOSPACE) {
 				free(final_dtb);
 
-				// break the loop if final dtb is too
-				// big
+				// break the loop if final dtb is too big
 				if (final_dtb_size == dtb_region_size) {
 					apply_ret = -FDT_ERR_TRUNCATED;
 				} else {
@@ -282,8 +298,9 @@ process_dtb(vm_t *vm)
 		} while (apply_ret == -FDT_ERR_NOSPACE);
 
 		if (apply_ret != 0) {
-			printf("Error: Failed to apply device tree overlay");
-			ret = RM_ERROR_DENIED;
+			printf("Error applying DT overlay, ret=%d\n",
+			       apply_ret);
+			ret = ERROR_DENIED;
 			goto out;
 		}
 
@@ -308,7 +325,7 @@ process_dtb(vm_t *vm)
 				       "the offset is at (%zu)\n",
 				       total_size, dtb_region_size,
 				       vm->segment_offset_after_dtb);
-				ret = RM_ERROR_DENIED;
+				ret = ERROR_DENIED;
 			}
 		}
 
@@ -323,6 +340,7 @@ out:
 	// unmap dtb from rm
 	error_t unmap_err = unmap_dtb(mp_handle);
 	if (ret == OK) {
+		printf("unmap_dtb: ret %d\n", ret);
 		ret = unmap_err;
 	}
 out_unmapped:
@@ -378,7 +396,7 @@ write_buffer_reg(dto_t *dto, memparcel_t *mp, vmid_t vmid, int addr_cells,
 
 		vmaddr_t ipa = ipa_ret.r;
 
-		size_result_t size_ret = memparcel_get_size(mp, i);
+		size_result_t size_ret = memparcel_get_region_size(mp, i);
 		if (size_ret.e != OK) {
 			ret = size_ret.e;
 			goto out_free;
@@ -421,15 +439,15 @@ create_reserved_buffer_node(dto_t *dto, vmid_t vmid, memparcel_t *mp,
 
 	mem_handle_t rm_handle = memparcel_get_handle(mp);
 
-	paddr_result_t phys_ret = memparcel_get_phys(mp, 0);
-	if (phys_ret.e != OK) {
-		ret = phys_ret.e;
+	vmaddr_result_t ipa_ret = memparcel_get_mapped_ipa(mp, vmid, 0);
+	if (ipa_ret.e != OK) {
+		ret = ipa_ret.e;
 		goto out;
 	}
 
 	// create node now
 	char name[DTB_NODE_NAME_MAX];
-	(void)snprintf(name, DTB_NODE_NAME_MAX, "buffer@0x%lx", phys_ret.r);
+	(void)snprintf(name, DTB_NODE_NAME_MAX, "buffer@0x%lx", ipa_ret.r);
 
 	vector_t *vmids = vector_init(vmid_t, 1, 8);
 	if (vmids == NULL) {
@@ -560,6 +578,10 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, vmaddr_t ipa_base,
 {
 	error_t ret = OK;
 
+	vm_t *cur_vm = vm_lookup(vmid);
+	assert(cur_vm != NULL);
+	assert(cur_vm->vm_config != NULL);
+
 	memparcel_t *mp;
 	foreach_memparcel_by_target_vmid (mp, vmid) {
 		assert(mp != NULL);
@@ -572,15 +594,34 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, vmaddr_t ipa_base,
 			}
 		}
 
+		bool		skip_iomem_mp = false;
+		vdevice_node_t *node	      = NULL;
+		loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
+		{
+			if (node->type == VDEV_IOMEM) {
+				struct vdevice_iomem *cfg =
+					(struct vdevice_iomem *)node->config;
+				if (memparcel_get_label(mp) == cfg->label) {
+					skip_iomem_mp = true;
+				}
+			}
+		}
+
+		if (skip_iomem_mp) {
+			continue;
+		}
+
 		// If this is the VM's main memory memparcel, don't create a
 		// reserved-memory node for it
 		vmaddr_result_t ipa_r = memparcel_get_mapped_ipa(mp, vmid, 0U);
 		// TODO: also skip here if not mapped, once we are auto-mapping
 		// everything
 		if ((ipa_r.e == OK) && (ipa_r.r == ipa_base)) {
-			printf("%s: memparcel labelled %#" PRIx32
-			       " is the base memory at %#zx\n",
-			       __func__, memparcel_get_label(mp), ipa_base);
+			printf("memparcel %#" PRIx32 " (%#" PRIx32 ")"
+			       " is base memory: %#zx (%#zx)\n",
+			       memparcel_get_handle(mp),
+			       memparcel_get_label(mp), ipa_r.r,
+			       memparcel_get_size(mp));
 			continue;
 		}
 
@@ -588,15 +629,17 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, vmaddr_t ipa_base,
 		// device tree, don't create a new one
 		if (static_config &&
 		    memparcel_get_phandle(mp, vmid, NULL) != 0U) {
-			printf("%s: memparcel labelled %#" PRIx32
+			printf("resmem: memparcel label %#" PRIx32
 			       " already has a node\n",
-			       __func__, memparcel_get_label(mp));
+			       memparcel_get_label(mp));
 			continue;
 		}
 
 		// create node
-		printf("%s: create node for memparcel labelled %#" PRIx32 "\n",
-		       __func__, memparcel_get_label(mp));
+		printf("resmem: memparcel %#" PRIx32 " (%#" PRIx32 ")"
+		       " added: %#zx (%#zx)\n",
+		       memparcel_get_handle(mp), memparcel_get_label(mp),
+		       ipa_r.r, memparcel_get_size(mp));
 		ret = create_reserved_buffer_node(
 			dto, vmid, mp, root_addr_cells, root_size_cells);
 		if (ret != OK) {
@@ -645,8 +688,8 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 			goto out;
 		}
 
-		// Patch the region node with the memparcel's RM handle, and add
-		// a phandle if none already exists
+		// Patch the region node with the memparcel's RM handle, and
+		// add a phandle if none already exists
 		const char *name = fdt_get_name(base_dtb, region_node, NULL);
 		assert(name != NULL);
 
@@ -694,12 +737,48 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 
 			memparcel_accept_sgl_resp_t *sgl_resp = NULL;
 			size_t			     sgl_resp_size;
+
+			uint8_t flags = MEM_ACCEPT_FLAG_DONE;
+
+			vmid_t owner = memparcel_get_owner(mp);
+
+			bool owner_is_sensitive =
+				vm_mgnt_is_vm_sensitive(owner);
+
+			uint8_result_t owner_rights_ret =
+				memparcel_get_vm_rights(mp, owner);
+
+			// owner doesn't need to access buffer if it's not in
+			// the ACL
+			bool owner_has_read = (owner_rights_ret.e == OK)
+						      ? (owner_rights_ret.r &
+							 MEM_RIGHTS_R) != 0U
+						      : false;
+
+			uint8_result_t vm_rights_ret =
+				memparcel_get_vm_rights(mp, vmid);
+			if (vm_rights_ret.e != OK) {
+				printf("Error: %s: mp(label %d) has no VM(%d)"
+				       " in ACL\n",
+				       __func__, label, vmid);
+				continue;
+			}
+
+			bool vm_has_write =
+				((vm_rights_ret.r & MEM_RIGHTS_W) != 0U);
+
+			bool vm_is_sensitive = vm_mgnt_is_vm_sensitive(vmid);
+
+			if (vm_is_sensitive && vm_has_write &&
+			    (!owner_has_read || owner_is_sensitive)) {
+				flags |= MEM_ACCEPT_FLAG_SANITIZE;
+			}
+
 			rm_error_t rm_err = memparcel_do_accept(
 				vmid, 1U, 1U, 0U, acl, sgl, NULL, 0U,
 				memparcel_get_handle(mp), 0U,
 				memparcel_get_mem_type(mp),
-				memparcel_get_trans_type(mp),
-				MEM_ACCEPT_FLAG_DONE, &sgl_resp,
+				memparcel_get_trans_type(mp), flags, &sgl_resp,
 				&sgl_resp_size);
 			if (rm_err != RM_OK) {
 				printf("error: %s: accept failed (%d)",
@@ -733,6 +812,45 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 		}
 
 		dto_modify_end_by_path(dto, path);
+	}
+
+out:
+	return ret;
+}
+
+static error_t
+patch_cpus_nodes(vm_config_t *vmcfg, dto_t *dto, const void *base_dtb)
+{
+	error_t ret = OK;
+
+	size_t cnt = vector_size(vmcfg->vcpus);
+
+	for (index_t i = 0; i < cnt; i++) {
+		vcpu_t *vcpu = vector_at_ptr(vcpu_t, vmcfg->vcpus, i);
+		if (vcpu->vm_cap == CSPACE_CAP_INVALID) {
+			continue;
+		} else if (vcpu->patch == NULL) {
+			ret = ERROR_ARGUMENT_INVALID;
+			goto out;
+		}
+
+		int node_ofs = fdt_path_offset(base_dtb, vcpu->patch);
+		if (node_ofs < 0) {
+			printf("CPUS: Can not find node %s in device tree",
+			       vcpu->patch);
+			ret = ERROR_ARGUMENT_INVALID;
+			goto out;
+		}
+
+		dto_modify_begin_by_path(dto, vcpu->patch);
+		ret = dto_property_add_u64(dto, "qcom,gunyah-capability",
+					   vcpu->vm_cap);
+		dto_modify_end_by_path(dto, vcpu->patch);
+
+		if (ret != OK) {
+			printf("Failed to add vcpu-capability property\n");
+			goto out;
+		}
 	}
 
 out:
@@ -803,6 +921,13 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 		dto_modify_end_by_path(dto, "/reserved-memory");
 	}
 
+	error_t create_iomem_nodes_ret = create_iomem_nodes(dto, vmid);
+	if (create_iomem_nodes_ret != OK) {
+		ret.err = create_iomem_nodes_ret;
+		dto_deinit(dto);
+		goto out;
+	}
+
 	error_t chosen_patch_ret = patch_chosen_node(dto, vm);
 	if (chosen_patch_ret != OK) {
 		ret.err = chosen_patch_ret;
@@ -832,14 +957,6 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 		dto_node_end(dto, "reserved-memory");
 	}
 
-	if (!static_config) {
-		ret.err = create_hypervisor_node(dto, vmid);
-		if (ret.err != OK) {
-			dto_deinit(dto);
-			goto out;
-		}
-	}
-
 	char node_name[DTB_NODE_NAME_MAX];
 	snprintf(node_name, DTB_NODE_NAME_MAX, "memory@%lx", ipa_base);
 
@@ -851,7 +968,31 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 
 	dto_modify_end_by_path(dto, "/");
 
-	error_t e = dto_finalise(dto);
+	vm_config_t *vmcfg = vm->vm_config;
+	assert(vmcfg != NULL);
+
+	ret.err = patch_cpus_nodes(vmcfg, dto, base_dtb);
+	if (ret.err != OK) {
+		dto_deinit(dto);
+		goto out;
+	}
+
+	if (!static_config) {
+		ret.err = create_dt_nodes(dto, vmid);
+		if (ret.err != OK) {
+			dto_deinit(dto);
+			goto out;
+		}
+	}
+
+	error_t e = platform_dto_finalise(dto, vm);
+	if (e != OK) {
+		ret.err = ERROR_NOMEM;
+		dto_deinit(dto);
+		goto out;
+	}
+
+	e = dto_finalise(dto);
 	if (e != OK) {
 		ret.err = ERROR_NOMEM;
 		dto_deinit(dto);
@@ -866,9 +1007,100 @@ out:
 	return ret;
 }
 
-error_t
-create_hypervisor_node(dto_t *dto, vmid_t vmid)
+static error_t
+add_peers_id_list(dto_t *dto, vm_t *vm)
 {
+	error_t ret = OK;
+
+	count_t cnt = 0UL;
+
+	const char **peers_id = NULL;
+
+	vdevice_node_t *node = NULL;
+	loop_list(node, &vm->vm_config->vdevice_nodes, vdevice_)
+	{
+		if ((!node->export_to_dt) ||
+		    (node->type != VDEV_MSG_QUEUE_PAIR)) {
+			continue;
+		}
+
+		struct vdevice_msg_queue_pair *cfg =
+			(struct vdevice_msg_queue_pair *)node->config;
+
+		if (!cfg->has_peer_vdevice) {
+			continue;
+		}
+
+		++cnt;
+	}
+
+	if (cnt == 0UL) {
+		// no need to generate peer id list
+		ret = OK;
+		goto out;
+	}
+
+	peers_id = calloc(sizeof(peers_id[0]), cnt);
+	if (peers_id == NULL) {
+		printf("Error: failed to allocate peers_id\n");
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	index_t i = 0;
+
+	node = NULL;
+	loop_list(node, &vm->vm_config->vdevice_nodes, vdevice_)
+	{
+		if ((!node->export_to_dt) ||
+		    (node->type != VDEV_MSG_QUEUE_PAIR)) {
+			continue;
+		}
+
+		struct vdevice_msg_queue_pair *cfg =
+			(struct vdevice_msg_queue_pair *)node->config;
+
+		if (!cfg->has_peer_vdevice) {
+			continue;
+		}
+
+		assert(cfg->peer_id != NULL);
+
+		bool existed = false;
+		for (int j = (int)i - 1; j >= 0; --j) {
+			if (strcmp(peers_id[j], cfg->peer_id) == 0) {
+				existed = true;
+				break;
+			}
+		}
+
+		if (existed) {
+			continue;
+		}
+
+		peers_id[i] = cfg->peer_id;
+		++i;
+	}
+
+	ret = dto_property_add_stringlist(dto, "qcom,peers", peers_id, i);
+
+out:
+	// free each peer_id
+	free(peers_id);
+
+	return ret;
+}
+
+error_t
+create_dt_nodes(dto_t *dto, vmid_t vmid)
+{
+	vm_t *cur_vm = vm_lookup(vmid);
+	assert(cur_vm != NULL);
+	assert(cur_vm->vm_config != NULL);
+
+	error_t ret = OK;
+
+	dto_modify_begin_by_path(dto, "/");
 	dto_node_begin(dto, "hypervisor");
 	dto_property_add_u32(dto, "#address-cells", 2);
 	dto_property_add_u32(dto, "#size-cells", 0);
@@ -881,13 +1113,38 @@ create_hypervisor_node(dto_t *dto, vmid_t vmid)
 				     "qcom,gunyah-vm-id" };
 	dto_property_add_stringlist(dto, "compatible", id_compat, 2);
 	dto_property_add_u32(dto, "qcom,vmid", vmid);
-	dto_property_add_u32(dto, "qcom,owner-vmid", VMID_HLOS);
-	dto_property_add_string(dto, "qcom,vendor", "QEMU");
+	dto_property_add_u32(dto, "qcom,owner-vmid", cur_vm->owner);
+	dto_property_add_string(dto, "qcom,vendor", "Qualcomm");
+
+	dto_property_add_string(dto, "qcom,image-name", cur_vm->name);
+
+	if (cur_vm->uri_len != 0) {
+		dto_property_add_string(dto, "qcom,vm-uri", cur_vm->uri);
+	}
+
+	if (cur_vm->has_guid) {
+		char guid[VM_MAX_GUID_STRING_LEN];
+		ret = dto_guid_to_string(cur_vm->guid,
+					 util_array_size(cur_vm->guid), guid,
+					 util_array_size(guid));
+		if (ret != OK) {
+			printf("Error: failed to convert guid to string\n");
+			goto out;
+		}
+
+		dto_property_add_string(dto, "qcom,vm-guid", guid);
+	}
+
+	ret = add_peers_id_list(dto, cur_vm);
+	if (ret != OK) {
+		printf("Error: failed to generate peers id list\n");
+		goto out;
+	}
+
 	dto_node_end(dto, "qcom,gunyah-vm");
 
-	vm_t *cur_vm = vm_lookup(vmid);
-	assert(cur_vm != NULL);
-	assert(cur_vm->vm_config != NULL);
+	dto_node_end(dto, "hypervisor");
+	dto_modify_end_by_path(dto, "/");
 
 	// Find the RM RPC node
 	vdevice_node_t *node = NULL;
@@ -908,18 +1165,100 @@ create_hypervisor_node(dto_t *dto, vmid_t vmid)
 			dto_err = dto_create_doorbell(node, dto, NULL);
 		} else if (node->type == VDEV_SHM) {
 			dto_err = dto_create_shm(node, dto, vmid);
+		} else if (node->type == VDEV_IOMEM) {
+			// no need to add IOMEM node under hypervisor node
+			continue;
 		} else {
 			dto_err = ERROR_UNIMPLEMENTED;
 		}
 
 		if (dto_err) {
+			printf("create_dt_nodes: vmid %d, %s (%d), error %d\n",
+			       (int)vmid, node->generate, (int)node->type,
+			       (int)dto_err);
+			ret = dto_err;
+		}
+	}
+out:
+	return ret;
+}
+
+error_t
+vm_creation_process_memparcel(vmid_t vmid, memparcel_t *mp)
+{
+	error_t ret = OK;
+
+	if (memparcel_is_shared(mp, vmid)) {
+		ret = OK;
+		goto out;
+	}
+
+	vm_t *cur_vm = vm_lookup(vmid);
+	assert(cur_vm != NULL);
+	assert(cur_vm->vm_config != NULL);
+
+	label_t label = memparcel_get_label(mp);
+
+	vdevice_node_t *node = NULL;
+	loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
+	{
+		label_t	 vlabel;
+		bool	 need_allocate = false;
+		vmaddr_t base_ipa      = 0U;
+
+		if (node->type == VDEV_SHM) {
+			struct vdevice_shm *cfg =
+				(struct vdevice_shm *)node->config;
+			vlabel	      = cfg->label;
+			need_allocate = cfg->need_allocate;
+			base_ipa      = cfg->base_ipa;
+		} else if (node->type == VDEV_IOMEM) {
+			struct vdevice_iomem *cfg =
+				(struct vdevice_iomem *)node->config;
+			vlabel	      = cfg->label;
+			need_allocate = cfg->need_allocate;
+			// FIXME: do we need to handle need allocate case?
+		} else {
+			continue;
+		}
+
+		if (vlabel != label) {
+			continue;
+		}
+
+		if (node->type == VDEV_SHM) {
+			if (!need_allocate && !memparcel_is_shared(mp, vmid)) {
+				ret = accept_memparcel_fixed(
+					vmid, mp, base_ipa,
+					memparcel_get_size(mp));
+				if (ret != OK) {
+					printf("accept mp fixed: failed %d\n",
+					       (int)ret);
+				}
+			} else if (!need_allocate) {
+				// in case the memparcel is not shared by it
+				// needs allocation
+				printf("Warning: SHM/VIRTIO_MMIO (label %d) "
+				       "requires allocation of IPA\n",
+				       label);
+			}
+			break;
+		} else if ((node != NULL) && (node->type == VDEV_IOMEM)) {
+			struct vdevice_iomem *cfg =
+				(struct vdevice_iomem *)node->config;
+			// here we ignore allocate-base option (assume it's
+			// always true)
+			ret = accept_iomem_memparcel(vmid, mp, cfg);
+			if (ret != OK) {
+				printf("accept iomem mp (label %d) failed %d\n",
+				       label, (int)ret);
+			}
 			break;
 		}
 	}
 
-	dto_node_end(dto, "hypervisor");
-
-	return dto_err;
+out:
+	return ret;
 }
 
 error_t
@@ -935,52 +1274,9 @@ process_memparcels(vmid_t vmid)
 	// vdevices "0..*" -- 1 memparcel
 	memparcel_t *mp = NULL;
 	foreach_memparcel_by_target_vmid (mp, vmid) {
-		// FIXME: does all memparcel must have a label?
-		label_t label = memparcel_get_label(mp);
-
-		vdevice_node_t *node = NULL;
-		loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
-		{
-			label_t vlabel;
-			if (node->type == VDEV_SHM) {
-				struct vdevice_shm *cfg =
-					(struct vdevice_shm *)node->config;
-				vlabel = cfg->label;
-			} else if (node->type == VDEV_DOORBELL) {
-				struct vdevice_doorbell *cfg =
-					(struct vdevice_doorbell *)node->config;
-				vlabel = cfg->label;
-			} else {
-				continue;
-			}
-
-			if (vlabel != label) {
-				continue;
-			}
-
-			if (node->type == VDEV_SHM) {
-				struct vdevice_shm *cfg =
-					(struct vdevice_shm *)node->config;
-				cfg->mp = mp;
-				break;
-			} else if (node->type == VDEV_DOORBELL) {
-				struct vdevice_doorbell *cfg =
-					(struct vdevice_doorbell *)node->config;
-				cfg->related_mp = mp;
-				break;
-			}
-		}
-
-		if ((node != NULL) && (node->type == VDEV_SHM)) {
-			struct vdevice_shm *cfg =
-				(struct vdevice_shm *)node->config;
-			if (!cfg->need_allocate &&
-			    !memparcel_is_shared(mp, vmid)) {
-				// FIXME: might need to get size based on mp,
-				// is that right? the size is also wrong.
-				accept_memparcel_fixed(vmid, mp, cfg->base_ipa,
-						       cfg->sz);
-			}
+		ret = vm_creation_process_memparcel(vmid, mp);
+		if (ret != OK) {
+			break;
 		}
 	}
 
@@ -1001,18 +1297,163 @@ accept_memparcel(vmid_t vmid, const memparcel_t *mp)
 	memparcel_accept_sgl_resp_t *sgl = NULL;
 	size_t			     sgl_size;
 
+	uint8_t flags = MEM_ACCEPT_FLAG_DONE;
+
+	vmid_t owner = memparcel_get_owner(mp);
+
+	bool owner_is_sensitive = vm_mgnt_is_vm_sensitive(owner);
+
+	uint8_result_t owner_rights_ret = memparcel_get_vm_rights(mp, owner);
+
+	// owner doesn't need to access buffer if it's not in
+	// the ACL
+	bool owner_has_read = (owner_rights_ret.e == OK) ? (owner_rights_ret.r &
+							    MEM_RIGHTS_R) != 0U
+							 : false;
+
+	uint8_result_t vm_rights_ret = memparcel_get_vm_rights(mp, vmid);
+	if (vm_rights_ret.e != OK) {
+		printf("Error: %s: mp(label %d) has no VM(%d) in ACL\n",
+		       __func__, memparcel_get_label(mp), vmid);
+		ret = vm_rights_ret.e;
+		goto out;
+	}
+
+	bool vm_has_write = ((vm_rights_ret.r & MEM_RIGHTS_W) != 0U);
+
+	bool vm_is_sensitive = vm_mgnt_is_vm_sensitive(vmid);
+
+	if (vm_is_sensitive && vm_has_write &&
+	    (!owner_has_read || owner_is_sensitive)) {
+		flags |= MEM_ACCEPT_FLAG_SANITIZE;
+	}
+
 	rm_error_t rm_err = memparcel_do_accept(
 		vmid, 1U, 0U, 0U, acl, NULL, NULL, 0U, memparcel_get_handle(mp),
 		0U, memparcel_get_mem_type(mp), memparcel_get_trans_type(mp),
-		MEM_ACCEPT_FLAG_DONE, &sgl, &sgl_size);
+		flags, &sgl, &sgl_size);
 	if (rm_err != RM_OK) {
 		ret = ERROR_DENIED;
+	}
+out:
+	if (sgl != NULL) {
+		free(sgl);
+	}
+
+	return ret;
+}
+
+error_t
+accept_iomem_memparcel(vmid_t vmid, memparcel_t *mp,
+		       struct vdevice_iomem *config)
+{
+	error_t ret = OK;
+
+	uint8_t flags = 0U;
+
+	uint32_t acl_entries = 0U;
+
+	acl_entry_t *acl = NULL;
+	acl_entry_t  rm_acl[IOMEM_VALIDATION_NUM_IDXS];
+
+	if (config->validate_acl) {
+		rm_acl[IOMEM_VALIDATION_SELF_IDX].vmid = vmid;
+		rm_acl[IOMEM_VALIDATION_SELF_IDX].rights =
+			(uint8_t)config->rm_acl[IOMEM_VALIDATION_SELF_IDX];
+
+		rm_acl[IOMEM_VALIDATION_PEER_IDX].vmid = config->peer;
+		rm_acl[IOMEM_VALIDATION_PEER_IDX].rights =
+			(uint8_t)config->rm_acl[IOMEM_VALIDATION_PEER_IDX];
+
+		acl = rm_acl;
+
+		acl_entries = util_array_size(config->rm_acl);
+
+		flags |= MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
+	}
+
+	uint16_t attr_entries = 0U;
+
+	attr_entry_t *attrs = NULL;
+	attr_entry_t  rm_attrs[IOMEM_VALIDATION_NUM_IDXS];
+
+	if (config->validate_attrs) {
+		rm_attrs[IOMEM_VALIDATION_SELF_IDX].vmid = vmid;
+		rm_attrs[IOMEM_VALIDATION_SELF_IDX].attr =
+			(uint16_t)config->rm_attrs[IOMEM_VALIDATION_SELF_IDX];
+
+		rm_attrs[IOMEM_VALIDATION_PEER_IDX].vmid = config->peer;
+		rm_attrs[IOMEM_VALIDATION_PEER_IDX].attr =
+			(uint16_t)config->rm_attrs[IOMEM_VALIDATION_PEER_IDX];
+
+		attrs = rm_attrs;
+
+		attr_entries = util_array_size(config->rm_attrs);
+
+		flags |= MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
+	}
+
+	count_t region_cnt = util_min(memparcel_get_num_regions(mp),
+				      (count_t)config->rm_sglist_len);
+	// validate physical address here
+	// FIXME: do we allow to provide partial sgl list?
+	if ((region_cnt != 0) && (region_cnt != config->rm_sglist_len)) {
+		ret = ERROR_DENIED;
+		goto out;
+	}
+
+	// simple compare since it's a short list
+	for (index_t i = 0; i < region_cnt; ++i) {
+		paddr_result_t region_ret = memparcel_get_phys(mp, i);
+		if (region_ret.e != OK) {
+			// only happen if it's done, but shouldn't
+			// happen here
+			break;
+		}
+
+		size_result_t size_ret = memparcel_get_region_size(mp, i);
+		if (size_ret.e != OK) {
+			// only happen if it's done, but shouldn't
+			// happen here
+			break;
+		}
+
+		bool found = false;
+
+		for (index_t j = 0; j < region_cnt; ++j) {
+			if ((config->rm_sglist[i].ipa == region_ret.r) &&
+			    (config->rm_sglist[i].size == size_ret.r)) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			ret = ERROR_DENIED;
+			goto out;
+		}
+	}
+
+	memparcel_accept_sgl_resp_t *sgl = NULL;
+	size_t			     sgl_size;
+
+	rm_error_t rm_err = memparcel_do_accept(
+		vmid, acl_entries, 0U, attr_entries, acl, NULL, attrs, 0U,
+		memparcel_get_handle(mp), config->label,
+		memparcel_get_mem_type(mp), memparcel_get_trans_type(mp),
+		flags | MEM_ACCEPT_FLAG_DONE, &sgl, &sgl_size);
+	if (rm_err != RM_OK) {
+		ret = ERROR_DENIED;
+	} else {
+		if (config->mem_info_tag_set) {
+			memparcel_set_mem_info_tag(mp, config->mem_info_tag);
+		}
 	}
 
 	if (sgl != NULL) {
 		free(sgl);
 	}
-
+out:
 	return ret;
 }
 
@@ -1033,14 +1474,45 @@ accept_memparcel_fixed(vmid_t vmid, const memparcel_t *mp, vmaddr_t ipa,
 
 	sgl_entry_t sgl[1] = { { .ipa = ipa, .size = sz } };
 
+	uint8_t flags = MEM_ACCEPT_FLAG_DONE;
+
+	vmid_t owner = memparcel_get_owner(mp);
+
+	bool owner_is_sensitive = vm_mgnt_is_vm_sensitive(owner);
+
+	uint8_result_t owner_rights_ret = memparcel_get_vm_rights(mp, owner);
+
+	// owner doesn't need to access buffer if it's not in
+	// the ACL
+	bool owner_has_read = (owner_rights_ret.e == OK) ? (owner_rights_ret.r &
+							    MEM_RIGHTS_R) != 0U
+							 : false;
+
+	uint8_result_t vm_rights_ret = memparcel_get_vm_rights(mp, vmid);
+	if (vm_rights_ret.e != OK) {
+		printf("Error: %s: mp(label %d) has no VM(%d) in ACL\n",
+		       __func__, memparcel_get_label(mp), vmid);
+		ret = vm_rights_ret.e;
+		goto out;
+	}
+
+	bool vm_has_write = ((vm_rights_ret.r & MEM_RIGHTS_W) != 0U);
+
+	bool vm_is_sensitive = vm_mgnt_is_vm_sensitive(vmid);
+
+	if (vm_is_sensitive && vm_has_write &&
+	    (!owner_has_read || owner_is_sensitive)) {
+		flags |= MEM_ACCEPT_FLAG_SANITIZE;
+	}
+
 	rm_error_t rm_err = memparcel_do_accept(
 		vmid, 1U, 1U, 0U, acl, sgl, NULL, 0U, memparcel_get_handle(mp),
 		0U, memparcel_get_mem_type(mp), memparcel_get_trans_type(mp),
-		MEM_ACCEPT_FLAG_DONE, &sgl_resp, &sgl_resp_size);
+		flags, &sgl_resp, &sgl_resp_size);
 	if (rm_err != RM_OK) {
 		ret = ERROR_DENIED;
 	}
-
+out:
 	if (sgl_resp != NULL) {
 		free(sgl_resp);
 	}
@@ -1048,13 +1520,161 @@ accept_memparcel_fixed(vmid_t vmid, const memparcel_t *mp, vmaddr_t ipa,
 	return ret;
 }
 
+extern gunyah_hyp_hypervisor_identify_result_t hyp_id;
+
 get_random_seed_ret_t
 get_random_seed(void)
 {
-	get_random_seed_ret_t ret = { .err = OK };
+	get_random_seed_ret_t ret = { .err = ERROR_UNIMPLEMENTED };
 
-	__asm__ volatile("mrs %0, RNDR;" : "=r"(ret.seed));
+	if (hyp_api_flags0_get_prng(&hyp_id.api_flags_0)) {
+		gunyah_hyp_prng_get_entropy_result_t prng;
+		do {
+			prng = gunyah_hyp_prng_get_entropy(sizeof(uint32_t) *
+							   2);
+		} while (prng.error == ERROR_BUSY);
 
+		ret.err = prng.error;
+		if (prng.error == OK) {
+			ret.seed = (uint64_t)prng.data0;
+			ret.seed |= (uint64_t)prng.data1 << 32;
+		}
+	}
+
+	return ret;
+}
+
+static void
+fdt_fill_u64(uint32_t *data, uint64_t val)
+{
+	data[0] = (val >> 32);
+	data[1] = (val & util_mask(32));
+}
+
+error_t
+create_iomem_nodes(dto_t *dto, vmid_t vmid)
+{
+	error_t ret = OK;
+
+	vm_t *cur_vm = vm_lookup(vmid);
+	assert(cur_vm != NULL);
+	assert(cur_vm->vm_config != NULL);
+
+#define CHECK_DTO(ret_val, dto_call)                                           \
+	do {                                                                   \
+		ret_val = (dto_call);                                          \
+		if (ret_val != OK) {                                           \
+			goto out;                                              \
+		}                                                              \
+	} while (0)
+
+	uint32_t *regs = NULL;
+
+	vdevice_node_t *node = NULL;
+	loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
+	{
+		if (node->type != VDEV_IOMEM) {
+			continue;
+		}
+		struct vdevice_iomem *cfg =
+			(struct vdevice_iomem *)node->config;
+
+		label_t vlabel;
+		vlabel = cfg->label;
+
+		memparcel_t *mp;
+		foreach_memparcel_by_target_vmid (mp, vmid) {
+			if (memparcel_get_label(mp) == vlabel) {
+				break;
+			}
+		}
+
+		if (mp == NULL) {
+			printf("Warning: iomem (label %x) has no memory parcel\n",
+			       vlabel);
+			continue;
+		}
+
+		CHECK_DTO(ret, dto_construct_begin_path(dto, node->generate));
+
+		CHECK_DTO(ret, dto_property_add_u32(dto, "#address-cells", 2));
+		CHECK_DTO(ret, dto_property_add_u32(dto, "#size-cells", 2));
+
+		count_t compatible_cnt = 0U;
+
+		const char *compatibles[VDEVICE_MAX_PUSH_COMPATIBLES];
+
+		compatible_cnt = node->push_compatible_num;
+		memcpy(&compatibles, &node->push_compatible,
+		       sizeof(node->push_compatible));
+
+		CHECK_DTO(ret, dto_property_add_stringlist(dto, "compatible",
+							   compatibles,
+							   compatible_cnt));
+
+		count_t region_cnt = memparcel_get_num_regions(mp);
+		count_t regs_size  = region_cnt * 2 * 2;
+
+		regs = calloc(regs_size, sizeof(regs[0]));
+		if (regs == NULL) {
+			ret = ERROR_NOMEM;
+			goto out;
+		}
+		for (index_t i = 0; i < region_cnt; ++i) {
+			fdt_fill_u64(&regs[i * 4], memparcel_get_phys(mp, i).r);
+			fdt_fill_u64(&regs[i * 4 + 2],
+				     memparcel_get_region_size(mp, i).r);
+		}
+
+		CHECK_DTO(ret, dto_property_add_u32array(dto, "reg", regs,
+							 regs_size));
+
+		CHECK_DTO(ret, dto_property_add_u32(dto, "peer", cfg->peer));
+
+		mem_handle_t mem_handle = memparcel_get_handle(mp);
+
+		CHECK_DTO(ret, dto_property_add_u64(dto, "qcom,rm-mem-handle",
+						    mem_handle));
+
+		uint8_result_t self_rights = memparcel_get_vm_rights(mp, vmid);
+
+		uint8_result_t peer_rights =
+			memparcel_get_vm_rights(mp, cfg->peer);
+
+		if ((self_rights.e == OK) && (peer_rights.e == OK)) {
+			uint32_t acl[2];
+			acl[0] = self_rights.r;
+			acl[1] = peer_rights.r;
+			CHECK_DTO(ret, dto_property_add_u32array(
+					       dto, "qcom,rm-acl", acl, 2));
+		}
+
+		uint16_result_t self_attrs = memparcel_get_vm_attrs(mp, vmid);
+
+		uint16_result_t peer_attrs =
+			memparcel_get_vm_attrs(mp, cfg->peer);
+
+		if ((self_attrs.e == OK) && (peer_attrs.e == OK)) {
+			uint32_t attrs[2];
+			attrs[0] = self_attrs.r;
+			attrs[1] = peer_attrs.r;
+			CHECK_DTO(ret,
+				  dto_property_add_u32array(
+					  dto, "qcom,rm-attributes", attrs, 2));
+		}
+
+		CHECK_DTO(ret,
+			  dto_property_add_u32(dto, "qcom,label", cfg->label));
+
+		free(regs);
+		regs = NULL;
+
+		CHECK_DTO(ret, dto_construct_end_path(dto, node->generate));
+	}
+#undef CHECK_DTO
+
+out:
+	free(regs);
 	return ret;
 }
 
