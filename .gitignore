@@ -13,6 +13,7 @@
 /.syntastic_*
 /.dir-locals.el
 /cscope*
+/.vscode
 
 # Ignore cppcheck dumps
 *.c.dump

@@ -7,15 +7,16 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include <rm-rpc.h>
-
-#include <resource-manager.h>
+#include <rm_types.h>
+#include <util.h>
 
 #include <event.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
 #include <platform_vm_config.h>
-#include <util.h>
+#include <resource-manager.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
 #include <vm_mgnt.h>
@@ -26,21 +27,14 @@
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
-#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
 #include <dt_linux.h>
 #include <dt_overlay.h>
+#include <vm_creation_dt.h>
 
 #include "dto_construct.h"
-
-static char *
-dto_construct_append_capid(const char *generate, cap_id_t cap_id);
-
-static error_t
-add_compatibles(struct vdevice_node *node, char *compatibles[],
-		count_t compatible_cnt, dto_t *dto);
 
 error_t
 dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle)
@@ -49,7 +43,7 @@ dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle)
 
 	struct vdevice_doorbell *cfg = (struct vdevice_doorbell *)node->config;
 
-	char *path = dto_construct_append_capid(node->generate, cfg->vm_cap);
+	char *path = vm_creation_node_name_capid(node->generate, cfg->vm_cap);
 	if (path == NULL) {
 		e = ERROR_NOMEM;
 		goto err_begin;
@@ -65,12 +59,14 @@ dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle)
 		char *c[] = { "qcom,gunyah-doorbell-source",
 			      "qcom,gunyah-capability" };
 
-		e = add_compatibles(node, c, util_array_size(c), dto);
+		e = vm_creation_add_compatibles(node, c, util_array_size(c),
+						dto);
 	} else {
 		char *c[] = { "qcom,gunyah-doorbell",
 			      "qcom,gunyah-capability" };
 
-		e = add_compatibles(node, c, util_array_size(c), dto);
+		e = vm_creation_add_compatibles(node, c, util_array_size(c),
+						dto);
 	}
 	if (e != OK) {
 		goto err;
@@ -83,8 +79,8 @@ dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle)
 	}
 
 	if (!cfg->source) {
-		uint32_t interrupts[3] = { 0, cfg->vm_virq - 32, 1 };
-		e = dto_property_add_u32array(dto, "interrupts", interrupts, 3);
+		e = dto_property_add_interrupts_array(dto, "interrupts",
+						      &cfg->vm_virq, 1);
 		if (e != OK) {
 			goto err;
 		}
@@ -130,7 +126,7 @@ dto_create_msg_queue(struct vdevice_node *node, dto_t *dto)
 	struct vdevice_msg_queue *cfg =
 		(struct vdevice_msg_queue *)node->config;
 
-	char *path = dto_construct_append_capid(node->generate, cfg->vm_cap);
+	char *path = vm_creation_node_name_capid(node->generate, cfg->vm_cap);
 	if (path == NULL) {
 		e = ERROR_NOMEM;
 		goto err_begin;
@@ -143,7 +139,7 @@ dto_create_msg_queue(struct vdevice_node *node, dto_t *dto)
 
 	char *c[] = { "qcom,gunyah-message-queue", "qcom,gunyah-capability" };
 
-	e = add_compatibles(node, c, util_array_size(c), dto);
+	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
 		goto err;
 	}
@@ -169,8 +165,8 @@ dto_create_msg_queue(struct vdevice_node *node, dto_t *dto)
 		goto err;
 	}
 
-	uint32_t interrupts[3] = { 0, cfg->vm_virq - 32, 1 };
-	e = dto_property_add_u32array(dto, "interrupts", interrupts, 3);
+	e = dto_property_add_interrupts_array(dto, "interrupts", &cfg->vm_virq,
+					      1);
 	if (e != OK) {
 		goto err;
 	}
@@ -237,7 +233,8 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 	struct vdevice_msg_queue_pair *cfg =
 		(struct vdevice_msg_queue_pair *)node->config;
 
-	char *path = dto_construct_append_capid(node->generate, cfg->rx_vm_cap);
+	char *path =
+		vm_creation_node_name_capid(node->generate, cfg->rx_vm_cap);
 	if (path == NULL) {
 		e = ERROR_NOMEM;
 		goto err_begin;
@@ -250,7 +247,7 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 
 	char *c[] = { "qcom,gunyah-message-queue", "qcom,gunyah-capability" };
 
-	e = add_compatibles(node, c, util_array_size(c), dto);
+	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
 		goto err;
 	}
@@ -262,9 +259,9 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 		goto err;
 	}
 
-	uint32_t interrupts[6] = { 0, cfg->tx_vm_virq - 32, 1,
-				   0, cfg->rx_vm_virq - 32, 1 };
-	e = dto_property_add_u32array(dto, "interrupts", interrupts, 6);
+	interrupt_data_t interrupts[] = { cfg->tx_vm_virq, cfg->rx_vm_virq };
+	e = dto_property_add_interrupts_array(dto, "interrupts", interrupts,
+					      util_array_size(interrupts));
 	if (e != OK) {
 		goto err;
 	}
@@ -367,16 +364,16 @@ dtbo_add_memory_region(dto_t *dto, vmid_t self, label_t label)
 		}
 	}
 
-	uint32_t mem_phandle = 0U;
 	if (mp == NULL) {
 		e = ERROR_ARGUMENT_INVALID;
 		goto out;
-	} else {
-		mem_phandle = memparcel_get_phandle(mp, self, &is_external);
 	}
 
-	// FIXME: if the handle is not set correctly, should we refacter it,
-	// and return error?
+	uint32_t mem_phandle = memparcel_get_phandle(mp, self, &is_external);
+	if (mem_phandle == DTO_PHANDLE_UNSET) {
+		e = ERROR_FAILURE;
+		goto out;
+	}
 
 	if (is_external) {
 		e = dto_property_add_u32(dto, "buffer", mem_phandle);
@@ -436,14 +433,21 @@ dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
 		compatible = "qcom,gunyah-shm-doorbell";
 	}
 
-	e = add_compatibles(node, &compatible, compatible_count, dto);
+	e = vm_creation_add_compatibles(node, &compatible, compatible_count,
+					dto);
 	if (e != OK) {
 		goto out;
 	}
 
 	e = dtbo_add_memory_region(dto, self, cfg->label);
 	if (e != OK) {
-		goto out;
+		if (cfg->is_memory_optional) {
+			// reset error if memory is optional and we cannot find
+			// the corresponding memory parcel
+			e = OK;
+		} else {
+			goto out;
+		}
 	}
 
 	e = dto_property_add_u32(dto, "peer", cfg->peer);
@@ -495,17 +499,138 @@ err_create_doorbell:
 }
 
 error_t
-add_compatibles(struct vdevice_node *node, char *compatibles[],
-		count_t compatible_cnt, dto_t *dto)
+dto_create_watchdog(struct vdevice_node *node, dto_t *dto)
+{
+	error_t ret;
+	error_t e = OK;
+
+	struct vdevice_watchdog *cfg = (struct vdevice_watchdog *)node->config;
+
+	e = dto_construct_begin_path(dto, node->generate);
+	if (e != OK) {
+		goto err_begin;
+	}
+
+	char *c[] = { "qcom,gh-watchdog" };
+	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
+	if (e != OK) {
+		goto err_compatibles;
+	}
+
+	e = dto_property_add_interrupts_array(dto, "interrupts",
+					      &cfg->bark_virq, 1);
+	if (e != OK) {
+		goto err;
+	}
+
+err:
+err_compatibles:
+	ret = dto_construct_end_path(dto, node->generate);
+	if (e == OK) {
+		e = ret;
+	}
+
+err_begin:
+	return e;
+}
+
+error_t
+dto_create_virtio_mmio(struct vdevice_node *node, dto_t *dto, vmid_t self)
+{
+	error_t			    e = OK;
+	struct vdevice_virtio_mmio *cfg =
+		(struct vdevice_virtio_mmio *)node->config;
+
+	char *path =
+		vm_creation_node_name_capid(node->generate, cfg->frontend_ipa);
+	if (path == NULL) {
+		e = ERROR_NOMEM;
+		goto err_begin;
+	}
+
+	e = dto_construct_begin_path(dto, path);
+	if (e != OK) {
+		goto err_begin;
+	}
+
+	char *c[] = { "virtio,mmio" };
+	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
+	if (e != OK) {
+		goto err_compatibles;
+	}
+
+	uint64_t reg[2] = { cfg->frontend_ipa, cfg->frontend_size };
+	e		= dto_property_add_u64array(dto, "reg", reg, 2);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dtbo_add_memory_region(dto, self, cfg->label);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_interrupts_array(dto, "interrupts",
+					      &cfg->frontend_virq, 1);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "qcom,label", cfg->label);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "label", cfg->label);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u64(dto, "dma_base", cfg->dma_base);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "peer", cfg->backend);
+	if (e != OK) {
+		goto err;
+	}
+
+	if (cfg->dma_coherent) {
+		e = dto_property_add_empty(dto, "dma-coherent");
+		if (e != OK) {
+			goto err;
+		}
+	}
+
+err:
+err_compatibles:
+	(void)0;
+
+	error_t ret;
+	ret = dto_construct_end_path(dto, path);
+	if (e == OK) {
+		e = ret;
+	}
+
+err_begin:
+	free(path);
+
+	return e;
+}
+
+error_t
+vm_creation_add_compatibles(struct vdevice_node *node, char *compatibles[],
+			    count_t compatible_cnt, dto_t *dto)
 {
 	error_t ret = OK;
 
-	if ((compatible_cnt > VDEVICE_MAX_PUSH_COMPATIBLES) ||
-	    (node->push_compatible_num > VDEVICE_MAX_PUSH_COMPATIBLES)) {
+	assert(node->push_compatible_num <= VDEVICE_MAX_PUSH_COMPATIBLES);
+
+	if (util_add_overflows(compatible_cnt, node->push_compatible_num)) {
 		ret = ERROR_ARGUMENT_SIZE;
 		goto err_alloc_compatibles;
 	}
-
 	// handle compatibles /push_compatibles
 	count_t total_cnt = compatible_cnt + node->push_compatible_num;
 
@@ -517,11 +642,13 @@ add_compatibles(struct vdevice_node *node, char *compatibles[],
 	}
 
 	index_t i = 0;
-	for (i = 0; i < compatible_cnt; ++i) {
-		final_compatibles[i] = compatibles[i];
+	// copy the input DT compatibles first (if any)
+	for (i = 0; i < node->push_compatible_num; ++i) {
+		final_compatibles[i] = node->push_compatible[i];
 	}
-	for (index_t j = 0; j < node->push_compatible_num; ++j) {
-		final_compatibles[i + j] = node->push_compatible[j];
+	// then add the generic compatibles
+	for (index_t j = 0; j < compatible_cnt; ++j) {
+		final_compatibles[i + j] = compatibles[j];
 	}
 
 	ret = dto_property_add_stringlist(dto, "compatible", final_compatibles,
@@ -537,7 +664,7 @@ err_alloc_compatibles:
 }
 
 char *
-dto_construct_append_capid(const char *generate, cap_id_t cap_id)
+vm_creation_node_name_capid(const char *generate, cap_id_t cap_id)
 {
 	error_t err = OK;
 
@@ -558,98 +685,5 @@ out:
 		ret = NULL;
 	}
 
-	return ret;
-}
-
-error_t
-dto_construct_begin_path(dto_t *dto, const char *path)
-{
-	error_t ret = OK;
-
-	char *target = strdup(path);
-	if (target == NULL) {
-		ret = ERROR_NOMEM;
-		goto out;
-	}
-
-	const char separator = '/';
-
-	assert(target[0] == separator);
-
-	char *name_start = target + 1;
-
-	assert(*name_start != '\0');
-
-	dto_modify_begin_by_path(dto, "/");
-
-	char *name_end = NULL;
-	do {
-		name_end = strchr(name_start, separator);
-		if (name_end == NULL) {
-			break;
-		}
-
-		*name_end = '\0';
-
-		ret = dto_node_begin(dto, name_start);
-		if (ret != OK) {
-			goto out;
-		}
-
-		name_start = name_end + 1;
-	} while (name_end != NULL);
-
-	// the generate should specify a node name
-	// we can change it to return error latter
-	assert(*name_start != '\0');
-
-	// create the last node
-	ret = dto_node_begin(dto, name_start);
-
-out:
-	free(target);
-	return ret;
-}
-
-error_t
-dto_construct_end_path(dto_t *dto, const char *path)
-{
-	error_t ret = OK;
-
-	size_t sz = strlen(path);
-
-	char *target = strdup(path);
-	if (target == NULL) {
-		ret = ERROR_NOMEM;
-		goto out;
-	}
-
-	const char separator = '/';
-
-	assert(target[0] == separator);
-
-	// should have a node name
-	assert(target[sz - 1] != '/');
-
-	// remove the node name
-	char *name_start = NULL;
-
-	do {
-		name_start = strrchr(target, separator);
-		if (name_start == NULL) {
-			break;
-		}
-
-		*name_start = '\0';
-
-		ret = dto_node_end(dto, &name_start[1]);
-		if (ret != OK) {
-			goto out;
-		}
-	} while (name_start != NULL);
-
-	dto_modify_end_by_path(dto, "/");
-out:
-	free(target);
 	return ret;
 }

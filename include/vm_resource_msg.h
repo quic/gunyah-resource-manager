@@ -10,6 +10,8 @@ typedef enum {
 	RSC_VIRTUAL_CPU	   = 4,
 	RSC_VIRTUAL_PM	   = 5,
 	RSC_VIRTIO_MMIO	   = 6,
+	RSC_VRTC	   = 7,
+	RSC_WATCHDOG	   = 8,
 } resource_type_t;
 
 typedef uint32_t resource_label_t;

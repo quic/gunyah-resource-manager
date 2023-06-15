@@ -5,9 +5,6 @@
 struct vm_console;
 typedef struct vm_console vm_console_t;
 
-struct vm;
-typedef struct vm vm_t;
-
 rm_error_t
 vm_console_init(void);
 

@@ -11,12 +11,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <rm-rpc.h>
+#include <rm_types.h>
+#include <utils/list.h>
+#include <utils/vector.h>
 
 #include <event.h>
 #include <rm-rpc-fifo.h>
-#include <utils/list.h>
-#include <utils/vector.h>
+#include <rm-rpc.h>
 
 #define MAX_NOTIFICATION_PENDING (256U)
 
@@ -28,9 +29,8 @@ typedef struct pending_notif {
 	struct pending_notif *notif_next;
 
 	uint32_t notif_id;
-	void    *buf;
+	void	*buf;
 	size_t	 len;
-	size_t	 alloc_size;
 } pending_notif_t;
 
 typedef struct {
@@ -42,11 +42,10 @@ typedef struct {
 	// We only keep one pending reply, as VMs
 	// should wait to receive the reply before
 	// making another request.
-	void    *reply_buf;
+	void	*reply_buf;
 	uint32_t reply_msg_id;
 	uint16_t reply_seq_num;
 	size_t	 reply_len;
-	size_t	 reply_alloc_size;
 } fifo_status_t;
 
 typedef struct {
@@ -122,39 +121,6 @@ err:
 	return e;
 }
 
-rm_error_t
-rm_rpc_fifo_destroy(vmid_t peer)
-{
-	find_fifo_status_ret_t ret = find_fifo_status(peer);
-	if (ret.status == NULL) {
-		goto out;
-	}
-
-	vector_delete(mngr.fifo_status, ret.idx);
-
-	free(ret.status);
-
-out:
-	return RM_OK;
-}
-
-static rm_error_t
-send_pending_reply(fifo_status_t *status)
-{
-	rm_error_t e;
-
-	assert(status->reply_buf != NULL);
-
-	e = rm_rpc_reply(status->vm_id, status->reply_msg_id,
-			 status->reply_seq_num, status->reply_buf,
-			 status->reply_len, status->reply_alloc_size);
-	if (e == RM_OK) {
-		status->reply_buf = NULL;
-	}
-
-	return e;
-}
-
 static void
 delete_pending_notif(fifo_status_t *status, pending_notif_t *n, bool sent)
 {
@@ -169,6 +135,56 @@ delete_pending_notif(fifo_status_t *status, pending_notif_t *n, bool sent)
 }
 
 static void
+clear_pending_msgs(fifo_status_t *status)
+{
+	while (status->pending_notif_list != NULL) {
+		delete_pending_notif(status, status->pending_notif_list, false);
+	}
+
+	assert(status->pending_notif_count == 0);
+
+	if (status->reply_buf != NULL) {
+		free(status->reply_buf);
+	}
+}
+
+rm_error_t
+rm_rpc_fifo_destroy(vmid_t peer)
+{
+	rm_error_t	       err = RM_OK;
+	find_fifo_status_ret_t ret = find_fifo_status(peer);
+	if (ret.status == NULL) {
+		err = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	clear_pending_msgs(ret.status);
+	vector_delete(mngr.fifo_status, ret.idx);
+
+	free(ret.status);
+
+out:
+	return err;
+}
+
+static rm_error_t
+send_pending_reply(fifo_status_t *status)
+{
+	rm_error_t e;
+
+	assert(status->reply_buf != NULL);
+
+	e = rm_rpc_reply(status->vm_id, status->reply_msg_id,
+			 status->reply_seq_num, status->reply_buf,
+			 status->reply_len);
+	if (e == RM_OK) {
+		status->reply_buf = NULL;
+	}
+
+	return e;
+}
+
+static void
 send_pending_notifications(fifo_status_t *status)
 {
 	while (status->pending_notif_list != NULL) {
@@ -176,7 +192,7 @@ send_pending_notifications(fifo_status_t *status)
 		pending_notif_t *n = status->pending_notif_list;
 
 		e = rm_rpc_send_notification(status->vm_id, n->notif_id, n->buf,
-					     n->len, n->alloc_size);
+					     n->len);
 		if (e != OK) {
 			break;
 		}
@@ -187,7 +203,7 @@ send_pending_notifications(fifo_status_t *status)
 
 rm_error_t
 rm_rpc_fifo_reply(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, void *buf,
-		  size_t len, size_t alloc_size)
+		  size_t len)
 {
 	rm_error_t	       e;
 	find_fifo_status_ret_t find_ret = find_fifo_status(vm_id);
@@ -211,16 +227,15 @@ rm_rpc_fifo_reply(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, void *buf,
 		}
 	}
 
-	e = rm_rpc_reply(vm_id, msg_id, seq_num, buf, len, alloc_size);
+	e = rm_rpc_reply(vm_id, msg_id, seq_num, buf, len);
 	if (e == RM_ERROR_BUSY) {
 		// Shouldn't have reply pending here
 		assert(status->reply_buf == NULL);
 		// Buffer this reply
-		status->reply_msg_id	 = msg_id;
-		status->reply_seq_num	 = seq_num;
-		status->reply_buf	 = buf;
-		status->reply_len	 = len;
-		status->reply_alloc_size = alloc_size;
+		status->reply_msg_id  = msg_id;
+		status->reply_seq_num = seq_num;
+		status->reply_buf     = buf;
+		status->reply_len     = len;
 
 		e = RM_OK;
 	}
@@ -231,7 +246,7 @@ err:
 
 rm_error_t
 rm_rpc_fifo_send_notification(vmid_t vm_id, uint32_t notif_id, void *buf,
-			      size_t len, size_t alloc_size, bool allow_pending)
+			      size_t len, bool allow_pending)
 {
 	rm_error_t	       e;
 	find_fifo_status_ret_t find_ret = find_fifo_status(vm_id);
@@ -246,7 +261,7 @@ rm_rpc_fifo_send_notification(vmid_t vm_id, uint32_t notif_id, void *buf,
 	// Try to send any pending notifications first
 	send_pending_notifications(status);
 
-	e = rm_rpc_send_notification(vm_id, notif_id, buf, len, alloc_size);
+	e = rm_rpc_send_notification(vm_id, notif_id, buf, len);
 	if ((e == RM_ERROR_BUSY) && allow_pending) {
 		// If we are at max notif count, drop the oldest notification
 		if (status->pending_notif_count == MAX_NOTIFICATION_PENDING) {
@@ -262,10 +277,9 @@ rm_rpc_fifo_send_notification(vmid_t vm_id, uint32_t notif_id, void *buf,
 			goto err;
 		}
 
-		n->notif_id   = notif_id;
-		n->buf	      = buf;
-		n->len	      = len;
-		n->alloc_size = alloc_size;
+		n->notif_id = notif_id;
+		n->buf	    = buf;
+		n->len	    = len;
 
 		list_append(pending_notif_t, &status->pending_notif_list, n,
 			    notif_);
@@ -299,17 +313,15 @@ rm_rpc_fifo_deinit(void)
 	for (index_t i = 0; i < cnt; ++i) {
 		fifo_status_t *s =
 			vector_at(fifo_status_t *, mngr.fifo_status, i);
-		while (s->pending_notif_list != NULL) {
-			delete_pending_notif(s, s->pending_notif_list, false);
-		}
 
+		clear_pending_msgs(s);
 		free(s);
 	}
 
 	vector_deinit(mngr.fifo_status);
 }
 
-find_fifo_status_ret_t
+static find_fifo_status_ret_t
 find_fifo_status(vmid_t peer)
 {
 	find_fifo_status_ret_t ret = { .status = NULL, .idx = 0U };
@@ -328,7 +340,7 @@ find_fifo_status(vmid_t peer)
 	return ret;
 }
 
-void
+static void
 send_pending_cb(event_t *event, void *data)
 {
 	rm_error_t     e      = RM_OK;
@@ -369,8 +381,8 @@ rm_reply_error(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		memcpy(out_buf + sizeof(rm_standard_rep_t), data, len);
 	}
 
-	rm_error_t rpc_err = rm_rpc_fifo_reply(client_id, msg_id, seq_num,
-					       out_buf, size, size);
+	rm_error_t rpc_err =
+		rm_rpc_fifo_reply(client_id, msg_id, seq_num, out_buf, size);
 	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
 		printf("rm_reply: err(%d)\n", rpc_err);
@@ -392,11 +404,17 @@ rm_notify(vmid_t client_id, uint32_t notif_id, void *data, size_t len)
 
 	memcpy(out_buf, data, len);
 
-	rm_error_t rpc_err = rm_rpc_fifo_send_notification(
-		client_id, notif_id, out_buf, len, len, true);
+	rm_error_t rpc_err = rm_rpc_fifo_send_notification(client_id, notif_id,
+							   out_buf, len, true);
 	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
 		printf("rm_reply: err(%d)\n", rpc_err);
 		exit(1);
 	}
+}
+
+bool
+rm_can_rpc(vmid_t client_id)
+{
+	return find_fifo_status(client_id).status != NULL;
 }

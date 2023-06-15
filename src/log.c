@@ -10,17 +10,23 @@
 #include <string.h>
 #include <sys/ioctl.h>
 
-#include <rm-rpc.h>
-
-#include <resource-manager.h>
-
-#include <log.h>
-#include <unistd.h>
+#include <rm_types.h>
 #include <util.h>
 #include <utils/address_range_allocator.h>
 #include <utils/vector.h>
+
+#include <event.h>
+#include <log.h>
+#include <memextent.h>
+#include <platform_vm_config.h>
+#include <resource-manager.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
+#include <unistd.h>
 #include <vm_config.h>
+#include <vm_config_struct.h>
 #include <vm_creation.h>
+#include <vm_memory.h>
 #include <vm_mgnt.h>
 
 #define TIOCSETBUF 0x547f // Non-standard IOCTL!!
@@ -51,7 +57,7 @@ log_reconfigure(uintptr_t *log_buf, size_t size)
 		memset(rm_log_area, 0, size);
 
 		struct tty_set_buffer_req req = { (uintptr_t)rm_log_area,
-						  LOG_AREA_SIZE };
+						  size };
 
 		int result =
 			ioctl(STDOUT_FILENO, TIOCSETBUF, (unsigned long)&req);
@@ -84,10 +90,22 @@ log_expose_to_hlos(uintptr_t log_buf, size_t size)
 	assert(paddr == log_buf);
 	vmaddr_t ipa = paddr;
 
-	// NOTE: assume it's safe to do 1:1 mapping for HLOS
-	error_t map_ret = hlos_map_memory(paddr, ipa, size, PGTABLE_ACCESS_R,
-					  PGTABLE_VM_MEMTYPE_NORMAL_WB);
-	if (map_ret != OK) {
+	vm_address_range_result_t as_ret =
+		vm_address_range_alloc(hlos, VM_MEMUSE_BOOTINFO, ipa, paddr,
+				       size, ADDRESS_RANGE_NO_ALIGNMENT);
+	if (as_ret.err != OK) {
+		ret = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	size_t offset = log_buf - rm_get_me_ipa_base();
+
+	cap_id_result_t cap_ret = vm_memory_create_and_map(
+		hlos, VM_MEMUSE_BOOTINFO, rm_get_me(), offset, size, ipa,
+		MEMEXTENT_MEMTYPE_ANY, PGTABLE_ACCESS_R,
+		PGTABLE_VM_MEMTYPE_NORMAL_WB);
+	if (cap_ret.e != OK) {
+		vm_address_range_free(hlos, VM_MEMUSE_BOOTINFO, ipa, size);
 		ret = RM_ERROR_DENIED;
 		goto out;
 	}

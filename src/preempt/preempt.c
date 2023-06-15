@@ -13,6 +13,7 @@
 
 #include <preempt.h>
 
+// FIXME:
 static unsigned int preempt_disable_count;
 
 void

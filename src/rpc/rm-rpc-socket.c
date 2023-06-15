@@ -14,12 +14,13 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include <rm-rpc.h>
+#include <rm_types.h>
+#include <utils/list.h>
 
 #include <errno.h>
 #include <event.h>
+#include <rm-rpc.h>
 #include <unistd.h>
-#include <utils/list.h>
 
 #include "rm-rpc-internal.h"
 
@@ -295,7 +296,7 @@ rm_rpc_server_add_link(vmid_t client_id)
 		goto out;
 	}
 
-	rm_rpc_transport_t *t = calloc(1, sizeof(rm_rpc_transport_t));
+	rm_rpc_transport_t *t = calloc(1, sizeof(*t));
 	if (t == NULL) {
 		err = RM_ERROR_NOMEM;
 		goto out;
@@ -331,7 +332,7 @@ out:
 rm_rpc_rx_data_t *
 rm_rpc_get_rx_data(vmid_t vm_id)
 {
-	rm_rpc_rx_data_t	 *data      = NULL;
+	rm_rpc_rx_data_t   *data      = NULL;
 	rm_rpc_transport_t *transport = rm_rpc_get_transport(vm_id);
 
 	if (transport != NULL) {
@@ -344,7 +345,7 @@ rm_rpc_get_rx_data(vmid_t vm_id)
 rm_rpc_tx_data_t *
 rm_rpc_get_tx_data(vmid_t vm_id)
 {
-	rm_rpc_tx_data_t	 *data      = NULL;
+	rm_rpc_tx_data_t   *data      = NULL;
 	rm_rpc_transport_t *transport = rm_rpc_get_transport(vm_id);
 
 	if (transport != NULL) {

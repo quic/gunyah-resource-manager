@@ -176,30 +176,6 @@ boot_env_phys_range_ptr_result_ok(boot_env_phys_range_t *ret)
 	return (boot_env_phys_range_ptr_result_t){ .r = ret, .e = OK };
 }
 
-boot_env_data_result_t
-boot_env_data_result_error(error_t err)
-{
-	return (boot_env_data_result_t){ .e = err };
-}
-
-boot_env_data_result_t
-boot_env_data_result_ok(boot_env_data_t ret)
-{
-	return (boot_env_data_result_t){ .r = ret, .e = OK };
-}
-
-boot_env_data_ptr_result_t
-boot_env_data_ptr_result_error(error_t err)
-{
-	return (boot_env_data_ptr_result_t){ .e = err };
-}
-
-boot_env_data_ptr_result_t
-boot_env_data_ptr_result_ok(boot_env_data_t *ret)
-{
-	return (boot_env_data_ptr_result_t){ .r = ret, .e = OK };
-}
-
 cpu_index_result_t
 cpu_index_result_error(error_t err)
 {
@@ -222,6 +198,54 @@ cpu_index_ptr_result_t
 cpu_index_ptr_result_ok(cpu_index_t *ret)
 {
 	return (cpu_index_ptr_result_t){ .r = ret, .e = OK };
+}
+
+addrspace_map_flags_result_t
+addrspace_map_flags_result_error(error_t err)
+{
+	return (addrspace_map_flags_result_t){ .e = err };
+}
+
+addrspace_map_flags_result_t
+addrspace_map_flags_result_ok(addrspace_map_flags_t ret)
+{
+	return (addrspace_map_flags_result_t){ .r = ret, .e = OK };
+}
+
+addrspace_map_flags_ptr_result_t
+addrspace_map_flags_ptr_result_error(error_t err)
+{
+	return (addrspace_map_flags_ptr_result_t){ .e = err };
+}
+
+addrspace_map_flags_ptr_result_t
+addrspace_map_flags_ptr_result_ok(addrspace_map_flags_t *ret)
+{
+	return (addrspace_map_flags_ptr_result_t){ .r = ret, .e = OK };
+}
+
+addrspace_vmmio_configure_op_result_t
+addrspace_vmmio_configure_op_result_error(error_t err)
+{
+	return (addrspace_vmmio_configure_op_result_t){ .e = err };
+}
+
+addrspace_vmmio_configure_op_result_t
+addrspace_vmmio_configure_op_result_ok(addrspace_vmmio_configure_op_t ret)
+{
+	return (addrspace_vmmio_configure_op_result_t){ .r = ret, .e = OK };
+}
+
+addrspace_vmmio_configure_op_ptr_result_t
+addrspace_vmmio_configure_op_ptr_result_error(error_t err)
+{
+	return (addrspace_vmmio_configure_op_ptr_result_t){ .e = err };
+}
+
+addrspace_vmmio_configure_op_ptr_result_t
+addrspace_vmmio_configure_op_ptr_result_ok(addrspace_vmmio_configure_op_t *ret)
+{
+	return (addrspace_vmmio_configure_op_ptr_result_t){ .r = ret, .e = OK };
 }
 
 hyp_variant_result_t
@@ -344,6 +368,30 @@ hyp_api_flags2_ptr_result_ok(hyp_api_flags2_t *ret)
 	return (hyp_api_flags2_ptr_result_t){ .r = ret, .e = OK };
 }
 
+memextent_type_result_t
+memextent_type_result_error(error_t err)
+{
+	return (memextent_type_result_t){ .e = err };
+}
+
+memextent_type_result_t
+memextent_type_result_ok(memextent_type_t ret)
+{
+	return (memextent_type_result_t){ .r = ret, .e = OK };
+}
+
+memextent_type_ptr_result_t
+memextent_type_ptr_result_error(error_t err)
+{
+	return (memextent_type_ptr_result_t){ .e = err };
+}
+
+memextent_type_ptr_result_t
+memextent_type_ptr_result_ok(memextent_type_t *ret)
+{
+	return (memextent_type_ptr_result_t){ .r = ret, .e = OK };
+}
+
 memextent_memtype_result_t
 memextent_memtype_result_error(error_t err)
 {
@@ -438,6 +486,102 @@ memextent_access_attrs_ptr_result_t
 memextent_access_attrs_ptr_result_ok(memextent_access_attrs_t *ret)
 {
 	return (memextent_access_attrs_ptr_result_t){ .r = ret, .e = OK };
+}
+
+memextent_donate_type_result_t
+memextent_donate_type_result_error(error_t err)
+{
+	return (memextent_donate_type_result_t){ .e = err };
+}
+
+memextent_donate_type_result_t
+memextent_donate_type_result_ok(memextent_donate_type_t ret)
+{
+	return (memextent_donate_type_result_t){ .r = ret, .e = OK };
+}
+
+memextent_donate_type_ptr_result_t
+memextent_donate_type_ptr_result_error(error_t err)
+{
+	return (memextent_donate_type_ptr_result_t){ .e = err };
+}
+
+memextent_donate_type_ptr_result_t
+memextent_donate_type_ptr_result_ok(memextent_donate_type_t *ret)
+{
+	return (memextent_donate_type_ptr_result_t){ .r = ret, .e = OK };
+}
+
+memextent_donate_options_result_t
+memextent_donate_options_result_error(error_t err)
+{
+	return (memextent_donate_options_result_t){ .e = err };
+}
+
+memextent_donate_options_result_t
+memextent_donate_options_result_ok(memextent_donate_options_t ret)
+{
+	return (memextent_donate_options_result_t){ .r = ret, .e = OK };
+}
+
+memextent_donate_options_ptr_result_t
+memextent_donate_options_ptr_result_error(error_t err)
+{
+	return (memextent_donate_options_ptr_result_t){ .e = err };
+}
+
+memextent_donate_options_ptr_result_t
+memextent_donate_options_ptr_result_ok(memextent_donate_options_t *ret)
+{
+	return (memextent_donate_options_ptr_result_t){ .r = ret, .e = OK };
+}
+
+memextent_modify_op_result_t
+memextent_modify_op_result_error(error_t err)
+{
+	return (memextent_modify_op_result_t){ .e = err };
+}
+
+memextent_modify_op_result_t
+memextent_modify_op_result_ok(memextent_modify_op_t ret)
+{
+	return (memextent_modify_op_result_t){ .r = ret, .e = OK };
+}
+
+memextent_modify_op_ptr_result_t
+memextent_modify_op_ptr_result_error(error_t err)
+{
+	return (memextent_modify_op_ptr_result_t){ .e = err };
+}
+
+memextent_modify_op_ptr_result_t
+memextent_modify_op_ptr_result_ok(memextent_modify_op_t *ret)
+{
+	return (memextent_modify_op_ptr_result_t){ .r = ret, .e = OK };
+}
+
+memextent_modify_flags_result_t
+memextent_modify_flags_result_error(error_t err)
+{
+	return (memextent_modify_flags_result_t){ .e = err };
+}
+
+memextent_modify_flags_result_t
+memextent_modify_flags_result_ok(memextent_modify_flags_t ret)
+{
+	return (memextent_modify_flags_result_t){ .r = ret, .e = OK };
+}
+
+memextent_modify_flags_ptr_result_t
+memextent_modify_flags_ptr_result_error(error_t err)
+{
+	return (memextent_modify_flags_ptr_result_t){ .e = err };
+}
+
+memextent_modify_flags_ptr_result_t
+memextent_modify_flags_ptr_result_ok(memextent_modify_flags_t *ret)
+{
+	return (memextent_modify_flags_ptr_result_t){ .r = ret, .e = OK };
 }
 
 pgtable_vm_memtype_result_t
@@ -608,6 +752,224 @@ vmaddr_ptr_result_ok(vmaddr_t *ret)
 	return (vmaddr_ptr_result_t){ .r = ret, .e = OK };
 }
 
+smccc_interface_id_result_t
+smccc_interface_id_result_error(error_t err)
+{
+	return (smccc_interface_id_result_t){ .e = err };
+}
+
+smccc_interface_id_result_t
+smccc_interface_id_result_ok(smccc_interface_id_t ret)
+{
+	return (smccc_interface_id_result_t){ .r = ret, .e = OK };
+}
+
+smccc_interface_id_ptr_result_t
+smccc_interface_id_ptr_result_error(error_t err)
+{
+	return (smccc_interface_id_ptr_result_t){ .e = err };
+}
+
+smccc_interface_id_ptr_result_t
+smccc_interface_id_ptr_result_ok(smccc_interface_id_t *ret)
+{
+	return (smccc_interface_id_ptr_result_t){ .r = ret, .e = OK };
+}
+
+smccc_function_result_t
+smccc_function_result_error(error_t err)
+{
+	return (smccc_function_result_t){ .e = err };
+}
+
+smccc_function_result_t
+smccc_function_result_ok(smccc_function_t ret)
+{
+	return (smccc_function_result_t){ .r = ret, .e = OK };
+}
+
+smccc_function_ptr_result_t
+smccc_function_ptr_result_error(error_t err)
+{
+	return (smccc_function_ptr_result_t){ .e = err };
+}
+
+smccc_function_ptr_result_t
+smccc_function_ptr_result_ok(smccc_function_t *ret)
+{
+	return (smccc_function_ptr_result_t){ .r = ret, .e = OK };
+}
+
+smccc_function_id_result_t
+smccc_function_id_result_error(error_t err)
+{
+	return (smccc_function_id_result_t){ .e = err };
+}
+
+smccc_function_id_result_t
+smccc_function_id_result_ok(smccc_function_id_t ret)
+{
+	return (smccc_function_id_result_t){ .r = ret, .e = OK };
+}
+
+smccc_function_id_ptr_result_t
+smccc_function_id_ptr_result_error(error_t err)
+{
+	return (smccc_function_id_ptr_result_t){ .e = err };
+}
+
+smccc_function_id_ptr_result_t
+smccc_function_id_ptr_result_ok(smccc_function_id_t *ret)
+{
+	return (smccc_function_id_ptr_result_t){ .r = ret, .e = OK };
+}
+
+smccc_vendor_hyp_function_class_result_t
+smccc_vendor_hyp_function_class_result_error(error_t err)
+{
+	return (smccc_vendor_hyp_function_class_result_t){ .e = err };
+}
+
+smccc_vendor_hyp_function_class_result_t
+smccc_vendor_hyp_function_class_result_ok(smccc_vendor_hyp_function_class_t ret)
+{
+	return (smccc_vendor_hyp_function_class_result_t){ .r = ret, .e = OK };
+}
+
+smccc_vendor_hyp_function_class_ptr_result_t
+smccc_vendor_hyp_function_class_ptr_result_error(error_t err)
+{
+	return (smccc_vendor_hyp_function_class_ptr_result_t){ .e = err };
+}
+
+smccc_vendor_hyp_function_class_ptr_result_t
+smccc_vendor_hyp_function_class_ptr_result_ok(
+	smccc_vendor_hyp_function_class_t *ret)
+{
+	return (smccc_vendor_hyp_function_class_ptr_result_t){ .r = ret,
+							       .e = OK };
+}
+
+smccc_vendor_hyp_function_id_result_t
+smccc_vendor_hyp_function_id_result_error(error_t err)
+{
+	return (smccc_vendor_hyp_function_id_result_t){ .e = err };
+}
+
+smccc_vendor_hyp_function_id_result_t
+smccc_vendor_hyp_function_id_result_ok(smccc_vendor_hyp_function_id_t ret)
+{
+	return (smccc_vendor_hyp_function_id_result_t){ .r = ret, .e = OK };
+}
+
+smccc_vendor_hyp_function_id_ptr_result_t
+smccc_vendor_hyp_function_id_ptr_result_error(error_t err)
+{
+	return (smccc_vendor_hyp_function_id_ptr_result_t){ .e = err };
+}
+
+smccc_vendor_hyp_function_id_ptr_result_t
+smccc_vendor_hyp_function_id_ptr_result_ok(smccc_vendor_hyp_function_id_t *ret)
+{
+	return (smccc_vendor_hyp_function_id_ptr_result_t){ .r = ret, .e = OK };
+}
+
+smccc_arch_function_result_t
+smccc_arch_function_result_error(error_t err)
+{
+	return (smccc_arch_function_result_t){ .e = err };
+}
+
+smccc_arch_function_result_t
+smccc_arch_function_result_ok(smccc_arch_function_t ret)
+{
+	return (smccc_arch_function_result_t){ .r = ret, .e = OK };
+}
+
+smccc_arch_function_ptr_result_t
+smccc_arch_function_ptr_result_error(error_t err)
+{
+	return (smccc_arch_function_ptr_result_t){ .e = err };
+}
+
+smccc_arch_function_ptr_result_t
+smccc_arch_function_ptr_result_ok(smccc_arch_function_t *ret)
+{
+	return (smccc_arch_function_ptr_result_t){ .r = ret, .e = OK };
+}
+
+smccc_standard_hyp_function_result_t
+smccc_standard_hyp_function_result_error(error_t err)
+{
+	return (smccc_standard_hyp_function_result_t){ .e = err };
+}
+
+smccc_standard_hyp_function_result_t
+smccc_standard_hyp_function_result_ok(smccc_standard_hyp_function_t ret)
+{
+	return (smccc_standard_hyp_function_result_t){ .r = ret, .e = OK };
+}
+
+smccc_standard_hyp_function_ptr_result_t
+smccc_standard_hyp_function_ptr_result_error(error_t err)
+{
+	return (smccc_standard_hyp_function_ptr_result_t){ .e = err };
+}
+
+smccc_standard_hyp_function_ptr_result_t
+smccc_standard_hyp_function_ptr_result_ok(smccc_standard_hyp_function_t *ret)
+{
+	return (smccc_standard_hyp_function_ptr_result_t){ .r = ret, .e = OK };
+}
+
+smccc_vendor_hyp_function_result_t
+smccc_vendor_hyp_function_result_error(error_t err)
+{
+	return (smccc_vendor_hyp_function_result_t){ .e = err };
+}
+
+smccc_vendor_hyp_function_result_t
+smccc_vendor_hyp_function_result_ok(smccc_vendor_hyp_function_t ret)
+{
+	return (smccc_vendor_hyp_function_result_t){ .r = ret, .e = OK };
+}
+
+smccc_vendor_hyp_function_ptr_result_t
+smccc_vendor_hyp_function_ptr_result_error(error_t err)
+{
+	return (smccc_vendor_hyp_function_ptr_result_t){ .e = err };
+}
+
+smccc_vendor_hyp_function_ptr_result_t
+smccc_vendor_hyp_function_ptr_result_ok(smccc_vendor_hyp_function_t *ret)
+{
+	return (smccc_vendor_hyp_function_ptr_result_t){ .r = ret, .e = OK };
+}
+
+ticks_result_t
+ticks_result_error(error_t err)
+{
+	return (ticks_result_t){ .e = err };
+}
+
+ticks_result_t
+ticks_result_ok(ticks_t ret)
+{
+	return (ticks_result_t){ .r = ret, .e = OK };
+}
+
+ticks_ptr_result_t
+ticks_ptr_result_error(error_t err)
+{
+	return (ticks_ptr_result_t){ .e = err };
+}
+
+ticks_ptr_result_t
+ticks_ptr_result_ok(ticks_t *ret)
+{
+	return (ticks_ptr_result_t){ .r = ret, .e = OK };
+}
+
 nanoseconds_result_t
 nanoseconds_result_error(error_t err)
 {
@@ -630,6 +992,198 @@ nanoseconds_ptr_result_t
 nanoseconds_ptr_result_ok(nanoseconds_t *ret)
 {
 	return (nanoseconds_ptr_result_t){ .r = ret, .e = OK };
+}
+
+microseconds_result_t
+microseconds_result_error(error_t err)
+{
+	return (microseconds_result_t){ .e = err };
+}
+
+microseconds_result_t
+microseconds_result_ok(microseconds_t ret)
+{
+	return (microseconds_result_t){ .r = ret, .e = OK };
+}
+
+microseconds_ptr_result_t
+microseconds_ptr_result_error(error_t err)
+{
+	return (microseconds_ptr_result_t){ .e = err };
+}
+
+microseconds_ptr_result_t
+microseconds_ptr_result_ok(microseconds_t *ret)
+{
+	return (microseconds_ptr_result_t){ .r = ret, .e = OK };
+}
+
+trace_class_result_t
+trace_class_result_error(error_t err)
+{
+	return (trace_class_result_t){ .e = err };
+}
+
+trace_class_result_t
+trace_class_result_ok(trace_class_t ret)
+{
+	return (trace_class_result_t){ .r = ret, .e = OK };
+}
+
+trace_class_ptr_result_t
+trace_class_ptr_result_error(error_t err)
+{
+	return (trace_class_ptr_result_t){ .e = err };
+}
+
+trace_class_ptr_result_t
+trace_class_ptr_result_ok(trace_class_t *ret)
+{
+	return (trace_class_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_virq_type_result_t
+vcpu_virq_type_result_error(error_t err)
+{
+	return (vcpu_virq_type_result_t){ .e = err };
+}
+
+vcpu_virq_type_result_t
+vcpu_virq_type_result_ok(vcpu_virq_type_t ret)
+{
+	return (vcpu_virq_type_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_virq_type_ptr_result_t
+vcpu_virq_type_ptr_result_error(error_t err)
+{
+	return (vcpu_virq_type_ptr_result_t){ .e = err };
+}
+
+vcpu_virq_type_ptr_result_t
+vcpu_virq_type_ptr_result_ok(vcpu_virq_type_t *ret)
+{
+	return (vcpu_virq_type_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_poweroff_flags_result_t
+vcpu_poweroff_flags_result_error(error_t err)
+{
+	return (vcpu_poweroff_flags_result_t){ .e = err };
+}
+
+vcpu_poweroff_flags_result_t
+vcpu_poweroff_flags_result_ok(vcpu_poweroff_flags_t ret)
+{
+	return (vcpu_poweroff_flags_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_poweroff_flags_ptr_result_t
+vcpu_poweroff_flags_ptr_result_error(error_t err)
+{
+	return (vcpu_poweroff_flags_ptr_result_t){ .e = err };
+}
+
+vcpu_poweroff_flags_ptr_result_t
+vcpu_poweroff_flags_ptr_result_ok(vcpu_poweroff_flags_t *ret)
+{
+	return (vcpu_poweroff_flags_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_register_set_result_t
+vcpu_register_set_result_error(error_t err)
+{
+	return (vcpu_register_set_result_t){ .e = err };
+}
+
+vcpu_register_set_result_t
+vcpu_register_set_result_ok(vcpu_register_set_t ret)
+{
+	return (vcpu_register_set_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_register_set_ptr_result_t
+vcpu_register_set_ptr_result_error(error_t err)
+{
+	return (vcpu_register_set_ptr_result_t){ .e = err };
+}
+
+vcpu_register_set_ptr_result_t
+vcpu_register_set_ptr_result_ok(vcpu_register_set_t *ret)
+{
+	return (vcpu_register_set_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_poweron_flags_result_t
+vcpu_poweron_flags_result_error(error_t err)
+{
+	return (vcpu_poweron_flags_result_t){ .e = err };
+}
+
+vcpu_poweron_flags_result_t
+vcpu_poweron_flags_result_ok(vcpu_poweron_flags_t ret)
+{
+	return (vcpu_poweron_flags_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_poweron_flags_ptr_result_t
+vcpu_poweron_flags_ptr_result_error(error_t err)
+{
+	return (vcpu_poweron_flags_ptr_result_t){ .e = err };
+}
+
+vcpu_poweron_flags_ptr_result_t
+vcpu_poweron_flags_ptr_result_ok(vcpu_poweron_flags_t *ret)
+{
+	return (vcpu_poweron_flags_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_run_state_result_t
+vcpu_run_state_result_error(error_t err)
+{
+	return (vcpu_run_state_result_t){ .e = err };
+}
+
+vcpu_run_state_result_t
+vcpu_run_state_result_ok(vcpu_run_state_t ret)
+{
+	return (vcpu_run_state_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_run_state_ptr_result_t
+vcpu_run_state_ptr_result_error(error_t err)
+{
+	return (vcpu_run_state_ptr_result_t){ .e = err };
+}
+
+vcpu_run_state_ptr_result_t
+vcpu_run_state_ptr_result_ok(vcpu_run_state_t *ret)
+{
+	return (vcpu_run_state_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_run_poweroff_flags_result_t
+vcpu_run_poweroff_flags_result_error(error_t err)
+{
+	return (vcpu_run_poweroff_flags_result_t){ .e = err };
+}
+
+vcpu_run_poweroff_flags_result_t
+vcpu_run_poweroff_flags_result_ok(vcpu_run_poweroff_flags_t ret)
+{
+	return (vcpu_run_poweroff_flags_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_run_poweroff_flags_ptr_result_t
+vcpu_run_poweroff_flags_ptr_result_error(error_t err)
+{
+	return (vcpu_run_poweroff_flags_ptr_result_t){ .e = err };
+}
+
+vcpu_run_poweroff_flags_ptr_result_t
+vcpu_run_poweroff_flags_ptr_result_ok(vcpu_run_poweroff_flags_t *ret)
+{
+	return (vcpu_run_poweroff_flags_ptr_result_t){ .r = ret, .e = OK };
 }
 
 vic_option_flags_result_t
@@ -678,6 +1232,54 @@ virq_ptr_result_t
 virq_ptr_result_ok(virq_t *ret)
 {
 	return (virq_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vpm_group_option_flags_result_t
+vpm_group_option_flags_result_error(error_t err)
+{
+	return (vpm_group_option_flags_result_t){ .e = err };
+}
+
+vpm_group_option_flags_result_t
+vpm_group_option_flags_result_ok(vpm_group_option_flags_t ret)
+{
+	return (vpm_group_option_flags_result_t){ .r = ret, .e = OK };
+}
+
+vpm_group_option_flags_ptr_result_t
+vpm_group_option_flags_ptr_result_error(error_t err)
+{
+	return (vpm_group_option_flags_ptr_result_t){ .e = err };
+}
+
+vpm_group_option_flags_ptr_result_t
+vpm_group_option_flags_ptr_result_ok(vpm_group_option_flags_t *ret)
+{
+	return (vpm_group_option_flags_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vpm_state_result_t
+vpm_state_result_error(error_t err)
+{
+	return (vpm_state_result_t){ .e = err };
+}
+
+vpm_state_result_t
+vpm_state_result_ok(vpm_state_t ret)
+{
+	return (vpm_state_result_t){ .r = ret, .e = OK };
+}
+
+vpm_state_ptr_result_t
+vpm_state_ptr_result_error(error_t err)
+{
+	return (vpm_state_ptr_result_t){ .e = err };
+}
+
+vpm_state_ptr_result_t
+vpm_state_ptr_result_ok(vpm_state_t *ret)
+{
+	return (vpm_state_ptr_result_t){ .r = ret, .e = OK };
 }
 
 msgqueue_create_info_result_t
@@ -750,6 +1352,54 @@ vmid_ptr_result_t
 vmid_ptr_result_ok(vmid_t *ret)
 {
 	return (vmid_ptr_result_t){ .r = ret, .e = OK };
+}
+
+rt_env_data_result_t
+rt_env_data_result_error(error_t err)
+{
+	return (rt_env_data_result_t){ .e = err };
+}
+
+rt_env_data_result_t
+rt_env_data_result_ok(rt_env_data_t ret)
+{
+	return (rt_env_data_result_t){ .r = ret, .e = OK };
+}
+
+rt_env_data_ptr_result_t
+rt_env_data_ptr_result_error(error_t err)
+{
+	return (rt_env_data_ptr_result_t){ .e = err };
+}
+
+rt_env_data_ptr_result_t
+rt_env_data_ptr_result_ok(rt_env_data_t *ret)
+{
+	return (rt_env_data_ptr_result_t){ .r = ret, .e = OK };
+}
+
+rm_env_data_hdr_result_t
+rm_env_data_hdr_result_error(error_t err)
+{
+	return (rm_env_data_hdr_result_t){ .e = err };
+}
+
+rm_env_data_hdr_result_t
+rm_env_data_hdr_result_ok(rm_env_data_hdr_t ret)
+{
+	return (rm_env_data_hdr_result_t){ .r = ret, .e = OK };
+}
+
+rm_env_data_hdr_ptr_result_t
+rm_env_data_hdr_ptr_result_error(error_t err)
+{
+	return (rm_env_data_hdr_ptr_result_t){ .e = err };
+}
+
+rm_env_data_hdr_ptr_result_t
+rm_env_data_hdr_ptr_result_ok(rm_env_data_hdr_t *ret)
+{
+	return (rm_env_data_hdr_ptr_result_t){ .r = ret, .e = OK };
 }
 
 vcpu_option_flags_result_t

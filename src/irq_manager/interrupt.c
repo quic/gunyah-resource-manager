@@ -11,15 +11,17 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 
-#include <rm-rpc.h>
+#include <rm_types.h>
+#include <utils/list.h>
+#include <utils/vector.h>
 
 #include <event.h>
 #include <fcntl.h>
 #include <guest_interface.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
 #include <uapi/interrupt.h>
 #include <unistd.h>
-#include <utils/list.h>
-#include <utils/vector.h>
 #include <vm_config.h>
 
 rm_error_t

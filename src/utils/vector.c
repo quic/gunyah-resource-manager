@@ -10,21 +10,22 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <util.h>
 #include <utils/vector.h>
 
 #define DEFAULT_INIT_CAPACITY (64)
 #define DEFAULT_CAPACITY_STEP (64)
 
-struct vector {
+struct vector_s {
 	void *data;
 	// minimum capacity
-	size_t min_capacity;
+	count_t min_capacity;
 	// capacity measured by element
-	size_t capacity;
+	count_t capacity;
 	// size of vector in elements
-	size_t elements;
+	count_t elements;
 	// vector grows or shrinks by step-size elements
-	size_t capacity_step_sz;
+	count_t capacity_step_sz;
 	// size of an element
 	size_t element_sz;
 	// NOTE: have issue for multiple thread accessing
@@ -43,12 +44,12 @@ static void
 vector_swap_threadsafe(vector_t *vector, index_t idx1, index_t idx2, void *tmp);
 
 vector_t *
-vector_init_internal(size_t init_capacity, size_t capacity_step_sz,
+vector_init_internal(count_t init_capacity, count_t capacity_step_sz,
 		     size_t element_sz)
 {
 	vector_t *ret = calloc(1, sizeof(*ret));
 	if (ret == NULL) {
-		goto err;
+		goto out;
 	}
 
 	ret->element_sz = element_sz;
@@ -78,7 +79,7 @@ vector_init_internal(size_t init_capacity, size_t capacity_step_sz,
 		goto err2;
 	}
 
-	return ret;
+	goto out;
 
 err2:
 	if (ret->data != NULL) {
@@ -87,9 +88,10 @@ err2:
 err1:
 	if (ret != NULL) {
 		free(ret);
+		ret = NULL;
 	}
-err:
-	return NULL;
+out:
+	return ret;
 }
 
 void
@@ -140,7 +142,7 @@ vector_pop_back_internal(vector_t *vector)
 						   vector->internal_tmp);
 }
 
-void *
+static void *
 vector_pop_back_threadsafe_internal(vector_t *vector, void *tmp)
 {
 	if (vector->elements == 0) {
@@ -175,6 +177,7 @@ vector_insert_internal(vector_t *vector, index_t idx, const void *element)
 		goto err;
 	}
 	assert(vector->elements > idx);
+
 	e = vector_resize(vector);
 	if (e != OK) {
 		goto err;
@@ -205,6 +208,7 @@ vector_delete_keep_order(vector_t *vector, index_t idx)
 	if (vector->data == NULL) {
 		goto out;
 	}
+	assert(vector->elements > idx);
 
 	size_t sz = vector->elements - (idx + 1);
 	sz *= vector->element_sz;
@@ -227,6 +231,7 @@ out:
 void
 vector_delete(vector_t *vector, index_t idx)
 {
+	assert(vector->elements > idx);
 	vector_swap(vector, idx, vector_end(vector));
 	vector_delete_keep_order(vector, vector_end(vector));
 }
@@ -237,7 +242,7 @@ vector_swap(vector_t *vector, index_t idx1, index_t idx2)
 	vector_swap_threadsafe(vector, idx1, idx2, vector->internal_tmp);
 }
 
-void
+static void
 vector_swap_threadsafe(vector_t *vector, index_t idx1, index_t idx2, void *tmp)
 {
 	if (vector->data == NULL) {
@@ -247,6 +252,8 @@ vector_swap_threadsafe(vector_t *vector, index_t idx1, index_t idx2, void *tmp)
 	if (idx1 == idx2) {
 		goto out;
 	}
+	assert(vector->elements > idx1);
+	assert(vector->elements > idx2);
 
 	uintptr_t base	  = (uintptr_t)vector->data;
 	size_t	  offset1 = idx1 * vector->element_sz;
@@ -264,13 +271,13 @@ out:
 	return;
 }
 
-size_t
+count_t
 vector_size(const vector_t *vector)
 {
 	return vector->elements;
 }
 
-error_t
+static error_t
 vector_resize(vector_t *vector)
 {
 	error_t e = OK;
@@ -280,14 +287,21 @@ vector_resize(vector_t *vector)
 		goto out;
 	}
 
-	size_t capacity = vector->capacity;
+	count_t capacity = vector->capacity;
+	count_t step_sz	 = vector->capacity_step_sz;
 
-	if ((capacity - vector->elements) >= vector->capacity_step_sz) {
+	assert(capacity >= vector->elements);
+
+	if ((capacity - vector->elements) >= step_sz) {
 		if (capacity > vector->min_capacity) {
-			capacity -= vector->capacity_step_sz;
+			capacity -= step_sz;
 		}
 	} else if (capacity == vector->elements) {
-		capacity += vector->capacity_step_sz;
+		if (util_add_overflows(capacity, step_sz)) {
+			e = ERROR_DENIED;
+			goto out;
+		}
+		capacity += step_sz;
 	} else {
 		goto out;
 	}

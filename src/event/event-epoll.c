@@ -25,7 +25,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 
-struct event_data {
+struct event_data_s {
 	int	 epoll_fd;
 	event_t *head;
 	event_t *tail;
@@ -35,7 +35,7 @@ struct event_data {
 
 #pragma clang diagnostic pop
 
-static struct event_data event_data;
+static struct event_data_s event_data;
 
 error_t
 event_init(void)
@@ -157,7 +157,7 @@ static event_t *
 get_next_pending_event(void)
 {
 	event_t **head = &event_data.head;
-	event_t	*ev;
+	event_t	 *ev;
 
 	assert(*head != NULL);
 
@@ -249,6 +249,8 @@ event_loop_common(int timeout)
 
 		int ret = do_epoll_wait(timeout);
 		if (ret == 0) {
+			// FIXME:
+			// Implement PSCI CPU suspend call
 			(void)do_epoll_wait(-1);
 		}
 	}

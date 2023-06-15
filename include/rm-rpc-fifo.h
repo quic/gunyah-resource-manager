@@ -13,12 +13,11 @@ rm_rpc_fifo_destroy(vmid_t peer);
 
 rm_error_t
 rm_rpc_fifo_reply(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, void *buf,
-		  size_t len, size_t alloc_size);
+		  size_t len);
 
 rm_error_t
 rm_rpc_fifo_send_notification(vmid_t vm_id, uint32_t notif_id, void *buf,
-			      size_t len, size_t alloc_size,
-			      bool allow_pending);
+			      size_t len, bool allow_pending);
 
 void
 rm_rpc_fifo_tx_callback(vmid_t vm_id);
@@ -63,3 +62,7 @@ rm_standard_reply(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 // Helper function that takes a copy of data.
 void
 rm_notify(vmid_t client_id, uint32_t notif_id, void *data, size_t len);
+
+// Helper function to check if a client can receive RM RPC.
+bool
+rm_can_rpc(vmid_t client_id);

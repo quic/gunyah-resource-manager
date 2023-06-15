@@ -14,7 +14,6 @@ typedef struct {
 	size_t	 len;
 	size_t	 pos;
 	size_t	 rem;
-	size_t	 alloc_size;
 } rm_rpc_tx_data_t;
 
 typedef struct {

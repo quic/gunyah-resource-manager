@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #define SMCCC_USE_SMC
-//#define SMCCC_USE_HVC
+// #define SMCCC_USE_HVC
 
 #define SMCCC_FAST_CALL_SHIFT  31
 #define SMCCC_64BIT_CALL_SHIFT 30

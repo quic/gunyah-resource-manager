@@ -4,17 +4,15 @@
 
 #include <guest_types.h>
 
-#include <assert.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <resource-manager.h>
+#include <rm_types.h>
 
 #include <memextent.h>
-#include <platform.h>
+#include <resource-manager.h>
+#include <rm_env_data.h>
+#include <uart.h>
 
 #include "uart_qemu.h"
 
@@ -31,8 +29,8 @@ uart_putc(const char c)
 	volatile uint32_t *tfr = (uint32_t *)(uart_address + UART_TFR);
 	volatile uint32_t *dr  = (uint32_t *)(uart_address + UART_DR);
 
-	while ((*tfr & ((uint32_t)1U << 5)) != 0U)
-		;
+	while ((*tfr & ((uint32_t)1U << 5)) != 0U) {
+	}
 	*dr = c;
 
 out:
@@ -68,7 +66,7 @@ out:
 }
 
 void
-platform_uart_map(boot_env_data_t *env_data)
+platform_uart_map(rm_env_data_t *env_data)
 {
 	error_t ret = OK;
 

@@ -13,183 +13,227 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <rm_types.h>
 #include <util.h>
 #include <utils/address_range_allocator.h>
 #include <utils/list.h>
+#include <utils/range_list.h>
+#include <utils/vector.h>
 
-typedef struct range {
-	struct range *range_prev;
-	struct range *range_next;
-
-	vmaddr_t base_address;
-	size_t	 size;
-} range_t;
+#include <log.h>
+#include <resource-manager.h>
+#include <rm-rpc.h>
 
 struct address_range_allocator {
-	range_t *range_list;
+	range_list_t *ralloc;
 
-#ifndef NDEBUG
-	// memory footprint measurement, can be done by memory allocator
-	size_t range_node_cnt;
-#endif
+	vector_t *sub_allocators;
 
-	vmaddr_t start_address;
+	uint64_t base_address;
 	size_t	 size;
 };
 
-static range_t *
-find_range(address_range_allocator_t *allocator, vmaddr_t start_address,
-	   size_t size, size_t alignment);
-
 typedef struct {
-	range_t *left;
-	range_t *right;
-} find_neighbor_range_ret_t;
+	range_list_t *ralloc;
 
-static find_neighbor_range_ret_t
-find_neighbor_range(address_range_allocator_t *allocator, vmaddr_t address);
+	address_range_tag_t tag;
+	uint8_t		    tag_padding[4];
+} sub_allocator_t;
 
-address_range_allocator_t *
-address_range_allocator_init(vmaddr_t base_address, size_t size)
+static sub_allocator_t *
+find_sub_allocator(address_range_allocator_t *allocator,
+		   address_range_tag_t	      tag);
+
+static void
+remove_sub_allocator(address_range_allocator_t *allocator,
+		     sub_allocator_t	       *sub_allocator);
+
+static sub_allocator_t *
+find_sub_allocator(address_range_allocator_t *allocator,
+		   address_range_tag_t	      tag)
 {
-	if (util_add_overflows(base_address, size)) {
-		goto err;
+	sub_allocator_t *ret = NULL, *cur = NULL;
+
+	index_t idx = 0U;
+
+	foreach_vector(sub_allocator_t *, allocator->sub_allocators, idx, cur)
+	{
+		if ((cur != NULL) && (cur->tag == tag)) {
+			ret = cur;
+			break;
+		}
 	}
 
-	if (!util_is_baligned(base_address, PAGE_SIZE) ||
-	    !util_is_baligned(size, PAGE_SIZE)) {
-		goto err;
-	}
-
-	if ((base_address + size) > ADDRESS_SPACE_LIMIT) {
-		goto err;
-	}
-
-	address_range_allocator_t *allocator = calloc(1, sizeof(*allocator));
-	if (allocator == NULL) {
-		goto err;
-	}
-
-	range_t *root_range = calloc(1, sizeof(*root_range));
-	if (root_range == NULL) {
-		goto err1;
-	}
-
-	root_range->base_address = base_address;
-	root_range->size	 = size;
-
-	list_append(range_t, &allocator->range_list, root_range, range_);
-#ifndef NDEBUG
-	allocator->range_node_cnt++;
-#endif
-
-	allocator->start_address = base_address;
-	allocator->size		 = size;
-
-	return allocator;
-err1:
-	free(allocator);
-err:
-	return NULL;
+	return ret;
 }
 
-address_range_allocator_alloc_ret_t
+static void
+remove_sub_allocator(address_range_allocator_t *allocator,
+		     sub_allocator_t	       *sub_allocator)
+{
+	sub_allocator_t *cur = NULL;
+
+	index_t idx   = 0U;
+	bool	found = false;
+
+	foreach_vector(sub_allocator_t *, allocator->sub_allocators, idx, cur)
+	{
+		if (cur == sub_allocator) {
+			found = true;
+			break;
+		}
+	}
+
+	// since it's called only by untag, the sub allocator must be found
+	assert(found);
+
+	if (found) {
+		vector_delete(allocator->sub_allocators, idx);
+		free(sub_allocator);
+	}
+
+	return;
+}
+
+address_range_allocator_t *
+address_range_allocator_init(uint64_t base_address, size_t size)
+{
+	address_range_allocator_t *allocator = NULL;
+
+	if (util_add_overflows(base_address, size) ||
+	    ((base_address + size) > ADDRESS_RANGE_LIMIT) ||
+	    !util_is_baligned(base_address, PAGE_SIZE) || (size < PAGE_SIZE) ||
+	    !util_is_baligned(size, PAGE_SIZE)) {
+		LOG_LOC("invalid arg");
+		goto out;
+	}
+
+	allocator = calloc(1, sizeof(*allocator));
+	if (allocator == NULL) {
+		LOG_LOC("nomem");
+		goto out;
+	}
+
+	allocator->ralloc = range_list_init(base_address, size, false);
+	if (allocator->ralloc == NULL) {
+		LOG_LOC("master list init");
+		goto err_free_allocator_alloc;
+	}
+
+	allocator->sub_allocators = vector_init(sub_allocator_t *, 2, 2);
+	if (allocator->sub_allocators == NULL) {
+		LOG_LOC("vector");
+		goto err_sub_allocator_vector_init;
+	}
+
+	allocator->base_address = base_address;
+	allocator->size		= size;
+
+	goto out;
+
+err_sub_allocator_vector_init:
+	range_list_deinit(allocator->ralloc);
+err_free_allocator_alloc:
+	free(allocator);
+	allocator = NULL;
+out:
+	return allocator;
+}
+
+typedef struct {
+	sub_allocator_t allocator;
+	uintptr_t	data;
+} target_allocator_t;
+
+static target_allocator_t
+get_address_allocator(address_range_allocator_t *allocator,
+		      uint64_t base_address, size_t size, size_t alignment)
+{
+	// check if it's in tagged range
+	target_allocator_t ret = { .allocator.ralloc = NULL,
+				   .allocator.tag    = ADDRESS_RANGE_NO_TAG,
+				   .data	     = INVALID_DATA };
+
+	// only support alloc from top level with INVALID_ADDRESS
+	if (base_address == INVALID_ADDRESS) {
+		ret.allocator.ralloc = allocator->ralloc;
+		ret.allocator.tag    = ADDRESS_RANGE_NO_TAG;
+		ret.data	     = INVALID_DATA;
+
+		goto out;
+	}
+
+	range_list_find_ret_t check_tagged_ret = range_list_find_range(
+		allocator->ralloc, base_address, size, alignment);
+	if (check_tagged_ret.err != OK) {
+		ret.allocator.ralloc = allocator->ralloc;
+		ret.allocator.tag    = ADDRESS_RANGE_NO_TAG;
+		ret.data	     = INVALID_DATA;
+	} else {
+		uintptr_t data = range_list_get_range_data(
+			check_tagged_ret.selected_range);
+		if (data == INVALID_DATA) {
+			ret.allocator.ralloc = allocator->ralloc;
+			ret.allocator.tag    = ADDRESS_RANGE_NO_TAG;
+			ret.data	     = INVALID_DATA;
+		} else {
+			assert(check_tagged_ret.selected_range != NULL);
+			sub_allocator_t *sub_allocator =
+				(sub_allocator_t *)(range_list_get_range_data(
+					check_tagged_ret.selected_range));
+			assert(sub_allocator != NULL);
+
+			ret.allocator.ralloc = sub_allocator->ralloc;
+			ret.allocator.tag    = sub_allocator->tag;
+			ret.data	     = (uintptr_t)sub_allocator;
+		}
+	}
+
+out:
+	return ret;
+}
+
+address_range_allocator_ret_t
 address_range_allocator_alloc(address_range_allocator_t *allocator,
-			      vmaddr_t start_address, size_t size,
+			      uint64_t base_address, size_t size,
 			      size_t alignment)
 {
 	assert(allocator != NULL);
 
-	address_range_allocator_alloc_ret_t ret = {
-		.err = OK,
-	};
+	address_range_allocator_ret_t ret = { 0 };
 
-	if ((start_address != INVALID_ADDRESS) &&
-	    !util_is_baligned(start_address, PAGE_SIZE)) {
+	if (((base_address != INVALID_ADDRESS) &&
+	     (util_add_overflows(base_address, size) ||
+	      !util_is_baligned(base_address, PAGE_SIZE) ||
+	      (base_address < allocator->base_address) ||
+	      ((base_address + size) >
+	       (allocator->base_address + allocator->size)))) ||
+	    (size < PAGE_SIZE) || !util_is_baligned(size, PAGE_SIZE)) {
+		LOG_LOC("bad arg");
 		ret.err = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
-	if (!util_is_baligned(size, PAGE_SIZE)) {
-		ret.err = ERROR_ARGUMENT_INVALID;
-		goto out;
+	if (alignment == 0U) {
+		alignment = PAGE_SIZE;
 	}
 
-	// ignore alignment if specified start_address
-	if ((start_address != INVALID_ADDRESS) &&
-	    (util_add_overflows(start_address, size) ||
-	     (start_address < allocator->start_address) ||
-	     ((start_address + size) >
-	      (allocator->start_address + allocator->size)))) {
-		ret.err = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
+	target_allocator_t get_ret =
+		get_address_allocator(allocator, base_address, size, alignment);
 
-	range_t *parent_range = NULL;
+	range_list_t *target_allocator = get_ret.allocator.ralloc;
 
-	// find the first fit node it start_address is NULL, set
-	// start_address find the node contains start_address, if
-	// doesn't fit size, return error
-	parent_range = find_range(allocator, start_address, size, alignment);
-	if (parent_range == NULL) {
-		ret.err = ERROR_ALLOCATOR_MEM_INUSE;
-		goto out;
-	}
-
-	vmaddr_t alloc_address;
-	if (start_address == INVALID_ADDRESS) {
-		alloc_address =
-			util_balign_up(parent_range->base_address, alignment);
+	range_list_remove_ret_t remove_ret = range_list_remove(
+		target_allocator, base_address, size, alignment, INVALID_DATA);
+	if (remove_ret.err == OK) {
+		ret.err		 = OK;
+		ret.base_address = remove_ret.base_address;
+		ret.size	 = remove_ret.size;
+		ret.tag		 = get_ret.allocator.tag;
 	} else {
-		alloc_address = start_address;
+		LOG_LOC("alloc");
+		ret.err = remove_ret.err;
 	}
-
-	assert(!util_add_overflows(alloc_address, size));
-
-	size_t head_remaining_size = alloc_address - parent_range->base_address;
-	size_t tail_remaining_size =
-		parent_range->size - size - head_remaining_size;
-	// it's more obvious than check relation of address and size
-	if ((head_remaining_size == 0UL) && (tail_remaining_size == 0UL)) {
-		// use all parent range
-		list_remove(range_t, &allocator->range_list, parent_range,
-			    range_);
-		free(parent_range);
-#ifndef NDEBUG
-		allocator->range_node_cnt--;
-#endif
-	} else if (head_remaining_size == 0UL) {
-		// took the head of parent range
-		parent_range->base_address = alloc_address + size;
-		parent_range->size -= size;
-	} else if (tail_remaining_size == 0UL) {
-		// took the tail of parent range
-		parent_range->size -= size;
-	} else {
-		// if start address in the mid, allocate additional
-		// node, insert, modify current node, maintain order
-		range_t *tail_range = calloc(1, sizeof(*tail_range));
-		if (tail_range == NULL) {
-			ret.err = ERROR_NOMEM;
-			goto out;
-		}
-
-		parent_range->size = head_remaining_size;
-
-		tail_range->base_address = alloc_address + size;
-		tail_range->size	 = tail_remaining_size;
-
-		// append tailing part to parent range
-		list_insert_after(range_t, &allocator->range_list, parent_range,
-				  tail_range, range_);
-
-#ifndef NDEBUG
-		allocator->range_node_cnt++;
-#endif
-	}
-
-	ret.base_address = alloc_address;
-	ret.size	 = size;
 
 out:
 	return ret;
@@ -197,108 +241,29 @@ out:
 
 error_t
 address_range_allocator_free(address_range_allocator_t *allocator,
-			     vmaddr_t start_address, size_t size)
+			     uint64_t base_address, size_t size)
 {
-	error_t ret = OK;
+	error_t ret;
 
-	if ((start_address == INVALID_ADDRESS) ||
-	    !util_is_baligned(start_address, PAGE_SIZE)) {
+	if ((base_address == INVALID_ADDRESS) ||
+	    util_add_overflows(base_address, size) ||
+	    !util_is_baligned(base_address, PAGE_SIZE) || (size < PAGE_SIZE) ||
+	    !util_is_baligned(size, PAGE_SIZE) ||
+	    (base_address < allocator->base_address) ||
+	    ((base_address + size) >
+	     (allocator->base_address + allocator->size))) {
+		LOG_LOC("bad arg");
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
-	if (!util_is_baligned(size, PAGE_SIZE)) {
-		ret = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
+	target_allocator_t get_ret =
+		get_address_allocator(allocator, base_address, size, PAGE_SIZE);
 
-	if ((util_add_overflows(start_address, size) ||
-	     (start_address < allocator->start_address) ||
-	     ((start_address + size) >
-	      (allocator->start_address + allocator->size)))) {
-		ret = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
+	range_list_t *target_allocator = get_ret.allocator.ralloc;
 
-	// find the node which is start_address left neighbor
-	find_neighbor_range_ret_t neighbor_ret =
-		find_neighbor_range(allocator, start_address);
-
-	// the allocated range should be outside of neighbors
-	range_t *left  = neighbor_ret.left;
-	range_t *right = neighbor_ret.right;
-	if ((left == NULL) && (right == NULL)) {
-		ret = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
-
-	// check if can merge to left
-	bool merge_left = false;
-	if (left != NULL) {
-		assert(start_address > left->base_address - 1 + left->size);
-
-		assert(!util_add_overflows(left->base_address, left->size));
-
-		merge_left =
-			((left->base_address + left->size) == start_address);
-	}
-
-	// check if can merge to right
-	bool merge_right = false;
-	if (right != NULL) {
-		// printf("start address %lx, size %lx\n", start_address, size);
-		assert(start_address - 1 + size < right->base_address);
-
-		// shouldn't have overflow
-		assert(!util_add_overflows(start_address, size));
-		merge_right = ((start_address + size) == right->base_address);
-	}
-
-	if (merge_left && merge_right) {
-		// if merge to both neighbors, delete right neighbor and merge
-		// into the left
-		assert(!util_add_overflows(left->size, size));
-		left->size += size;
-
-		assert(!util_add_overflows(left->size, right->size));
-		left->size += right->size;
-
-		list_remove(range_t, &allocator->range_list, right, range_);
-		free(right);
-#ifndef NDEBUG
-		allocator->range_node_cnt--;
-#endif
-	} else if (merge_left) {
-		// if just merge to left, update left neighbor
-		assert(!util_add_overflows(left->size, size));
-		left->size += size;
-	} else if (merge_right) {
-		// if just merge to right, just update right neighbor
-		right->base_address = start_address;
-		assert(!util_add_overflows(right->size, size));
-		right->size += size;
-	} else {
-		// create a new node in the unallocated range
-		range_t *new_range = calloc(1, sizeof(*new_range));
-		if (new_range == NULL) {
-			ret = ERROR_NOMEM;
-			goto out;
-		}
-
-		new_range->base_address = start_address;
-		new_range->size		= size;
-
-		if (left != NULL) {
-			list_insert_after(range_t, &allocator->range_list, left,
-					  new_range, range_);
-		} else {
-			list_insert_head(range_t, &allocator->range_list,
-					 new_range, range_);
-		}
-#ifndef NDEBUG
-		allocator->range_node_cnt++;
-#endif
-	}
+	ret = range_list_insert(target_allocator, base_address, size,
+				INVALID_DATA);
 
 out:
 	return ret;
@@ -307,90 +272,216 @@ out:
 void
 address_range_allocator_deinit(address_range_allocator_t *allocator)
 {
-	range_t *cur, *next;
-	loop_list_safe(cur, next, &allocator->range_list, range_)
+	index_t		 idx	       = 0U;
+	sub_allocator_t *cur_allocator = NULL;
+
+	foreach_vector(sub_allocator_t *, allocator->sub_allocators, idx,
+		       cur_allocator)
 	{
-		free(cur);
-#ifndef NDEBUG
-		allocator->range_node_cnt--;
-#endif
+		if (cur_allocator != NULL) {
+			range_list_deinit(cur_allocator->ralloc);
+			free(cur_allocator);
+		}
 	}
 
-#ifndef NDEBUG
-	assert(allocator->range_node_cnt == 0UL);
-#endif
+	vector_deinit(allocator->sub_allocators);
+
+	range_list_deinit(allocator->ralloc);
 
 	free(allocator);
 }
 
-range_t *
-find_range(address_range_allocator_t *allocator, vmaddr_t start_address,
-	   size_t size, size_t alignment)
+address_range_allocator_ret_t
+address_range_allocator_tag_region(address_range_allocator_t *allocator,
+				   uint64_t		      constrain_base,
+				   size_t constrain_size, size_t size,
+				   size_t alignment, address_range_tag_t tag)
 {
-	range_t *cur = NULL, *ret = NULL;
+	address_range_allocator_ret_t ret = { 0 };
 
-	// FIXME: might be able to find the just fit free range to avoid
-	// fragment
-	loop_list(cur, &allocator->range_list, range_)
-	{
-		if (start_address == INVALID_ADDRESS) {
-			size_t remaining_size =
-				cur->size -
-				(util_balign_up(cur->base_address, alignment) -
-				 cur->base_address);
-			if (size <= remaining_size) {
-				ret = cur;
-				break;
-			}
+	if ((tag == ADDRESS_RANGE_NO_TAG) || (size < PAGE_SIZE) ||
+	    !util_is_baligned(size, PAGE_SIZE) || (alignment < PAGE_SIZE) ||
+	    !util_is_p2(alignment)) {
+		LOG_LOC("bad arg");
+		ret.err = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	if ((constrain_base != INVALID_ADDRESS) &&
+	    (util_add_overflows(constrain_base, constrain_size) ||
+	     !util_is_baligned(constrain_base, PAGE_SIZE) ||
+	     (constrain_base < allocator->base_address) ||
+	     ((constrain_base + constrain_size) >
+	      (allocator->base_address + allocator->size)) ||
+	     (constrain_size < PAGE_SIZE) ||
+	     !util_is_baligned(constrain_size, PAGE_SIZE))) {
+		LOG_LOC("constrain");
+		ret.err = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	if (alignment == ADDRESS_RANGE_NO_TAG) {
+		alignment = PAGE_SIZE;
+	}
+
+	if (constrain_base == INVALID_ADDRESS) {
+		constrain_base = allocator->base_address;
+		constrain_size = allocator->size;
+	}
+
+	range_list_find_ret_t select_ret = range_list_find_range_by_region(
+		allocator->ralloc, constrain_base, constrain_size, size,
+		alignment, INVALID_DATA);
+	if (select_ret.err != OK) {
+		LOG_LOC("used");
+		ret.err = select_ret.err;
+		goto out;
+	}
+
+	sub_allocator_t *sub_allocator = find_sub_allocator(allocator, tag);
+	if (sub_allocator == NULL) {
+		range_list_t *sub_list = range_list_init(
+			allocator->base_address, allocator->size, true);
+		if (sub_list == NULL) {
+			LOG_LOC("alloc");
+			ret.err = ERROR_NOMEM;
+			goto out;
 		} else {
-			assert(!util_add_overflows(start_address, size));
+			sub_allocator = calloc(1U, sizeof(*sub_allocator));
+			if (sub_allocator == NULL) {
+				LOG_LOC("alloc");
+				ret.err = ERROR_NOMEM;
+				goto out;
+			}
 
-			if ((cur->base_address <= start_address) &&
-			    ((cur->base_address + cur->size) >=
-			     (start_address + size))) {
-				ret = cur;
-				break;
-			} else if (cur->base_address > start_address) {
-				// assume it's ascending order, return early
-				break;
+			sub_allocator->ralloc = sub_list;
+			sub_allocator->tag    = tag;
+
+			ret.err = vector_push_back(allocator->sub_allocators,
+						   sub_allocator);
+			if (ret.err != OK) {
+				LOG_LOC("vector");
+				range_list_deinit(sub_list);
+				goto out;
 			}
 		}
 	}
 
+	ret.err = range_list_update(allocator->ralloc, select_ret.base_address,
+				    size, select_ret.selected_range,
+				    (uintptr_t)sub_allocator);
+	if (ret.err != OK) {
+		LOG_LOC("update");
+		goto out;
+	}
+
+	error_t sub_list_insert_ret = range_list_insert(sub_allocator->ralloc,
+							select_ret.base_address,
+							size, INVALID_DATA);
+	if (sub_list_insert_ret != OK) {
+		(void)range_list_update(allocator->ralloc,
+					select_ret.base_address, size,
+					select_ret.selected_range,
+					INVALID_DATA);
+
+		ret.err = sub_list_insert_ret;
+		LOG_LOC("insert");
+		goto out;
+	}
+
+	ret = (address_range_allocator_ret_t){ .base_address =
+						       select_ret.base_address,
+					       .size = size,
+					       .tag  = tag,
+					       .err  = OK };
+
+out:
 	return ret;
 }
 
-find_neighbor_range_ret_t
-find_neighbor_range(address_range_allocator_t *allocator, vmaddr_t address)
+error_t
+address_range_allocator_tag(address_range_allocator_t *allocator,
+			    uint64_t base_address, size_t size,
+			    address_range_tag_t tag)
 {
-	find_neighbor_range_ret_t ret = { .left = NULL, .right = NULL };
+	address_range_allocator_ret_t ret;
 
-	range_t *cur = NULL, *next = NULL;
-
-	// assert address is in initial range
-	assert(address >= allocator->start_address);
-	assert(address <= (allocator->start_address + allocator->size - 1));
-
-	loop_list_safe(cur, next, &allocator->range_list, range_)
-	{
-		if (is_first(cur, &allocator->range_list, range_) &&
-		    (address < cur->base_address)) {
-			ret.left  = NULL;
-			ret.right = cur;
-			break;
-		} else if (is_last(cur, range_) &&
-			   (address >= (cur->base_address + cur->size))) {
-			ret.left  = cur;
-			ret.right = NULL;
-			break;
-		} else if ((address >= (cur->base_address + cur->size)) &&
-			   (next != NULL) && (address < next->base_address)) {
-			ret.left  = cur;
-			ret.right = next;
-			break;
-		}
+	ret = address_range_allocator_tag_region(
+		allocator, base_address, PAGE_SIZE, size, PAGE_SIZE, tag);
+	if (ret.err != OK) {
+		LOG_ERR(ret.err);
 	}
 
+	return ret.err;
+}
+
+error_t
+address_range_allocator_untag(address_range_allocator_t *allocator,
+			      uint64_t base_address, size_t size,
+			      address_range_tag_t tag)
+{
+	error_t ret = OK;
+
+	if ((base_address == INVALID_ADDRESS) ||
+	    !util_is_baligned(base_address, PAGE_SIZE) || (size < PAGE_SIZE) ||
+	    !util_is_baligned(size, PAGE_SIZE) ||
+	    util_add_overflows(base_address, size) ||
+	    (base_address < allocator->base_address) ||
+	    ((base_address + size) >
+	     (allocator->base_address + allocator->size))) {
+		LOG_LOC("bad arg");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	range_list_find_ret_t select_ret = range_list_find_range(
+		allocator->ralloc, base_address, size, PAGE_SIZE);
+	if (select_ret.err != OK) {
+		LOG_LOC("address is not tagged");
+		ret = select_ret.err;
+		goto out;
+	}
+
+	assert(base_address == select_ret.base_address);
+
+	sub_allocator_t *sub_allocator = find_sub_allocator(allocator, tag);
+	if (sub_allocator == NULL) {
+		LOG_LOC("wrong tag");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	if (range_list_get_range_data(select_ret.selected_range) !=
+	    (uintptr_t)sub_allocator) {
+		LOG_LOC("wrong range");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	range_list_remove_ret_t sub_list_remove_ret =
+		range_list_remove(sub_allocator->ralloc, base_address, size,
+				  PAGE_SIZE, INVALID_DATA);
+	if (sub_list_remove_ret.err != OK) {
+		ret = sub_list_remove_ret.err;
+		LOG_LOC("remove");
+		goto out;
+	}
+
+	ret = range_list_update(allocator->ralloc, base_address, size,
+				select_ret.selected_range, INVALID_DATA);
+	if (ret != OK) {
+		range_list_insert(sub_allocator->ralloc, base_address, size,
+				  INVALID_DATA);
+		LOG_ERR(ret);
+		goto out;
+	}
+
+	if ((ret == OK) &&
+	    !range_list_has_data(allocator->ralloc, (uintptr_t)sub_allocator)) {
+		range_list_deinit(sub_allocator->ralloc);
+		remove_sub_allocator(allocator, sub_allocator);
+	}
+out:
 	return ret;
 }
 
@@ -398,16 +489,28 @@ find_neighbor_range(address_range_allocator_t *allocator, vmaddr_t address)
 void
 address_range_allocator_dump(address_range_allocator_t *allocator)
 {
-	printf("range dump for [0x%lx, 0x%lx):\n", allocator->start_address,
-	       allocator->start_address + allocator->size);
+	printf("Dump allocator: list range [0x%lx, 0x%lx):\n",
+	       allocator->base_address,
+	       allocator->base_address + allocator->size);
 
-	range_t *cur;
+	range_list_dump(allocator->ralloc, "");
 
-	loop_list(cur, &allocator->range_list, range_)
+	index_t		 idx	       = 0U;
+	sub_allocator_t *cur_allocator = NULL;
+
+	printf("Sub allocators:\n");
+	foreach_vector(sub_allocator_t *, allocator->sub_allocators, idx,
+		       cur_allocator)
 	{
-		printf("[0x%lx, 0x%lx), ", cur->base_address,
-		       cur->base_address + cur->size);
+		if (cur_allocator != NULL) {
+			range_list_t *a	   = cur_allocator->ralloc;
+			uint64_t      base = range_list_get_base_address(a);
+			uint64_t      size = range_list_get_size(a);
+			printf("\ttagged: list range [0x%lx, 0x%lx) tag(%lx) data(%p):\n",
+			       base, base + size, (uint64_t)cur_allocator->tag,
+			       (void *)cur_allocator);
+			range_list_dump(a, "\t");
+		}
 	}
-	printf("\n");
 }
 #endif

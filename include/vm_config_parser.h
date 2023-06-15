@@ -9,11 +9,6 @@ typedef enum {
 
 typedef enum {
 	// default
-	VM_CONFIG_BOOT_CONFIG_FDT_UNIFIED,
-} vm_config_boot_config_t;
-
-typedef enum {
-	// default
 	VM_CONFIG_OS_TYPE_LINUX,
 } vm_config_os_type_t;
 
@@ -22,6 +17,7 @@ typedef enum {
 	VM_CONFIG_AFFINITY_STATIC,
 	VM_CONFIG_AFFINITY_STICKY,
 	VM_CONFIG_AFFINITY_PINNED,
+	VM_CONFIG_AFFINITY_PROXY,
 } vm_config_affinity_t;
 
 typedef struct general_data {
@@ -34,22 +30,13 @@ typedef struct general_data {
 	char *generate;
 } general_data_t;
 
-typedef struct interrupt_data {
-	virq_t virq;
-
-	bool is_cpu_local;
-	bool is_edge_triggerring;
-
-	uint8_t is_edge_triggerring_padding[2];
-} interrupt_data_t;
-
 // index definition for paired vdevice
 enum irq_index {
 	TX_IRQ_IDX = 0,
 	RX_IRQ_IDX,
 };
 
-typedef struct doorbell_data {
+RM_PADDED(typedef struct doorbell_data {
 	interrupt_data_t irq;
 
 	general_data_t general;
@@ -59,9 +46,8 @@ typedef struct doorbell_data {
 	bool defined_irq;
 
 	bool is_source;
-
-	uint8_t is_source_padding[4];
-} doorbell_data_t;
+	bool source_can_clear;
+} doorbell_data_t)
 
 typedef struct msg_queue_data {
 	general_data_t general;
@@ -107,7 +93,9 @@ typedef struct shm_data {
 	bool need_allocate;
 
 	bool is_plain_shm;
-	bool is_plain_shm_padding[4];
+
+	bool is_memory_optional;
+	bool is_plain_shm_padding[3];
 } shm_data_t;
 
 typedef struct rm_rpc_data {
@@ -125,13 +113,41 @@ typedef struct rm_rpc_data {
 	uint8_t is_console_dev_padding[2];
 } rm_rpc_data_t;
 
-typedef struct iomem_data {
+RM_PADDED(typedef struct virtio_mmio_data {
+	general_data_t general;
+
+	paddr_t	 mem_base_ipa;
+	uint64_t dma_base;
+
+	vmid_t	peer;
+	count_t vqs_num;
+	bool	need_allocate;
+	bool	dma_coherent;
+	uint8_t need_allocate_padding[2];
+} virtio_mmio_data_t)
+
+RM_PADDED(typedef struct iomem_data {
 	general_data_t general;
 
 	char *patch_node_path;
 
-	struct vdevice_iomem data;
-} iomem_data_t;
+	label_t label;
+
+	uint32_t mem_info_tag;
+	bool	 mem_info_tag_set;
+
+	bool validate_acl;
+	bool validate_attrs;
+	bool need_allocate;
+
+	uint32_t rm_acl[IOMEM_VALIDATION_NUM_IDXS];
+	uint32_t rm_attrs[IOMEM_VALIDATION_NUM_IDXS];
+
+	sgl_entry_t *rm_sglist;
+	size_t	     rm_sglist_len;
+
+	vmid_t peer;
+} iomem_data_t)
 
 enum iomem_range_access {
 	IOMEM_RANGE_RW = 0,
@@ -162,24 +178,45 @@ typedef struct {
 	virq_t virq;
 } irq_range_data_t;
 
-typedef struct vcpu_data {
+RM_PADDED(typedef struct smmu_v2_data {
+	const char *patch;
+	uint32_t    smmu_handle;
+	uint32_t    num_cbs;
+	uint32_t    num_smrs;
+} smmu_v2_data_t)
+
+typedef struct rtc_data {
+	vmaddr_t ipa_base;
+	bool	 allocate_base;
+	uint8_t	 padding[7];
+} rtc_data_t;
+
+// FIXME: move all minidump data to platform
+typedef struct minidump_data {
+	bool	       allowed;
+	uint8_t	       padding[7];
+	general_data_t general;
+} minidump_data_t;
+
+RM_PADDED(typedef struct vcpu_data_s {
 	char *patch;
-} vcpu_data_t;
+	bool  boot_vcpu;
+} vcpu_data_t)
 
-RM_PADDED(struct vm_config_parser_data {
-	vm_config_vm_type_t	vm_type;
-	vm_config_boot_config_t boot_config;
-	vm_config_os_type_t	os_type;
+RM_PADDED(struct dtb_parser_data_s {
+	vm_auth_type_t auth_type;
 
-	bool	ras_error_handler;
-	bool	amu_counting_disabled;
-	uint8_t bool_flags_padding[2];
+	vm_config_vm_type_t vm_type;
+	vm_config_os_type_t os_type;
 
+	bool ras_error_handler;
+	bool amu_counting_disabled;
 	bool sensitive;
-
 	bool crash_fatal;
+	bool context_dump;
+	bool no_shutdown;
 
-	char    *kernel_entry_segment;
+	char	*kernel_entry_segment;
 	uint64_t kernel_entry_offset;
 
 	char *vendor_name;
@@ -190,11 +227,15 @@ RM_PADDED(struct vm_config_parser_data {
 	bool	has_guid;
 	uint8_t vm_guid[VM_GUID_LEN];
 
-	uint64_t pasid;
-
 	// memory
-	paddr_t mem_base_ipa;
-	size_t	mem_size_min;
+	paddr_t	 mem_base_ipa;
+	size_t	 mem_size_min;
+	size_t	 mem_size_max;
+	bool	 mem_base_constraints_set;
+	uint32_t mem_base_constraints[2];
+
+	paddr_t fw_base_ipa;
+	size_t	fw_size_max;
 
 	vector_t *iomem_ranges;
 
@@ -203,13 +244,12 @@ RM_PADDED(struct vm_config_parser_data {
 	uint32_t sched_time_slice;
 	int32_t	 sched_priority;
 
-	int ramfs_idx;
-
 	vm_config_affinity_t affinity;
 
 	size_t	     affinity_map_cnt;
 	cpu_index_t *affinity_map;
 
+	bool enable_vpm_psci_virq;
 	bool enable_vpm_psci;
 
 	vector_t *rm_rpcs;
@@ -221,9 +261,11 @@ RM_PADDED(struct vm_config_parser_data {
 	vector_t *iomems;
 	vector_t *smmus;
 	vector_t *vcpus;
+	vector_t *rtc;
+	vector_t *minidump;
 	vector_t *platform_data;
 
 	platform_vm_config_parser_data_t platform;
 })
 
-typedef struct vm_config_parser_data vm_config_parser_data_t;
+typedef struct dtb_parser_data_s vm_config_parser_data_t;

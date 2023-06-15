@@ -11,14 +11,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <rm-rpc.h>
-
-#include <resource-manager.h>
-
-#include <platform.h>
-#include <rm-rpc-fifo.h>
+#include <rm_types.h>
 #include <utils/vector.h>
-#include <vendor_hyp_call.h>
+
+#include <event.h>
+#include <platform.h>
+#include <resource-manager.h>
+#include <rm-rpc-fifo.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
 #include <vm_config.h>
 #include <vm_console.h>
 #include <vm_console_message.h>
@@ -57,6 +58,12 @@ vm_console_create(vm_t *vm)
 
 err:
 	return console;
+}
+
+void
+vm_console_destroy(vm_console_t *console)
+{
+	free(console);
 }
 
 static vm_console_t *
@@ -144,6 +151,12 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 		goto out;
 	}
 
+	if (!is_console_open(console, !is_owner)) {
+		// FIXME: drop message for now
+		err = RM_OK;
+		goto out;
+	}
+
 	if (platform_get_security_state()) {
 		err = RM_OK;
 		goto out;
@@ -163,20 +176,11 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 
 	vmid_t to = (target == 0U) ? console->owner : console->self;
 
-	if (to == VMID_RM) {
-		/* if the console owner is resource manager ''itself'', which is
-		 * considered as invalid recipient for the console, then
-		 * loopback the message to the requester. */
-
-		to = console->self;
-	}
-
 	memcpy(notif_buf, &notif, sizeof(notif));
 	memcpy(notif_buf + sizeof(notif), content, num_bytes);
 
 	err = rm_rpc_fifo_send_notification(to, NOTIFY_VM_CONSOLE_CHARS,
-					    notif_buf, notif_size, notif_size,
-					    true);
+					    notif_buf, notif_size, true);
 	if (err != RM_OK) {
 		printf("vm_console: Failed to send char notification\n");
 		exit(1);

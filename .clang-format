@@ -13,10 +13,30 @@ Language:        Cpp
 AccessModifierOffset: -8
 AlignAfterOpenBracket: Align
 AlignArrayOfStructures: None
-AlignConsecutiveMacros: Consecutive
-AlignConsecutiveAssignments: Consecutive
-AlignConsecutiveBitFields: None
-AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveAssignments:
+  Enabled:         true
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    true
+AlignConsecutiveBitFields:
+  Enabled:         false
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    true
+AlignConsecutiveDeclarations:
+  Enabled:         true
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    true
+AlignConsecutiveMacros:
+  Enabled:         true
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    true
 AlignEscapedNewlines: Right
 AlignOperands:   Align
 AlignTrailingComments: true
@@ -58,7 +78,7 @@ BraceWrapping:
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
 BreakBeforeBinaryOperators: None
-BreakBeforeConceptDeclarations: true
+BreakBeforeConceptDeclarations: Always
 BreakBeforeBraces: Custom
 BreakBeforeInheritanceComma: false
 BreakInheritanceList: BeforeComma
@@ -69,6 +89,7 @@ BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: false
 ColumnLimit:     80
 CommentPragmas:  '^ FIXME:'
+QualifierAlignment: Left
 CompactNamespaces: false
 ConstructorInitializerIndentWidth: 8
 ContinuationIndentWidth: 8
@@ -80,12 +101,15 @@ EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: LogicalBlock
 ExperimentalAutoDetectBinPacking: false
 PackConstructorInitializers: BinPack
+BasedOnStyle:    ''
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+AllowAllConstructorInitializersOnNextLine: true
 FixNamespaceComments: true
 ForEachMacros:
-    - foreach_memparcel_by_target_vmid
-    - foreach_vector_ptr
-    - fdt_for_each_subnode
-    - fdt_for_each_property_offset
+  - foreach_memparcel_by_target_vmid
+  - foreach_vector_ptr
+  - fdt_for_each_subnode
+  - fdt_for_each_property_offset
 IfMacros: []
 IncludeBlocks:   Regroup
 IncludeCategories:
@@ -93,8 +117,12 @@ IncludeCategories:
     Priority:        -150
     SortPriority:    0
     CaseSensitive:   true
-  - Regex:           '^<(assert|endian|limits|string|std.*|sys/.*)\.h>$'
+  - Regex:           '^<(assert|endian|inttypes|limits|string|std.*|sys/.*)\.h>$'
     Priority:        -100
+    SortPriority:    0
+    CaseSensitive:   true
+  - Regex:           '^<asm-generic/'
+    Priority:        -75
     SortPriority:    0
     CaseSensitive:   true
   - Regex:           '^<(type|error)'
@@ -102,19 +130,11 @@ IncludeCategories:
     SortPriority:    0
     CaseSensitive:   true
   - Regex:           '^<asm/'
+    Priority:        -60
+    SortPriority:    0
+    CaseSensitive:   true
+  - Regex:           '^<(rm_types|util.*).h>'
     Priority:        -50
-    SortPriority:    0
-    CaseSensitive:   true
-  - Regex:           '^<asm-generic/'
-    Priority:        -75
-    SortPriority:    0
-    CaseSensitive:   true
-  - Regex:           '^<rm-rpc.h>'
-    Priority:        -50
-    SortPriority:    0
-    CaseSensitive:   true
-  - Regex:           '^<resource-manager.h>'
-    Priority:        -40
     SortPriority:    0
     CaseSensitive:   true
   - Regex:           '^<'
@@ -133,9 +153,10 @@ IndentCaseBlocks: false
 IndentGotoLabels: true
 IndentPPDirectives: None
 IndentExternBlock: AfterExternBlock
-IndentRequires:  false
+IndentRequiresClause: false
 IndentWidth:     8
 IndentWrappedFunctionNames: false
+InsertBraces:    true
 InsertTrailingCommas: None
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true
@@ -154,6 +175,7 @@ PenaltyBreakAssignment: 10
 PenaltyBreakBeforeFirstCallParameter: 30
 PenaltyBreakComment: 10
 PenaltyBreakFirstLessLess: 0
+PenaltyBreakOpenParenthesis: 0
 PenaltyBreakString: 10
 PenaltyBreakTemplateDeclaration: 10
 PenaltyExcessCharacter: 100
@@ -163,6 +185,9 @@ PointerAlignment: Right
 PPIndentWidth:   -1
 ReferenceAlignment: Pointer
 ReflowComments:  true
+RemoveBracesLLVM: false
+RequiresClausePosition: OwnLine
+SeparateDefinitionBlocks: Always
 ShortNamespaceLines: 1
 SortIncludes:    CaseSensitive
 SortJavaStaticImport: Before
@@ -176,6 +201,16 @@ SpaceBeforeCpp11BracedList: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterForeachMacros: true
+  AfterFunctionDefinitionName: false
+  AfterFunctionDeclarationName: false
+  AfterIfMacros:   true
+  AfterOverloadedOperator: false
+  AfterRequiresInClause: false
+  AfterRequiresInExpression: false
+  BeforeNonEmptyParentheses: false
 SpaceAroundPointerQualifiers: Default
 SpaceBeforeRangeBasedForLoopColon: false
 SpaceInEmptyBlock: true

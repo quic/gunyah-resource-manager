@@ -5,7 +5,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 
-struct vcpu {
+struct vcpu_s {
 	// Cap in RM's cspace
 	cap_id_t master_cap;
 
@@ -15,9 +15,16 @@ struct vcpu {
 
 	uint32_t affinity_index;
 
+	interrupt_data_t proxy_virq;
+
 	bool  boot_vcpu;
 	char *patch;
+
+	vmid_t vmid;
+
+	interrupt_data_t halt_virq;
+	event_t		 halt_event;
 };
-typedef struct vcpu vcpu_t;
+typedef struct vcpu_s vcpu_t;
 
 #pragma clang diagnostic pop

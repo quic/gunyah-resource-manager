@@ -149,26 +149,6 @@ boot_env_phys_range_ptr_result_error(error_t err);
 boot_env_phys_range_ptr_result_t
 boot_env_phys_range_ptr_result_ok(boot_env_phys_range_t *ret);
 
-typedef struct boot_env_data_result {
-	boot_env_data_t r;
-	error_t alignas(register_t) e;
-} boot_env_data_result_t;
-
-boot_env_data_result_t
-boot_env_data_result_error(error_t err);
-boot_env_data_result_t
-boot_env_data_result_ok(boot_env_data_t ret);
-
-typedef struct boot_env_data_ptr_result {
-	boot_env_data_t *r;
-	error_t alignas(register_t) e;
-} boot_env_data_ptr_result_t;
-
-boot_env_data_ptr_result_t
-boot_env_data_ptr_result_error(error_t err);
-boot_env_data_ptr_result_t
-boot_env_data_ptr_result_ok(boot_env_data_t *ret);
-
 typedef struct cpu_index_result {
 	cpu_index_t r;
 	error_t alignas(register_t) e;
@@ -188,6 +168,46 @@ cpu_index_ptr_result_t
 cpu_index_ptr_result_error(error_t err);
 cpu_index_ptr_result_t
 cpu_index_ptr_result_ok(cpu_index_t *ret);
+
+typedef struct addrspace_map_flags_result {
+	addrspace_map_flags_t r;
+	error_t alignas(register_t) e;
+} addrspace_map_flags_result_t;
+
+addrspace_map_flags_result_t
+addrspace_map_flags_result_error(error_t err);
+addrspace_map_flags_result_t
+addrspace_map_flags_result_ok(addrspace_map_flags_t ret);
+
+typedef struct addrspace_map_flags_ptr_result {
+	addrspace_map_flags_t *r;
+	error_t alignas(register_t) e;
+} addrspace_map_flags_ptr_result_t;
+
+addrspace_map_flags_ptr_result_t
+addrspace_map_flags_ptr_result_error(error_t err);
+addrspace_map_flags_ptr_result_t
+addrspace_map_flags_ptr_result_ok(addrspace_map_flags_t *ret);
+
+typedef struct addrspace_vmmio_configure_op_result {
+	addrspace_vmmio_configure_op_t r;
+	error_t alignas(register_t) e;
+} addrspace_vmmio_configure_op_result_t;
+
+addrspace_vmmio_configure_op_result_t
+addrspace_vmmio_configure_op_result_error(error_t err);
+addrspace_vmmio_configure_op_result_t
+addrspace_vmmio_configure_op_result_ok(addrspace_vmmio_configure_op_t ret);
+
+typedef struct addrspace_vmmio_configure_op_ptr_result {
+	addrspace_vmmio_configure_op_t *r;
+	error_t alignas(register_t) e;
+} addrspace_vmmio_configure_op_ptr_result_t;
+
+addrspace_vmmio_configure_op_ptr_result_t
+addrspace_vmmio_configure_op_ptr_result_error(error_t err);
+addrspace_vmmio_configure_op_ptr_result_t
+addrspace_vmmio_configure_op_ptr_result_ok(addrspace_vmmio_configure_op_t *ret);
 
 typedef struct hyp_variant_result {
 	hyp_variant_t r;
@@ -289,6 +309,26 @@ hyp_api_flags2_ptr_result_error(error_t err);
 hyp_api_flags2_ptr_result_t
 hyp_api_flags2_ptr_result_ok(hyp_api_flags2_t *ret);
 
+typedef struct memextent_type_result {
+	memextent_type_t r;
+	error_t alignas(register_t) e;
+} memextent_type_result_t;
+
+memextent_type_result_t
+memextent_type_result_error(error_t err);
+memextent_type_result_t
+memextent_type_result_ok(memextent_type_t ret);
+
+typedef struct memextent_type_ptr_result {
+	memextent_type_t *r;
+	error_t alignas(register_t) e;
+} memextent_type_ptr_result_t;
+
+memextent_type_ptr_result_t
+memextent_type_ptr_result_error(error_t err);
+memextent_type_ptr_result_t
+memextent_type_ptr_result_ok(memextent_type_t *ret);
+
 typedef struct memextent_memtype_result {
 	memextent_memtype_t r;
 	error_t alignas(register_t) e;
@@ -368,6 +408,86 @@ memextent_access_attrs_ptr_result_t
 memextent_access_attrs_ptr_result_error(error_t err);
 memextent_access_attrs_ptr_result_t
 memextent_access_attrs_ptr_result_ok(memextent_access_attrs_t *ret);
+
+typedef struct memextent_donate_type_result {
+	memextent_donate_type_t r;
+	error_t alignas(register_t) e;
+} memextent_donate_type_result_t;
+
+memextent_donate_type_result_t
+memextent_donate_type_result_error(error_t err);
+memextent_donate_type_result_t
+memextent_donate_type_result_ok(memextent_donate_type_t ret);
+
+typedef struct memextent_donate_type_ptr_result {
+	memextent_donate_type_t *r;
+	error_t alignas(register_t) e;
+} memextent_donate_type_ptr_result_t;
+
+memextent_donate_type_ptr_result_t
+memextent_donate_type_ptr_result_error(error_t err);
+memextent_donate_type_ptr_result_t
+memextent_donate_type_ptr_result_ok(memextent_donate_type_t *ret);
+
+typedef struct memextent_donate_options_result {
+	memextent_donate_options_t r;
+	error_t alignas(register_t) e;
+} memextent_donate_options_result_t;
+
+memextent_donate_options_result_t
+memextent_donate_options_result_error(error_t err);
+memextent_donate_options_result_t
+memextent_donate_options_result_ok(memextent_donate_options_t ret);
+
+typedef struct memextent_donate_options_ptr_result {
+	memextent_donate_options_t *r;
+	error_t alignas(register_t) e;
+} memextent_donate_options_ptr_result_t;
+
+memextent_donate_options_ptr_result_t
+memextent_donate_options_ptr_result_error(error_t err);
+memextent_donate_options_ptr_result_t
+memextent_donate_options_ptr_result_ok(memextent_donate_options_t *ret);
+
+typedef struct memextent_modify_op_result {
+	memextent_modify_op_t r;
+	error_t alignas(register_t) e;
+} memextent_modify_op_result_t;
+
+memextent_modify_op_result_t
+memextent_modify_op_result_error(error_t err);
+memextent_modify_op_result_t
+memextent_modify_op_result_ok(memextent_modify_op_t ret);
+
+typedef struct memextent_modify_op_ptr_result {
+	memextent_modify_op_t *r;
+	error_t alignas(register_t) e;
+} memextent_modify_op_ptr_result_t;
+
+memextent_modify_op_ptr_result_t
+memextent_modify_op_ptr_result_error(error_t err);
+memextent_modify_op_ptr_result_t
+memextent_modify_op_ptr_result_ok(memextent_modify_op_t *ret);
+
+typedef struct memextent_modify_flags_result {
+	memextent_modify_flags_t r;
+	error_t alignas(register_t) e;
+} memextent_modify_flags_result_t;
+
+memextent_modify_flags_result_t
+memextent_modify_flags_result_error(error_t err);
+memextent_modify_flags_result_t
+memextent_modify_flags_result_ok(memextent_modify_flags_t ret);
+
+typedef struct memextent_modify_flags_ptr_result {
+	memextent_modify_flags_t *r;
+	error_t alignas(register_t) e;
+} memextent_modify_flags_ptr_result_t;
+
+memextent_modify_flags_ptr_result_t
+memextent_modify_flags_ptr_result_error(error_t err);
+memextent_modify_flags_ptr_result_t
+memextent_modify_flags_ptr_result_ok(memextent_modify_flags_t *ret);
 
 typedef struct pgtable_vm_memtype_result {
 	pgtable_vm_memtype_t r;
@@ -509,6 +629,187 @@ vmaddr_ptr_result_error(error_t err);
 vmaddr_ptr_result_t
 vmaddr_ptr_result_ok(vmaddr_t *ret);
 
+typedef struct smccc_interface_id_result {
+	smccc_interface_id_t r;
+	error_t alignas(register_t) e;
+} smccc_interface_id_result_t;
+
+smccc_interface_id_result_t
+smccc_interface_id_result_error(error_t err);
+smccc_interface_id_result_t
+smccc_interface_id_result_ok(smccc_interface_id_t ret);
+
+typedef struct smccc_interface_id_ptr_result {
+	smccc_interface_id_t *r;
+	error_t alignas(register_t) e;
+} smccc_interface_id_ptr_result_t;
+
+smccc_interface_id_ptr_result_t
+smccc_interface_id_ptr_result_error(error_t err);
+smccc_interface_id_ptr_result_t
+smccc_interface_id_ptr_result_ok(smccc_interface_id_t *ret);
+
+typedef struct smccc_function_result {
+	smccc_function_t r;
+	error_t alignas(register_t) e;
+} smccc_function_result_t;
+
+smccc_function_result_t
+smccc_function_result_error(error_t err);
+smccc_function_result_t
+smccc_function_result_ok(smccc_function_t ret);
+
+typedef struct smccc_function_ptr_result {
+	smccc_function_t *r;
+	error_t alignas(register_t) e;
+} smccc_function_ptr_result_t;
+
+smccc_function_ptr_result_t
+smccc_function_ptr_result_error(error_t err);
+smccc_function_ptr_result_t
+smccc_function_ptr_result_ok(smccc_function_t *ret);
+
+typedef struct smccc_function_id_result {
+	smccc_function_id_t r;
+	error_t alignas(register_t) e;
+} smccc_function_id_result_t;
+
+smccc_function_id_result_t
+smccc_function_id_result_error(error_t err);
+smccc_function_id_result_t
+smccc_function_id_result_ok(smccc_function_id_t ret);
+
+typedef struct smccc_function_id_ptr_result {
+	smccc_function_id_t *r;
+	error_t alignas(register_t) e;
+} smccc_function_id_ptr_result_t;
+
+smccc_function_id_ptr_result_t
+smccc_function_id_ptr_result_error(error_t err);
+smccc_function_id_ptr_result_t
+smccc_function_id_ptr_result_ok(smccc_function_id_t *ret);
+
+typedef struct smccc_vendor_hyp_function_class_result {
+	smccc_vendor_hyp_function_class_t r;
+	error_t alignas(register_t) e;
+} smccc_vendor_hyp_function_class_result_t;
+
+smccc_vendor_hyp_function_class_result_t
+smccc_vendor_hyp_function_class_result_error(error_t err);
+smccc_vendor_hyp_function_class_result_t
+smccc_vendor_hyp_function_class_result_ok(smccc_vendor_hyp_function_class_t ret);
+
+typedef struct smccc_vendor_hyp_function_class_ptr_result {
+	smccc_vendor_hyp_function_class_t *r;
+	error_t alignas(register_t) e;
+} smccc_vendor_hyp_function_class_ptr_result_t;
+
+smccc_vendor_hyp_function_class_ptr_result_t
+smccc_vendor_hyp_function_class_ptr_result_error(error_t err);
+smccc_vendor_hyp_function_class_ptr_result_t
+smccc_vendor_hyp_function_class_ptr_result_ok(
+	smccc_vendor_hyp_function_class_t *ret);
+
+typedef struct smccc_vendor_hyp_function_id_result {
+	smccc_vendor_hyp_function_id_t r;
+	error_t alignas(register_t) e;
+} smccc_vendor_hyp_function_id_result_t;
+
+smccc_vendor_hyp_function_id_result_t
+smccc_vendor_hyp_function_id_result_error(error_t err);
+smccc_vendor_hyp_function_id_result_t
+smccc_vendor_hyp_function_id_result_ok(smccc_vendor_hyp_function_id_t ret);
+
+typedef struct smccc_vendor_hyp_function_id_ptr_result {
+	smccc_vendor_hyp_function_id_t *r;
+	error_t alignas(register_t) e;
+} smccc_vendor_hyp_function_id_ptr_result_t;
+
+smccc_vendor_hyp_function_id_ptr_result_t
+smccc_vendor_hyp_function_id_ptr_result_error(error_t err);
+smccc_vendor_hyp_function_id_ptr_result_t
+smccc_vendor_hyp_function_id_ptr_result_ok(smccc_vendor_hyp_function_id_t *ret);
+
+typedef struct smccc_arch_function_result {
+	smccc_arch_function_t r;
+	error_t alignas(register_t) e;
+} smccc_arch_function_result_t;
+
+smccc_arch_function_result_t
+smccc_arch_function_result_error(error_t err);
+smccc_arch_function_result_t
+smccc_arch_function_result_ok(smccc_arch_function_t ret);
+
+typedef struct smccc_arch_function_ptr_result {
+	smccc_arch_function_t *r;
+	error_t alignas(register_t) e;
+} smccc_arch_function_ptr_result_t;
+
+smccc_arch_function_ptr_result_t
+smccc_arch_function_ptr_result_error(error_t err);
+smccc_arch_function_ptr_result_t
+smccc_arch_function_ptr_result_ok(smccc_arch_function_t *ret);
+
+typedef struct smccc_standard_hyp_function_result {
+	smccc_standard_hyp_function_t r;
+	error_t alignas(register_t) e;
+} smccc_standard_hyp_function_result_t;
+
+smccc_standard_hyp_function_result_t
+smccc_standard_hyp_function_result_error(error_t err);
+smccc_standard_hyp_function_result_t
+smccc_standard_hyp_function_result_ok(smccc_standard_hyp_function_t ret);
+
+typedef struct smccc_standard_hyp_function_ptr_result {
+	smccc_standard_hyp_function_t *r;
+	error_t alignas(register_t) e;
+} smccc_standard_hyp_function_ptr_result_t;
+
+smccc_standard_hyp_function_ptr_result_t
+smccc_standard_hyp_function_ptr_result_error(error_t err);
+smccc_standard_hyp_function_ptr_result_t
+smccc_standard_hyp_function_ptr_result_ok(smccc_standard_hyp_function_t *ret);
+
+typedef struct smccc_vendor_hyp_function_result {
+	smccc_vendor_hyp_function_t r;
+	error_t alignas(register_t) e;
+} smccc_vendor_hyp_function_result_t;
+
+smccc_vendor_hyp_function_result_t
+smccc_vendor_hyp_function_result_error(error_t err);
+smccc_vendor_hyp_function_result_t
+smccc_vendor_hyp_function_result_ok(smccc_vendor_hyp_function_t ret);
+
+typedef struct smccc_vendor_hyp_function_ptr_result {
+	smccc_vendor_hyp_function_t *r;
+	error_t alignas(register_t) e;
+} smccc_vendor_hyp_function_ptr_result_t;
+
+smccc_vendor_hyp_function_ptr_result_t
+smccc_vendor_hyp_function_ptr_result_error(error_t err);
+smccc_vendor_hyp_function_ptr_result_t
+smccc_vendor_hyp_function_ptr_result_ok(smccc_vendor_hyp_function_t *ret);
+
+typedef struct ticks_result {
+	ticks_t r;
+	error_t alignas(register_t) e;
+} ticks_result_t;
+
+ticks_result_t
+ticks_result_error(error_t err);
+ticks_result_t
+ticks_result_ok(ticks_t ret);
+
+typedef struct ticks_ptr_result {
+	ticks_t *r;
+	error_t alignas(register_t) e;
+} ticks_ptr_result_t;
+
+ticks_ptr_result_t
+ticks_ptr_result_error(error_t err);
+ticks_ptr_result_t
+ticks_ptr_result_ok(ticks_t *ret);
+
 typedef struct nanoseconds_result {
 	nanoseconds_t r;
 	error_t alignas(register_t) e;
@@ -528,6 +829,166 @@ nanoseconds_ptr_result_t
 nanoseconds_ptr_result_error(error_t err);
 nanoseconds_ptr_result_t
 nanoseconds_ptr_result_ok(nanoseconds_t *ret);
+
+typedef struct microseconds_result {
+	microseconds_t r;
+	error_t alignas(register_t) e;
+} microseconds_result_t;
+
+microseconds_result_t
+microseconds_result_error(error_t err);
+microseconds_result_t
+microseconds_result_ok(microseconds_t ret);
+
+typedef struct microseconds_ptr_result {
+	microseconds_t *r;
+	error_t alignas(register_t) e;
+} microseconds_ptr_result_t;
+
+microseconds_ptr_result_t
+microseconds_ptr_result_error(error_t err);
+microseconds_ptr_result_t
+microseconds_ptr_result_ok(microseconds_t *ret);
+
+typedef struct trace_class_result {
+	trace_class_t r;
+	error_t alignas(register_t) e;
+} trace_class_result_t;
+
+trace_class_result_t
+trace_class_result_error(error_t err);
+trace_class_result_t
+trace_class_result_ok(trace_class_t ret);
+
+typedef struct trace_class_ptr_result {
+	trace_class_t *r;
+	error_t alignas(register_t) e;
+} trace_class_ptr_result_t;
+
+trace_class_ptr_result_t
+trace_class_ptr_result_error(error_t err);
+trace_class_ptr_result_t
+trace_class_ptr_result_ok(trace_class_t *ret);
+
+typedef struct vcpu_virq_type_result {
+	vcpu_virq_type_t r;
+	error_t alignas(register_t) e;
+} vcpu_virq_type_result_t;
+
+vcpu_virq_type_result_t
+vcpu_virq_type_result_error(error_t err);
+vcpu_virq_type_result_t
+vcpu_virq_type_result_ok(vcpu_virq_type_t ret);
+
+typedef struct vcpu_virq_type_ptr_result {
+	vcpu_virq_type_t *r;
+	error_t alignas(register_t) e;
+} vcpu_virq_type_ptr_result_t;
+
+vcpu_virq_type_ptr_result_t
+vcpu_virq_type_ptr_result_error(error_t err);
+vcpu_virq_type_ptr_result_t
+vcpu_virq_type_ptr_result_ok(vcpu_virq_type_t *ret);
+
+typedef struct vcpu_poweroff_flags_result {
+	vcpu_poweroff_flags_t r;
+	error_t alignas(register_t) e;
+} vcpu_poweroff_flags_result_t;
+
+vcpu_poweroff_flags_result_t
+vcpu_poweroff_flags_result_error(error_t err);
+vcpu_poweroff_flags_result_t
+vcpu_poweroff_flags_result_ok(vcpu_poweroff_flags_t ret);
+
+typedef struct vcpu_poweroff_flags_ptr_result {
+	vcpu_poweroff_flags_t *r;
+	error_t alignas(register_t) e;
+} vcpu_poweroff_flags_ptr_result_t;
+
+vcpu_poweroff_flags_ptr_result_t
+vcpu_poweroff_flags_ptr_result_error(error_t err);
+vcpu_poweroff_flags_ptr_result_t
+vcpu_poweroff_flags_ptr_result_ok(vcpu_poweroff_flags_t *ret);
+
+typedef struct vcpu_register_set_result {
+	vcpu_register_set_t r;
+	error_t alignas(register_t) e;
+} vcpu_register_set_result_t;
+
+vcpu_register_set_result_t
+vcpu_register_set_result_error(error_t err);
+vcpu_register_set_result_t
+vcpu_register_set_result_ok(vcpu_register_set_t ret);
+
+typedef struct vcpu_register_set_ptr_result {
+	vcpu_register_set_t *r;
+	error_t alignas(register_t) e;
+} vcpu_register_set_ptr_result_t;
+
+vcpu_register_set_ptr_result_t
+vcpu_register_set_ptr_result_error(error_t err);
+vcpu_register_set_ptr_result_t
+vcpu_register_set_ptr_result_ok(vcpu_register_set_t *ret);
+
+typedef struct vcpu_poweron_flags_result {
+	vcpu_poweron_flags_t r;
+	error_t alignas(register_t) e;
+} vcpu_poweron_flags_result_t;
+
+vcpu_poweron_flags_result_t
+vcpu_poweron_flags_result_error(error_t err);
+vcpu_poweron_flags_result_t
+vcpu_poweron_flags_result_ok(vcpu_poweron_flags_t ret);
+
+typedef struct vcpu_poweron_flags_ptr_result {
+	vcpu_poweron_flags_t *r;
+	error_t alignas(register_t) e;
+} vcpu_poweron_flags_ptr_result_t;
+
+vcpu_poweron_flags_ptr_result_t
+vcpu_poweron_flags_ptr_result_error(error_t err);
+vcpu_poweron_flags_ptr_result_t
+vcpu_poweron_flags_ptr_result_ok(vcpu_poweron_flags_t *ret);
+
+typedef struct vcpu_run_state_result {
+	vcpu_run_state_t r;
+	error_t alignas(register_t) e;
+} vcpu_run_state_result_t;
+
+vcpu_run_state_result_t
+vcpu_run_state_result_error(error_t err);
+vcpu_run_state_result_t
+vcpu_run_state_result_ok(vcpu_run_state_t ret);
+
+typedef struct vcpu_run_state_ptr_result {
+	vcpu_run_state_t *r;
+	error_t alignas(register_t) e;
+} vcpu_run_state_ptr_result_t;
+
+vcpu_run_state_ptr_result_t
+vcpu_run_state_ptr_result_error(error_t err);
+vcpu_run_state_ptr_result_t
+vcpu_run_state_ptr_result_ok(vcpu_run_state_t *ret);
+
+typedef struct vcpu_run_poweroff_flags_result {
+	vcpu_run_poweroff_flags_t r;
+	error_t alignas(register_t) e;
+} vcpu_run_poweroff_flags_result_t;
+
+vcpu_run_poweroff_flags_result_t
+vcpu_run_poweroff_flags_result_error(error_t err);
+vcpu_run_poweroff_flags_result_t
+vcpu_run_poweroff_flags_result_ok(vcpu_run_poweroff_flags_t ret);
+
+typedef struct vcpu_run_poweroff_flags_ptr_result {
+	vcpu_run_poweroff_flags_t *r;
+	error_t alignas(register_t) e;
+} vcpu_run_poweroff_flags_ptr_result_t;
+
+vcpu_run_poweroff_flags_ptr_result_t
+vcpu_run_poweroff_flags_ptr_result_error(error_t err);
+vcpu_run_poweroff_flags_ptr_result_t
+vcpu_run_poweroff_flags_ptr_result_ok(vcpu_run_poweroff_flags_t *ret);
 
 typedef struct vic_option_flags_result {
 	vic_option_flags_t r;
@@ -568,6 +1029,46 @@ virq_ptr_result_t
 virq_ptr_result_error(error_t err);
 virq_ptr_result_t
 virq_ptr_result_ok(virq_t *ret);
+
+typedef struct vpm_group_option_flags_result {
+	vpm_group_option_flags_t r;
+	error_t alignas(register_t) e;
+} vpm_group_option_flags_result_t;
+
+vpm_group_option_flags_result_t
+vpm_group_option_flags_result_error(error_t err);
+vpm_group_option_flags_result_t
+vpm_group_option_flags_result_ok(vpm_group_option_flags_t ret);
+
+typedef struct vpm_group_option_flags_ptr_result {
+	vpm_group_option_flags_t *r;
+	error_t alignas(register_t) e;
+} vpm_group_option_flags_ptr_result_t;
+
+vpm_group_option_flags_ptr_result_t
+vpm_group_option_flags_ptr_result_error(error_t err);
+vpm_group_option_flags_ptr_result_t
+vpm_group_option_flags_ptr_result_ok(vpm_group_option_flags_t *ret);
+
+typedef struct vpm_state_result {
+	vpm_state_t r;
+	error_t alignas(register_t) e;
+} vpm_state_result_t;
+
+vpm_state_result_t
+vpm_state_result_error(error_t err);
+vpm_state_result_t
+vpm_state_result_ok(vpm_state_t ret);
+
+typedef struct vpm_state_ptr_result {
+	vpm_state_t *r;
+	error_t alignas(register_t) e;
+} vpm_state_ptr_result_t;
+
+vpm_state_ptr_result_t
+vpm_state_ptr_result_error(error_t err);
+vpm_state_ptr_result_t
+vpm_state_ptr_result_ok(vpm_state_t *ret);
 
 typedef struct msgqueue_create_info_result {
 	msgqueue_create_info_t r;
@@ -628,6 +1129,46 @@ vmid_ptr_result_t
 vmid_ptr_result_error(error_t err);
 vmid_ptr_result_t
 vmid_ptr_result_ok(vmid_t *ret);
+
+typedef struct rt_env_data_result {
+	rt_env_data_t r;
+	error_t alignas(register_t) e;
+} rt_env_data_result_t;
+
+rt_env_data_result_t
+rt_env_data_result_error(error_t err);
+rt_env_data_result_t
+rt_env_data_result_ok(rt_env_data_t ret);
+
+typedef struct rt_env_data_ptr_result {
+	rt_env_data_t *r;
+	error_t alignas(register_t) e;
+} rt_env_data_ptr_result_t;
+
+rt_env_data_ptr_result_t
+rt_env_data_ptr_result_error(error_t err);
+rt_env_data_ptr_result_t
+rt_env_data_ptr_result_ok(rt_env_data_t *ret);
+
+typedef struct rm_env_data_hdr_result {
+	rm_env_data_hdr_t r;
+	error_t alignas(register_t) e;
+} rm_env_data_hdr_result_t;
+
+rm_env_data_hdr_result_t
+rm_env_data_hdr_result_error(error_t err);
+rm_env_data_hdr_result_t
+rm_env_data_hdr_result_ok(rm_env_data_hdr_t ret);
+
+typedef struct rm_env_data_hdr_ptr_result {
+	rm_env_data_hdr_t *r;
+	error_t alignas(register_t) e;
+} rm_env_data_hdr_ptr_result_t;
+
+rm_env_data_hdr_ptr_result_t
+rm_env_data_hdr_ptr_result_error(error_t err);
+rm_env_data_hdr_ptr_result_t
+rm_env_data_hdr_ptr_result_ok(rm_env_data_hdr_t *ret);
 
 typedef struct vcpu_option_flags_result {
 	vcpu_option_flags_t r;

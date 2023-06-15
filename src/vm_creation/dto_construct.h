@@ -14,18 +14,22 @@ dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self);
 error_t
 dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto);
 
-// Construct modification path node.
-// This call constructs a overlay fragment at root '/', and then constructs
-// the path nodes one by one.
-// The call of dto_construct_begin_path/dto_construct_end_path cannot be nested.
 error_t
-dto_construct_begin_path(dto_t *dto, const char *path);
+dto_create_watchdog(struct vdevice_node *node, dto_t *dto);
 
-// Each path in relative_path is a device tree node. This call ends the node
-// and exit the modification.
 error_t
-dto_construct_end_path(dto_t *dto, const char *path);
+dto_create_virtio_mmio(struct vdevice_node *node, dto_t *dto, vmid_t self);
+
+error_t
+dto_create_vrtc(struct vdevice_node *node, dto_t *dto);
+
+error_t
+patch_smmu_v2_nodes(const void *base_dtb, dto_t *dto, vmid_t vmid);
 
 error_t
 dto_guid_to_string(uint8_t *guid, size_t guid_len, char *output,
 		   size_t output_len);
+
+error_t
+add_compatibles(struct vdevice_node *node, char *compatibles[],
+		count_t compatible_cnt, dto_t *dto);

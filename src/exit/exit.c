@@ -5,16 +5,19 @@
 #include <guest_types.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
 
-#include <rm-rpc.h>
+#include <rm_types.h>
 
 #include <exit_dev.h>
 #include <fcntl.h>
+#include <panic.h>
 #include <platform.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
 #include <uapi/exit_dev.h>
 #include <unistd.h>
-#include <vendor_hyp_call.h>
 
 rm_error_t
 register_exit(void)
@@ -66,4 +69,11 @@ deregister_exit(void)
 
 err:
 	return error;
+}
+
+noreturn void
+panic(const char *msg)
+{
+	(void)printf("panic: %s\n", msg);
+	exit(1);
 }

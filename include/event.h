@@ -5,18 +5,18 @@
 #define EVENT_FD_READ  (1 << 0)
 #define EVENT_FD_WRITE (1 << 1)
 
-typedef struct event event_t;
+typedef struct event_s event_t;
 typedef void (*event_callback_t)(event_t *event, void *data);
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 
-struct event {
+struct event_s {
 	event_t		*next;
 	event_t		*prev;
 	event_callback_t callback;
 	bool		 pending;
-	void	     *data;
+	void		*data;
 	int		 fd;
 };
 

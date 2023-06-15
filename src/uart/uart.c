@@ -6,10 +6,12 @@
 
 #include <sys/ioctl.h>
 
-#include <rm-rpc.h>
+#include <rm_types.h>
 
 #include <fcntl.h>
 #include <platform.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
 #include <uapi/console.h>
 #include <uart.h>
 #include <unistd.h>
@@ -21,7 +23,7 @@ rm_error_t
 register_uart(void)
 {
 	const char *dev	   = "/dev/console";
-	char	     *banner = "[RM]";
+	char	   *banner = "[RM]";
 
 	rm_error_t e = RM_OK;
 

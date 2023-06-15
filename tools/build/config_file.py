@@ -243,7 +243,7 @@ class Configuration:
             llvm_root = self.graph.get_env('LLVM')
         except KeyError:
             logger.error(
-                "Please set $LLVM to the root of the prebuilt LLVM")
+                "Set $LLVM to the root of LLVM toolchain")
             sys.exit(1)
 
         try:
@@ -254,6 +254,12 @@ class Configuration:
 
         # Use a QC prebuilt LLVM
         self.graph.add_env('CLANG', os.path.join(llvm_root, 'bin', 'clang'))
+
+        # On scons builds, the abs path may be put into the commandline,
+        # strip it out of the __FILE__ macro.
+        root = os.path.abspath(os.curdir) + os.sep
+        self.graph.append_env('CFLAGS',
+                              '-fmacro-prefix-map={:s}={:s}'.format(root, ''))
 
         # FIXME: manually add the toolchain header file. Remove it.
         self.graph.append_env('CFLAGS', "-isystem " + os.path.join(

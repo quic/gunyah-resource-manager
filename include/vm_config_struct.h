@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-typedef struct memparcel memparcel_t;
-typedef struct sgl_entry sgl_entry_t;
+typedef struct memparcel   memparcel_t;
+typedef struct sgl_entry_s sgl_entry_t;
 
 typedef enum {
 	// two message queues to communicate with resource manager
@@ -15,8 +15,16 @@ typedef enum {
 	// contains two direction message queue
 	VDEV_MSG_QUEUE_PAIR,
 	VDEV_SHM,
+#if defined(CAP_RIGHTS_WATCHDOG_ALL)
+	VDEV_WATCHDOG,
+#endif
 	VDEV_VIRTUAL_PM,
+#if defined(CAP_RIGHTS_VIRTIO_MMIO_ALL)
+	VDEV_VIRTIO_MMIO,
+#endif
 	VDEV_IOMEM,
+	VDEV_RTC,
+	VDEV_MINIDUMP,
 } vdevice_type_t;
 
 #pragma clang diagnostic push
@@ -30,16 +38,16 @@ struct vdevice_msg_queue_pair {
 	cap_id_t tx_master_cap;
 	cap_id_t rx_master_cap;
 
-	cap_id_t tx_vm_cap;
-	virq_t	 tx_vm_virq;
-	cap_id_t rx_vm_cap;
-	virq_t	 rx_vm_virq;
+	cap_id_t	 tx_vm_cap;
+	interrupt_data_t tx_vm_virq;
+	cap_id_t	 rx_vm_cap;
+	interrupt_data_t rx_vm_virq;
 
 	// Note, peer tx == vm rx
-	cap_id_t tx_peer_cap;
-	virq_t	 tx_peer_virq;
-	cap_id_t rx_peer_cap;
-	virq_t	 rx_peer_virq;
+	cap_id_t	 tx_peer_cap;
+	interrupt_data_t tx_peer_virq;
+	cap_id_t	 rx_peer_cap;
+	interrupt_data_t rx_peer_virq;
 
 	count_t tx_queue_depth;
 	count_t rx_queue_depth;
@@ -57,13 +65,14 @@ struct vdevice_msg_queue_pair {
 struct vdevice_doorbell {
 	vmid_t peer;
 	bool   source;
+	bool   source_can_clear;
 
 	cap_id_t master_cap;
 
-	cap_id_t vm_cap;
-	virq_t	 vm_virq;
-	cap_id_t peer_cap;
-	virq_t	 peer_virq;
+	cap_id_t	 vm_cap;
+	interrupt_data_t vm_virq;
+	cap_id_t	 peer_cap;
+	interrupt_data_t peer_virq;
 
 	uint32_t label;
 };
@@ -73,8 +82,34 @@ struct vdevice_virtual_pm {
 
 	cap_id_t master_cap;
 
-	cap_id_t peer_cap;
-	virq_t	 peer_virq;
+	cap_id_t	 peer_cap;
+	interrupt_data_t peer_virq;
+
+	uint32_t label;
+};
+
+struct vdevice_virtio_mmio {
+	vmid_t backend;
+
+	vmaddr_t backend_ipa;
+	size_t	 backend_size;
+
+	vmaddr_t frontend_ipa;
+	size_t	 frontend_size;
+
+	cap_id_t master_cap;
+	cap_id_t memextent_cap;
+
+	interrupt_data_t frontend_virq;
+
+	cap_id_t	 backend_cap;
+	interrupt_data_t backend_virq;
+
+	bool	 need_allocate;
+	vmaddr_t base_ipa;
+
+	uint64_t dma_base;
+	bool	 dma_coherent;
 
 	uint32_t label;
 };
@@ -85,10 +120,10 @@ struct vdevice_msg_queue {
 
 	cap_id_t master_cap;
 
-	cap_id_t vm_cap;
-	virq_t	 vm_virq;
-	cap_id_t peer_cap;
-	virq_t	 peer_virq;
+	cap_id_t	 vm_cap;
+	interrupt_data_t vm_virq;
+	cap_id_t	 peer_cap;
+	interrupt_data_t peer_virq;
 
 	uint16_t queue_depth;
 	uint16_t msg_size;
@@ -108,15 +143,23 @@ struct vdevice_shm {
 
 	bool need_allocate;
 
+	bool is_memory_optional;
+
 	vmaddr_t base_ipa;
 
 	uint64_t dma_base;
 };
 
 struct vdevice_watchdog {
-	virq_t bark_virq;
-	virq_t bite_virq;
+	interrupt_data_t bark_virq;
+	interrupt_data_t bite_virq;
+	bool		 virtual_regs;
+
+	vmid_t	 manager;
+	cap_id_t manager_cap;
 };
+
+typedef struct sgl_entry_s sgl_entry_t;
 
 // index definition for iomem vdevice node validation member's index
 enum iomem_validation_index {
@@ -125,7 +168,7 @@ enum iomem_validation_index {
 	IOMEM_VALIDATION_NUM_IDXS,
 };
 
-struct vdevice_iomem {
+RM_PADDED(struct vdevice_iomem {
 	uint32_t rm_acl[IOMEM_VALIDATION_NUM_IDXS];
 	uint32_t rm_attrs[IOMEM_VALIDATION_NUM_IDXS];
 
@@ -137,17 +180,26 @@ struct vdevice_iomem {
 	uint32_t label;
 
 	uint32_t mem_info_tag;
-
-	bool mem_info_tag_set;
+	bool	 mem_info_tag_set;
 
 	bool need_allocate;
-
 	bool validate_acl;
 	bool validate_attrs;
+})
+
+struct vdevice_smmu_v2 {
+	vmaddr_t	  ipa;
+	uint64_t	  ipa_size;
+	uint8_t		  num_cbs;
+	cap_id_t	 *cb_me_caps;
+	interrupt_data_t *irqs;
+	const char	 *patch;
 };
 
-#define VDEVICE_MAX_COMPATIBLE_LEN   256U
-#define VDEVICE_MAX_PUSH_COMPATIBLES 4
+struct vdevice_rtc {
+	vmaddr_t ipa;
+	uint64_t ipa_size;
+};
 
 struct vdevice_node {
 	vdevice_type_t type;
@@ -159,6 +211,8 @@ struct vdevice_node {
 	bool export_to_dt;
 
 	bool visible; // visible to queries
+
+	bool generate_alloc; // generate string was allocated.
 
 	count_t push_compatible_num;
 	char   *push_compatible[VDEVICE_MAX_PUSH_COMPATIBLES];
@@ -179,11 +233,27 @@ struct vm_config {
 
 	char *image_name;
 
+	// True if the configuration data has been authenticated by the
+	// platform, and therefore can be trusted to specify parameters that
+	// would otherwise not be allowed, e.g. elevated priority.
+	bool trusted_config;
+
 	uint64_t swid;
 
 	vector_t *vcpus;
+	bool	  vcpus_proxy_scheduled;
+
+	vector_t *iomem_ranges;
 
 	vdevice_node_t *vdevice_nodes;
+
+	paddr_t mem_ipa_base;
+	paddr_t mem_size_min;
+	paddr_t mem_size_max;
+	bool	mem_unsanitized;
+
+	paddr_t fw_ipa_base;
+	paddr_t fw_size_max;
 
 	// FIXME: legacy - move
 	cap_id_t partition;
@@ -192,12 +262,23 @@ struct vm_config {
 	cap_id_t vic;
 	cap_id_t vpm_group;
 	cap_id_t watchdog;
+	cap_id_t rtc;
+	cap_id_t vm_info_area_me_cap;
+
+	bool minidump_allowed;
+	bool watchdog_enabled;
 
 	vm_console_t *console;
 
 	vm_irq_manager_t *irq_manager;
 
 	platform_vm_config_t platform;
+
+	vector_t *accepted_memparcels;
+};
+
+struct dtb_parser_alloc_params_s {
+	vm_auth_type_t auth_type;
 };
 
 #pragma clang diagnostic pop

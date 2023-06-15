@@ -11,9 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <dt_overlay.h>
+#include <rm_types.h>
 #include <util.h>
 #include <utils/list.h>
+
+#include <dt_linux.h>
+#include <dt_overlay.h>
+#include <resource-manager.h>
+#include <rm-rpc.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-length-array"
@@ -22,7 +27,6 @@
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
 #pragma clang diagnostic ignored "-Wpadded"
-#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
@@ -38,19 +42,16 @@
 
 #define ASSERT_RUN(fdt_func, err)                                              \
 	do {                                                                   \
-		int count = 0;                                                 \
-		int ret	  = (fdt_func);                                        \
-		assert((ret == -FDT_ERR_NOSPACE) || (ret == 0));               \
-		if (ret == -FDT_ERR_NOSPACE) {                                 \
-			err = expand(dto);                                     \
-		} else {                                                       \
-			break;                                                 \
+		for (int count = 0; count <= MAX_RETRY; count++) {             \
+			int ret = (fdt_func);                                  \
+			assert((ret == -FDT_ERR_NOSPACE) || (ret == 0));       \
+			if (ret == -FDT_ERR_NOSPACE) {                         \
+				(err) = expand(dto);                           \
+			} else {                                               \
+				break;                                         \
+			}                                                      \
 		}                                                              \
-		count++;                                                       \
-		if (count > MAX_RETRY) {                                       \
-			break;                                                 \
-		}                                                              \
-	} while (1)
+	} while (0)
 
 typedef struct local_fixup_leaf {
 	struct local_fixup_leaf *local_fixup_leaf_prev;
@@ -72,16 +73,16 @@ typedef struct local_fixup_node {
 
 } local_fixup_node_t;
 
-typedef struct fixup {
-	struct fixup *fixup_prev;
-	struct fixup *fixup_next;
+typedef struct fixup_s {
+	struct fixup_s *fixup_prev;
+	struct fixup_s *fixup_next;
 	// referred label
 	char *label;
 	// who refer this label: [full_path:property_name:offset]
 	char *who;
 } fixup_t;
 
-struct dto {
+struct dto_s {
 	// root pointer to device tree, may be update after resize.
 	void *fdt;
 
@@ -98,10 +99,6 @@ struct dto {
 	// fragment count
 	index_t fragment_count;
 };
-
-static const char *overlay_node_name	  = "__overlay__";
-static const char *fixups_node_name	  = "__fixups__";
-static const char *local_fixups_node_name = "__local_fixups__";
 
 #ifdef DTBO_DEBUG
 static bool debug = false;
@@ -237,8 +234,8 @@ out:
 	return dto;
 }
 
-error_t
-dto_modify_begin(dto_t *dto, const char *target)
+static error_t
+dto_modify_do_start_fragment(dto_t *dto)
 {
 	// generate fragment name
 	char fragment_name[FRAGMENT_NAME_SZ];
@@ -257,11 +254,19 @@ dto_modify_begin(dto_t *dto, const char *target)
 		goto out;
 	}
 	enter_node(dto, fragment_name);
+	dto->fragment_count++;
 
-	// add external ref
-	dto_property_ref_external(dto, "target", target);
+out:
+	return e;
+}
+
+static error_t
+dto_modify_do_start_overlay(dto_t *dto)
+{
+	error_t e = OK;
 
 	// create __overlay__ node
+	static const char *overlay_node_name = "__overlay__";
 	ASSERT_RUN(fdt_begin_node(dto->fdt, overlay_node_name), e);
 	if (e != OK) {
 		leave_node(dto);
@@ -269,18 +274,14 @@ dto_modify_begin(dto_t *dto, const char *target)
 	}
 
 	enter_node(dto, overlay_node_name);
-
-	dto->fragment_count++;
 out:
 	return e;
 }
 
-error_t
-dto_modify_end(dto_t *dto, const char *target)
+static error_t
+dto_modify_do_end(dto_t *dto)
 {
 	error_t e = OK;
-
-	(void)target;
 
 	// finish overlay_node
 	ASSERT_RUN(fdt_end_node(dto->fdt), e);
@@ -302,69 +303,81 @@ out:
 }
 
 error_t
+dto_modify_begin(dto_t *dto, const char *target)
+{
+	error_t err = dto_modify_do_start_fragment(dto);
+	if (err != OK) {
+		goto out;
+	}
+
+	// target is a symbolic ref to a base DTB node
+	err = dto_property_ref_external(dto, "target", target);
+	if (err != OK) {
+		goto out;
+	}
+
+	err = dto_modify_do_start_overlay(dto);
+out:
+	return err;
+}
+
+error_t
+dto_modify_end(dto_t *dto, const char *target)
+{
+	(void)target;
+	return dto_modify_do_end(dto);
+}
+
+error_t
 dto_modify_begin_by_path(dto_t *dto, const char *target)
 {
-	error_t e = OK;
-
-	// generate fragment name
-	char fragment_name[FRAGMENT_NAME_SZ];
-
-	int sz_ret = snprintf(fragment_name, FRAGMENT_NAME_SZ, "fragment@%u",
-			      dto->fragment_count);
-
-	(void)sz_ret;
-	assert(sz_ret <= FRAGMENT_NAME_SZ);
-
-	// create fragment node
-	ASSERT_RUN(fdt_begin_node(dto->fdt, fragment_name), e);
-	if (e != OK) {
+	error_t err = dto_modify_do_start_fragment(dto);
+	if (err != OK) {
 		goto out;
 	}
 
-	enter_node(dto, fragment_name);
-
-	// add external ref
-	dto_property_add_string(dto, "target-path", target);
-
-	// create __overlay__ node
-	ASSERT_RUN(fdt_begin_node(dto->fdt, overlay_node_name), e);
-	if (e != OK) {
-		leave_node(dto);
+	// target is a fixed path of a base DTB node
+	err = dto_property_add_string(dto, "target-path", target);
+	if (err != OK) {
 		goto out;
 	}
 
-	enter_node(dto, overlay_node_name);
-
-	dto->fragment_count++;
+	err = dto_modify_do_start_overlay(dto);
 out:
-	return e;
+	return err;
 }
 
 error_t
 dto_modify_end_by_path(dto_t *dto, const char *target)
 {
 	(void)target;
+	return dto_modify_do_end(dto);
+}
 
-	error_t e = OK;
-
-	// finish overlay_node
-	ASSERT_RUN(fdt_end_node(dto->fdt), e);
-	if (e != OK) {
-		goto err;
+error_t
+dto_modify_begin_by_phandle(dto_t *dto, uint32_t target)
+{
+	error_t err = dto_modify_do_start_fragment(dto);
+	if (err != OK) {
+		goto out;
 	}
 
-	leave_node(dto);
-
-	// finish fragment node
-	ASSERT_RUN(fdt_end_node(dto->fdt), e);
-	if (e != OK) {
-		goto err;
+	// target is a fixed phandle of a base DTB node
+	err = dto_property_add_u32(dto, "target", target);
+	if (err != OK) {
+		goto out;
 	}
 
-	leave_node(dto);
+	err = dto_modify_do_start_overlay(dto);
+out:
+	return err;
+}
 
-err:
-	return e;
+error_t
+dto_modify_end_by_phandle(dto_t *dto, uint32_t target)
+{
+	(void)target;
+	return dto_modify_do_end(dto);
 }
 
 error_t
@@ -539,38 +552,118 @@ err:
 }
 
 error_t
-dto_property_add_addrrange(dto_t *dto, const char *name, size_t addr_cells,
-			   uint64_t addr, size_t size_cells, uint64_t size)
+dto_property_add_addrrange_array(dto_t *dto, const char *name,
+				 const dto_addrrange_t ranges[],
+				 count_t entries, count_t addr_cells,
+				 count_t size_cells)
 {
-	error_t	 e = OK;
-	uint8_t *data;
+	error_t e    = OK;
+	void   *prop = NULL;
 
-	if ((addr_cells > 2) || (size_cells > 2)) {
+	if ((addr_cells > 2U) || (size_cells > 2U) || (entries > 1024U)) {
 		e = ERROR_ARGUMENT_INVALID;
 		goto err;
 	}
 
-	ASSERT_RUN(fdt_property_placeholder(
-			   dto->fdt, name,
-			   (int)(sizeof(uint32_t) * (addr_cells + size_cells)),
-			   (void **)&data),
+	const count_t range_cells   = addr_cells + size_cells;
+	size_t	      property_size = sizeof(uint32_t) * range_cells * entries;
+	ASSERT_RUN(fdt_property_placeholder(dto->fdt, name, (int)property_size,
+					    &prop),
 		   e);
 	if (e != OK) {
 		goto err;
 	}
+	assert(prop != NULL);
 
-	if (addr_cells == 2) {
-		fdt64_st(data, addr);
-	} else if (addr_cells == 1) {
-		fdt32_st(data, (uint32_t)addr);
-	}
-	data += addr_cells * (sizeof(uint32_t) / sizeof(*data));
+	uint32_t *data = (uint32_t *)prop;
 
-	if (size_cells == 2) {
-		fdt64_st(data, size);
-	} else if (size_cells == 1) {
-		fdt32_st(data, (uint32_t)size);
+	for (index_t i = 0; i < entries; i++) {
+		if (addr_cells == 2U) {
+			fdt64_st(data, ranges[i].addr);
+		} else if (addr_cells == 1U) {
+			fdt32_st(data, (uint32_t)ranges[i].addr);
+		} else {
+			// addr_cells is 0, nothing to store
+		}
+		data += addr_cells;
+
+		if (size_cells == 2U) {
+			fdt64_st(data, ranges[i].size);
+		} else if (size_cells == 1U) {
+			fdt32_st(data, (uint32_t)ranges[i].size);
+		} else {
+			// size_cells is 0, nothing to store
+		}
+		data += size_cells;
 	}
+err:
+	return e;
+}
+
+error_t
+dto_property_add_addrrange(dto_t *dto, const char *name, count_t addr_cells,
+			   uint64_t addr, count_t size_cells, uint64_t size)
+{
+	dto_addrrange_t range = {
+		.addr = addr,
+		.size = size,
+	};
+	return dto_property_add_addrrange_array(dto, name, &range, 1U,
+						addr_cells, size_cells);
+}
+
+// Add an array of interrupts, normally for the "interrupts" property.
+// FIXME: this is platform-specific. It assumes a GIC with 3 interrupt cells.
+error_t
+dto_property_add_interrupts_array(dto_t *dto, const char *name,
+				  const interrupt_data_t *interrupts,
+				  count_t		  entries)
+{
+	error_t e;
+
+	uint32_t *buffer =
+		(uint32_t *)calloc((size_t)entries * 3U, sizeof(uint32_t));
+	if (buffer == NULL) {
+		e = ERROR_NOMEM;
+		goto err;
+	}
+	uint32_t *p = buffer;
+
+	for (count_t i = 0; i < entries; i++) {
+		const interrupt_data_t *d = &interrupts[i];
+		uint32_t		type, irq, flags;
+
+		if (!d->is_cpu_local && (d->irq >= 32U) && (d->irq < 1020U)) {
+			type = DT_GIC_SPI;
+			irq  = d->irq - 32U;
+		} else if (d->is_cpu_local && (d->irq >= 16U) &&
+			   (d->irq < 32U)) {
+			type = DT_GIC_PPI;
+			irq  = d->irq - 16U;
+		} else if (!d->is_cpu_local && (d->irq >= 4096U) &&
+			   (d->irq < 5120U)) {
+			type = DT_GIC_ESPI;
+			irq  = d->irq - 4096U;
+		} else if (d->is_cpu_local && (d->irq >= 1056U) &&
+			   (d->irq < 1120U)) {
+			type = DT_GIC_EPPI;
+			irq  = d->irq - 1056U;
+		} else {
+			e = ERROR_ARGUMENT_INVALID;
+			goto err_free;
+		}
+		flags = d->is_edge_triggering ? DT_GIC_IRQ_TYPE_EDGE_RISING
+					      : DT_GIC_IRQ_TYPE_LEVEL_HIGH;
+
+		p[0] = type;
+		p[1] = irq;
+		p[2] = flags;
+		p += 3U;
+	}
+	e = dto_property_add_u32array(dto, name, buffer, entries * 3U);
+
+err_free:
+	free(buffer);
 err:
 	return e;
 }
@@ -614,7 +707,7 @@ dto_property_ref_external(dto_t *dto, const char *property_name,
 	}
 
 	const int who_sz = 256;
-	char     *who	 = malloc((size_t)who_sz);
+	char	 *who	 = malloc((size_t)who_sz);
 	if (who == NULL) {
 		e = ERROR_NOMEM;
 		goto err2;
@@ -721,14 +814,16 @@ dto_deinit(dto_t *dto)
 	free_local_fixups(dto);
 
 	if (dto->fdt != NULL) {
-		free(dto->fdt);
+		if (!dto->use_external_memory) {
+			free(dto->fdt);
+		}
 		dto->fdt = NULL;
 	}
 
 	free(dto);
 }
 
-void
+static void
 enter_node(dto_t *dto, const char *node_name)
 {
 	size_t pwd_len = strlen(dto->pwd);
@@ -744,7 +839,7 @@ enter_node(dto_t *dto, const char *node_name)
 	assert((size_t)fmt_ret == node_len);
 }
 
-void
+static void
 leave_node(dto_t *dto)
 {
 	// might be done by double strrchr or strlen
@@ -767,11 +862,12 @@ out:
 	return;
 }
 
-error_t
+static error_t
 gen_fixups_node(dto_t *dto)
 {
 	error_t e = OK;
 
+	static const char *fixups_node_name = "__fixups__";
 	ASSERT_RUN(fdt_begin_node(dto->fdt, fixups_node_name), e);
 	if (e != OK) {
 		goto out;
@@ -802,7 +898,7 @@ out:
 	return e;
 }
 
-error_t
+static error_t
 add_local_fixup(dto_t *dto, const char *label)
 {
 	error_t e	  = OK;
@@ -816,7 +912,7 @@ add_local_fixup(dto_t *dto, const char *label)
 
 	// for each node in pwd
 	const char *delim	  = "/";
-	char	     *cur_node_name = strtok_r(cur_pwd, delim, &saved_ptr);
+	char	   *cur_node_name = strtok_r(cur_pwd, delim, &saved_ptr);
 	if (cur_node_name == NULL) {
 		e = ERROR_NOMEM;
 		goto err1;
@@ -892,7 +988,7 @@ out:
 	return e;
 }
 
-error_t
+static error_t
 gen_local_fixups_node(dto_t *dto)
 {
 	index_t		    cur_level = 0;
@@ -900,6 +996,7 @@ gen_local_fixups_node(dto_t *dto)
 
 	error_t e = OK;
 
+	static const char *local_fixups_node_name = "__local_fixups__";
 	ASSERT_RUN(fdt_begin_node(dto->fdt, local_fixups_node_name), e);
 	if (e != OK) {
 		goto err;
@@ -970,7 +1067,7 @@ err:
 	return e;
 }
 
-void
+static void
 free_local_fixups(dto_t *dto)
 {
 	index_t		    cur_level = 0;
@@ -1048,5 +1145,5 @@ dto_get_dtbo(dto_t *dto)
 size_t
 dto_get_size(dto_t *dto)
 {
-	return dto->fdt_sz;
+	return fdt_totalsize(dto->fdt);
 }

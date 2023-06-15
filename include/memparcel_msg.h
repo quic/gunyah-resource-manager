@@ -2,17 +2,20 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-#define MEM_DONATE  0x51000010U
-#define MEM_ACCEPT  0x51000011U
-#define MEM_LEND    0x51000012U
-#define MEM_SHARE   0x51000013U
-#define MEM_RELEASE 0x51000014U
-#define MEM_RECLAIM 0x51000015U
-#define MEM_NOTIFY  0x51000017U
+#define MEM_DONATE	    0x51000010U
+#define MEM_ACCEPT	    0x51000011U
+#define MEM_LEND	    0x51000012U
+#define MEM_SHARE	    0x51000013U
+#define MEM_RELEASE	    0x51000014U
+#define MEM_RECLAIM	    0x51000015U
+#define MEM_NOTIFY	    0x51000017U
+#define MEM_APPEND	    0x51000018U
+#define MEM_QCOM_LOOKUP_SGL 0x5100001AU
 
 #define MEM_SHARED   0x51100011U
 #define MEM_RELEASED 0x51100012U
 #define MEM_ACCEPTED 0x51100013U
+#define MEM_RECALL   0x51100014U
 
 #define MEM_TYPE_NORMAL 0U
 #define MEM_TYPE_IO	1U
@@ -25,6 +28,9 @@
 #define MEM_RIGHTS_RWX 0x7U
 
 #define MEM_CREATE_FLAG_SANITIZE 1U
+#define MEM_CREATE_FLAG_APPEND	 2U
+
+#define MEM_APPEND_FLAG_DONE 1U
 
 #define MEM_ACCEPT_FLAG_VALIDATE_SANITIZED 1U
 #define MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR  2U
@@ -41,6 +47,7 @@
 #define MEM_NOTIFY_FLAG_SHARED	 1U
 #define MEM_NOTIFY_FLAG_RELEASED 2U
 #define MEM_NOTIFY_FLAG_ACCEPTED 4U
+#define MEM_NOTIFY_FLAG_RECALL	 8U
 
 #define TRANS_TYPE_DONATE 0U
 #define TRANS_TYPE_LEND	  1U
@@ -57,7 +64,7 @@ typedef struct acl_entry {
 	uint8_t res0;
 } acl_entry_t;
 
-typedef struct sgl_entry {
+typedef struct sgl_entry_s {
 	uint64_t ipa;
 	uint64_t size;
 } sgl_entry_t;
@@ -84,7 +91,8 @@ typedef struct {
 	uint8_t	 flags;
 	uint8_t	 res0_1;
 	uint32_t label;
-	uint32_t acl_entries;
+	uint16_t acl_entries;
+	uint16_t res0_acl_entries;
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	uint16_t res0_2;
@@ -96,12 +104,22 @@ typedef struct {
 
 typedef struct {
 	uint32_t handle;
+	uint8_t	 flags;
+	uint8_t	 res0_0[3];
+	uint16_t sgl_entries;
+	uint16_t res0_1;
+	// array of sgl_entry_t
+} memparcel_append_req_t;
+
+typedef struct {
+	uint32_t handle;
 	uint8_t	 mem_type;
 	uint8_t	 trans_type;
 	uint8_t	 flags;
 	uint8_t	 res0_0;
 	uint32_t label;
-	uint32_t acl_entries;
+	uint16_t acl_entries;
+	uint16_t res0_acl_entries;
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	vmid_t	 map_vmid;
@@ -130,7 +148,8 @@ typedef struct {
 	uint8_t	 mem_type;
 	uint8_t	 res0_0[3];
 	uint32_t label;
-	uint32_t acl_entries;
+	uint16_t acl_entries;
+	uint16_t res0_acl_entries;
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	uint16_t res0_1;
@@ -153,10 +172,13 @@ typedef struct {
 
 #define MEMPARCEL_INVALID_HANDLE ~(uint32_t)0U
 
+#define MEM_ACCEPT_RESP_FLAG_INCOMPLETE 1U
+
 typedef struct {
 	rm_error_t err;
 	uint16_t   sgl_entries;
-	uint16_t   res0;
+	uint8_t	   flags;
+	uint8_t	   res0;
 	// array of sgl_entry_t
 } memparcel_accept_sgl_resp_t;
 
@@ -170,12 +192,15 @@ typedef struct {
 	uint8_t	 res0_1[2];
 	uint32_t label;
 	uint32_t mem_info_tag;
-	uint32_t acl_entries;
+	uint16_t acl_entries;
+	uint16_t res0_acl_entries;
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	uint16_t res0_2;
 	// array of sgl_entry_t
-	// optional attr list
+	uint16_t attr_entries;
+	uint16_t res0_3;
+	// array of attr_entry_t
 } memparcel_shared_notif_t;
 
 typedef struct {
@@ -185,23 +210,12 @@ typedef struct {
 	uint32_t mem_info_tag;
 } memparcel_owner_notif_t;
 
+typedef struct {
+	uint32_t handle;
+	uint32_t mem_info_tag;
+} memparcel_recall_notif_t;
+
 typedef uint32_t mem_handle_t;
-
-void
-memparcel_create(vmid_t vmid, uint32_t msg_id, uint16_t seq_num, uint8_t *buf,
-		 size_t len);
-
-void
-memparcel_accept(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
-
-void
-memparcel_release(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
-
-void
-memparcel_reclaim(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
-
-void
-memparcel_notify(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len);
 
 // FIXME: The following declarations don't necessarily belong here. There are here
 // because some necessary type definitions are in this file. Move them out once
@@ -213,22 +227,21 @@ typedef struct memparcel_construct_ret {
 } memparcel_construct_ret_t;
 
 memparcel_construct_ret_t
-memparcel_construct(vmid_t owner_vmid, uint32_t acl_entries,
+memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 		    uint16_t sgl_entries, uint16_t attr_entries,
 		    acl_entry_t *acl, sgl_entry_t *sgl, attr_entry_t *attr_list,
 		    uint32_t label, bool label_valid, uint8_t mem_type,
-		    uint8_t trans_type, bool hyp_assign, bool sanitize);
+		    uint8_t trans_type, bool vm_init, uint8_t flags);
 
 rm_error_t
-memparcel_do_accept(vmid_t vmid, uint32_t acl_entries, uint16_t sgl_entries,
-		    uint16_t attr_entries, acl_entry_t *acl, sgl_entry_t *sgl,
-		    attr_entry_t *attr_list, vmid_t map_vmid,
-		    mem_handle_t handle, uint32_t label, uint8_t mem_type,
-		    uint8_t trans_type, uint8_t flags,
-		    memparcel_accept_sgl_resp_t **resp, size_t *resp_size);
+memparcel_accept(vmid_t vmid, uint16_t acl_entries, uint16_t sgl_entries,
+		 uint16_t attr_entries, const acl_entry_t *acl,
+		 const sgl_entry_t *sgl, const attr_entry_t *attr_list,
+		 vmid_t map_vmid, mem_handle_t handle, uint32_t label,
+		 uint8_t mem_type, uint8_t trans_type, uint8_t flags);
 
 mem_handle_t
-memparcel_sgl_do_lookup(vmid_t vmid, uint32_t acl_entries, uint16_t sgl_entries,
+memparcel_sgl_do_lookup(vmid_t vmid, uint16_t acl_entries, uint16_t sgl_entries,
 			uint16_t attr_entries, acl_entry_t *acl,
 			sgl_entry_t *sgl, attr_entry_t *attr_list,
 			uint32_t label, uint8_t mem_type, bool hyp_unassign);

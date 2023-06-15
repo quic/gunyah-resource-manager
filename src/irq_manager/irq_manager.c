@@ -11,9 +11,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <rm-rpc.h>
-
-#include <resource-manager.h>
+#include <rm_types.h>
+#include <util.h>
+#include <utils/dict.h>
+#include <utils/list.h>
+#include <utils/vector.h>
 
 #include <event.h>
 #include <guest_interface.h>
@@ -21,20 +23,24 @@
 #include <irq_message.h>
 #include <memparcel_msg.h>
 #include <platform_vm_config.h>
+#include <resource-manager.h>
 #include <rm-rpc-fifo.h>
-#include <util.h>
-#include <utils/dict.h>
-#include <utils/list.h>
-#include <utils/vector.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
 #include <vm_mgnt.h>
 
+#define MAX_IRQ	       8191U
+#define MAX_IRQ_HANDLE 1023U
+
 // The first VIRQ number that can be used to attach HW IRQs. This is
 // platform-specific and should be defined elsewhere.
+// FIXME:
 static const virq_t VIRQ_FIRST_VALID   = (virq_t)16U;
 static const virq_t VIRQ_RM_VIRT_START = (virq_t)32U;
 static const virq_t VIRQ_VIRT_START    = (virq_t)960U;
+static const virq_t VIRQ_LAST_VALID    = (virq_t)1019U;
 
 static void
 handle_accept(vmid_t client_id, uint16_t seq_num, virq_handle_t handle,
@@ -154,7 +160,7 @@ create_irq_mapping(vm_irq_manager_t *manager, virq_t virq_num, cap_id_t hwirq,
 
 RM_PADDED(typedef struct {
 	irq_mapping_info_t *info;
-	vm_irq_manager_t	 *manager;
+	vm_irq_manager_t   *manager;
 	rm_error_t	    err;
 } irq_manager_get_ret_t)
 
@@ -162,7 +168,7 @@ RM_PADDED(typedef struct {
 // hw irq, and the current virq: hwirq still hold by the owner (has't been
 // lent)
 static irq_manager_get_ret_t
-irq_manager_get(vmid_t owner, virq_t virq_num);
+irq_manager_get(vmid_t vmid, virq_t virq_num);
 
 RM_PADDED(typedef struct {
 	virq_handle_t handle;
@@ -189,7 +195,7 @@ virq_handle_manager_free(virq_handle_t handle, virq_handle_info_t *info);
 
 // Find all the mappings for a specific VM
 static vm_irq_manager_t *
-irq_manager_lookup(vmid_t owner);
+irq_manager_lookup(vmid_t vmid);
 
 static rm_error_t
 map_irq(irq_mapping_info_t *info, cap_id_t vic);
@@ -209,7 +215,11 @@ irq_manager_allocate_virq(vm_irq_manager_t *manager)
 	assert(dict != NULL);
 
 	// FIXME: add manager->virq_base instead of VIRQ_FIRST_VALID
-	return (virq_t)dict_get_first_free_key_from(dict, VIRQ_FIRST_VALID);
+	dict_key_ret_t ret =
+		dict_get_first_free_key_from(dict, VIRQ_FIRST_VALID);
+	assert(ret.err == OK);
+
+	return (virq_t)ret.key;
 }
 
 vm_irq_manager_t *
@@ -225,9 +235,8 @@ irq_manager_create(cap_id_t vic, count_t num_hwirqs, const cap_id_t *hwirqs)
 
 	manager->vic = vic;
 
-	// init dict
-	// FIXME: should specify a correct capacity
-	manager->mapping_dict = dict_init();
+	// init dict to support SPIs and Extended SPI numbering
+	manager->mapping_dict = dict_init(0, MAX_IRQ);
 	if (manager->mapping_dict == NULL) {
 		free(manager);
 		manager = NULL;
@@ -265,19 +274,32 @@ irq_manager_init(void)
 	rm_error_t ret = RM_OK;
 
 	// init global handle control struct
-	handle_manager.handle_dict = dict_init();
+	handle_manager.handle_dict = dict_init(0, MAX_IRQ_HANDLE);
 
 	rm_irq_manager = irq_manager_create(rm_get_rm_vic(), 0, NULL);
 	if (rm_irq_manager == NULL) {
 		ret = RM_ERROR_NOMEM;
 		goto out;
 	}
-
 out:
 	return ret;
 }
 
 rm_error_t
+irq_manager_deinit(void)
+{
+	rm_error_t ret = RM_OK;
+
+	if (rm_irq_manager->mapping_dict != NULL) {
+		dict_deinit(rm_irq_manager->mapping_dict);
+	}
+	free(rm_irq_manager);
+	rm_irq_manager = NULL;
+
+	return ret;
+}
+
+static rm_error_t
 map_irq(irq_mapping_info_t *info, cap_id_t vic)
 {
 	rm_error_t ret;
@@ -306,7 +328,7 @@ map_irq(irq_mapping_info_t *info, cap_id_t vic)
 	return ret;
 }
 
-rm_error_t
+static rm_error_t
 unmap_irq(irq_mapping_info_t *info)
 {
 	rm_error_t ret;
@@ -326,7 +348,7 @@ unmap_irq(irq_mapping_info_t *info)
 	return ret;
 }
 
-irq_manager_borrow_irq_ret_t
+static irq_manager_borrow_irq_ret_t
 irq_manager_borrow_irq(virq_handle_info_t *info, vmid_t borrower,
 		       virq_t virq_num)
 {
@@ -335,14 +357,14 @@ irq_manager_borrow_irq(virq_handle_info_t *info, vmid_t borrower,
 	// check if it's expected holder
 	if (borrower != info->holder) {
 		ret.err	     = RM_ERROR_VALIDATE_FAILED;
-		ret.virq_num = VIRQ_INVALID;
+		ret.virq_num = VIRQ_NUM_INVALID;
 		goto out;
 	}
 
 	vm_irq_manager_t *manager = irq_manager_lookup(borrower);
 	if (manager == NULL) {
 		ret.err	     = RM_ERROR_VMID_INVALID;
-		ret.virq_num = VIRQ_INVALID;
+		ret.virq_num = VIRQ_NUM_INVALID;
 		goto out;
 	}
 
@@ -350,10 +372,10 @@ irq_manager_borrow_irq(virq_handle_info_t *info, vmid_t borrower,
 		assert(info->owner_info != NULL);
 		assert(info->owner_info->is_owner);
 
-		if (virq_num == VIRQ_INVALID) {
+		if (virq_num == VIRQ_NUM_INVALID) {
 			// Allocate 1:1
 			virq_num = info->owner_info->hw_irq;
-			assert(virq_num != VIRQ_INVALID);
+			assert(virq_num != VIRQ_NUM_INVALID);
 		}
 		create_irq_mapping_ret_t create_ret = create_irq_mapping(
 			manager, virq_num, info->owner_info->hw_irq_cap, false);
@@ -406,7 +428,7 @@ irq_manager_static_share(vmid_t source_vmid, virq_t source_virq,
 		goto out;
 	}
 
-	if (dest_virq == VIRQ_INVALID) {
+	if (dest_virq == VIRQ_NUM_INVALID) {
 		dest_virq = irq_manager_allocate_virq(manager);
 		if (dest_virq > VIRQ_LAST_VALID) {
 			err = RM_ERROR_NORESOURCE;
@@ -431,9 +453,15 @@ out:
 }
 
 rm_error_t
-irq_manager_reserve_virq(vmid_t vmid, virq_t virq, bool is_virt)
+irq_manager_reserve_virq(vmid_t vmid, interrupt_data_t virq, bool is_virt)
 {
 	rm_error_t err = RM_OK;
+
+	// CPU-local IRQ allocation not supported yet
+	if (virq.is_cpu_local) {
+		err = RM_ERROR_UNIMPLEMENTED;
+		goto out;
+	}
 
 	vm_irq_manager_t *manager = irq_manager_lookup(vmid);
 	if (manager == NULL) {
@@ -445,10 +473,10 @@ irq_manager_reserve_virq(vmid_t vmid, virq_t virq, bool is_virt)
 	assert(dict != NULL);
 
 	irq_mapping_info_t *irq_info =
-		(irq_mapping_info_t *)dict_get(dict, virq);
+		(irq_mapping_info_t *)dict_get(dict, virq.irq);
 	if (irq_info != NULL) {
 		if (!irq_info->is_valid || irq_info->is_reserved || is_virt ||
-		    (irq_info->hw_irq != VIRQ_INVALID)) {
+		    (irq_info->hw_irq != VIRQ_NUM_INVALID)) {
 			err = RM_ERROR_IRQ_INUSE;
 			goto out;
 		}
@@ -467,11 +495,17 @@ irq_manager_reserve_virq(vmid_t vmid, virq_t virq, bool is_virt)
 			irq_info->is_valid = true;
 		}
 
-		irq_info->virq	     = virq;
-		irq_info->hw_irq     = VIRQ_INVALID;
+		irq_info->virq	     = virq.irq;
+		irq_info->hw_irq     = VIRQ_NUM_INVALID;
 		irq_info->hw_irq_cap = CSPACE_CAP_INVALID;
 
-		dict_add(dict, (dict_key_t)virq, (void *)irq_info);
+		error_t dict_err =
+			dict_add(dict, (dict_key_t)virq.irq, (void *)irq_info);
+		if (dict_err != OK) {
+			err = RM_ERROR_NOMEM;
+			free(irq_info);
+			goto out;
+		}
 	}
 
 out:
@@ -479,9 +513,15 @@ out:
 }
 
 irq_manager_get_free_virt_virq_ret_t
-irq_manager_get_free_virt_virq(vmid_t vmid)
+irq_manager_get_free_virt_virq(vmid_t vmid, bool cpu_local)
 {
 	irq_manager_get_free_virt_virq_ret_t ret = { .err = RM_OK };
+
+	// CPU-local IRQ allocation not supported yet
+	if (cpu_local) {
+		ret.err = RM_ERROR_UNIMPLEMENTED;
+		goto err_cpu_local;
+	}
 
 	vm_irq_manager_t *manager = irq_manager_lookup(vmid);
 	if (manager == NULL) {
@@ -499,24 +539,43 @@ irq_manager_get_free_virt_virq(vmid_t vmid)
 		start_from = VIRQ_VIRT_START;
 	}
 
-	virq_t free_virq =
-		(virq_t)dict_get_first_free_key_from(dict, start_from);
+	dict_key_ret_t key_ret = dict_get_first_free_key_from(dict, start_from);
+	if (key_ret.err != OK) {
+		ret.err = RM_ERROR_NORESOURCE;
+		goto err_vmid_invalid;
+	}
+
+	virq_t free_virq = (virq_t)key_ret.key;
 
 	// virt virq (for vdevice) is restricted from
 	// [VIRQ_VIRT_START, VIRQ_LAST_VALID), if this range is exhausted
 	// we will need to find a better solution
 	assert(free_virq <= VIRQ_LAST_VALID);
 
-	ret.virq = free_virq;
+	ret.virq.irq		    = free_virq;
+	ret.virq.is_cpu_local	    = cpu_local;
+	ret.virq.is_edge_triggering = true;
 
 err_vmid_invalid:
+err_cpu_local:
 	return ret;
 }
 
 error_t
-irq_manager_return_virq(vmid_t vmid, virq_t virq)
+irq_manager_return_virq(vmid_t vmid, interrupt_data_t virq)
 {
 	error_t ret = OK;
+
+	// CPU-local IRQ allocation not supported yet
+	if (virq.is_cpu_local) {
+		ret = ERROR_UNIMPLEMENTED;
+		goto err_cpu_local;
+	}
+
+	if (virq.irq == VIRQ_NUM_INVALID) {
+		ret = ERROR_ARGUMENT_INVALID;
+		goto err_invalid;
+	}
 
 	vm_irq_manager_t *manager = irq_manager_lookup(vmid);
 	if (manager == NULL) {
@@ -528,7 +587,7 @@ irq_manager_return_virq(vmid_t vmid, virq_t virq)
 	assert(dict != NULL);
 
 	irq_mapping_info_t *irq_info =
-		(irq_mapping_info_t *)dict_get(dict, virq);
+		(irq_mapping_info_t *)dict_get(dict, virq.irq);
 	if (irq_info == NULL) {
 		ret = ERROR_ARGUMENT_INVALID;
 		goto err_virq_get;
@@ -539,20 +598,47 @@ irq_manager_return_virq(vmid_t vmid, virq_t virq)
 		goto err_wrong_status;
 	}
 
-	if (irq_info->hw_irq == VIRQ_INVALID) {
+	if (irq_info->hw_irq == VIRQ_NUM_INVALID) {
 		irq_info->is_reserved = false;
 	} else {
 		free(irq_info);
-		dict_remove(dict, (dict_key_t)virq);
+		(void)dict_remove(dict, (dict_key_t)virq.irq, NULL);
 	}
 
 err_wrong_status:
 err_virq_get:
 err_manager:
+err_invalid:
+err_cpu_local:
 	return ret;
 }
 
-rm_error_t
+static rm_error_t
+irq_manager_do_release_irq(vm_irq_manager_t   *manager,
+			   irq_mapping_info_t *irq_info)
+{
+	rm_error_t err = RM_OK;
+
+	assert(irq_info->is_valid);
+
+	rm_error_t unmap_ret = unmap_irq(irq_info);
+	// FIXME: assume unmap always works in this case
+	assert(unmap_ret == RM_OK);
+
+	// remove it from dict if not also a reservation
+	irq_info->is_valid = false;
+	if (!irq_info->is_reserved) {
+		dict_t *dict = manager->mapping_dict;
+		assert(dict != NULL);
+
+		(void)dict_remove(dict, (dict_key_t)irq_info->virq, NULL);
+		free(irq_info);
+	}
+
+	return err;
+}
+
+static rm_error_t
 irq_manager_release_irq(virq_handle_info_t *info)
 {
 	rm_error_t err = RM_OK;
@@ -576,6 +662,8 @@ irq_manager_release_irq(virq_handle_info_t *info)
 	} else if (ret.err != RM_OK) {
 		err = ret.err;
 		goto out;
+	} else {
+		// ret.err = RM_OK, irq is mapped
 	}
 	irq_mapping_info_t *irq_info = ret.info;
 
@@ -590,30 +678,18 @@ irq_manager_release_irq(virq_handle_info_t *info)
 	assert(irq_info->is_mapped);
 	assert(irq_info->hw_irq_cap == info->owner_info->hw_irq_cap);
 
-	rm_error_t unmap_ret = unmap_irq(irq_info);
-	// FIXME: assume unmap always works in this case
-	assert(unmap_ret == RM_OK);
-
-	// remove it from dict if not also a reservation
-	irq_info->is_valid = false;
-	if (!irq_info->is_reserved) {
-		dict_t *dict = ret.manager->mapping_dict;
-		assert(dict != NULL);
-
-		dict_remove(dict, irq_info->virq);
-		free(irq_info);
-	}
+	err = irq_manager_do_release_irq(ret.manager, irq_info);
 
 release:
 	// update handler to mark the release
 	info->is_borrowed = false;
-	info->holder_virq = VIRQ_INVALID;
+	info->holder_virq = VIRQ_NUM_INVALID;
 
 out:
 	return err;
 }
 
-rm_error_t
+static rm_error_t
 irq_manager_reclaim_irq(virq_handle_info_t *info)
 {
 	rm_error_t err = RM_OK;
@@ -625,7 +701,7 @@ irq_manager_reclaim_irq(virq_handle_info_t *info)
 		err = RM_ERROR_IRQ_INUSE;
 		goto out;
 	}
-	assert(info->holder_virq == VIRQ_INVALID);
+	assert(info->holder_virq == VIRQ_NUM_INVALID);
 
 	// get the owner's mapping info
 	irq_manager_get_ret_t get_ret =
@@ -657,24 +733,24 @@ out:
 	return err;
 }
 
-void
-irq_manager_lend_irq(irq_mapping_info_t *irq_info)
+static void
+irq_manager_lend_irq(irq_mapping_info_t *info)
 {
-	assert(irq_info != NULL);
-	assert(irq_info->is_valid);
-	assert(irq_info->is_owner);
-	assert(!irq_info->is_lent);
+	assert(info != NULL);
+	assert(info->is_valid);
+	assert(info->is_owner);
+	assert(!info->is_lent);
 
-	if (irq_info->is_mapped) {
-		rm_error_t err = unmap_irq(irq_info);
+	if (info->is_mapped) {
+		rm_error_t err = unmap_irq(info);
 		// shouldn't have issue, or else, internal status wrong
 		assert(err == RM_OK);
 	}
 
-	irq_info->is_lent = true;
+	info->is_lent = true;
 }
 
-rm_error_t
+static rm_error_t
 irq_manager_unmap_irqs(vmid_t owner, size_t virq_num_cnt, virq_t virq_nums[])
 {
 	rm_error_t err = RM_OK;
@@ -721,7 +797,8 @@ irq_manager_unmap_irqs(vmid_t owner, size_t virq_num_cnt, virq_t virq_nums[])
 		// remove it from dict if not also a reservation
 		irq_info->is_valid = false;
 		if (!irq_info->is_reserved) {
-			dict_remove(dict, (dict_key_t)irq_info->virq);
+			(void)dict_remove(dict, (dict_key_t)irq_info->virq,
+					  NULL);
 			free(irq_info);
 		}
 	}
@@ -729,7 +806,7 @@ out:
 	return err;
 }
 
-create_irq_mapping_ret_t
+static create_irq_mapping_ret_t
 create_irq_mapping(vm_irq_manager_t *manager, virq_t virq_num, cap_id_t hwirq,
 		   bool does_own)
 {
@@ -740,7 +817,7 @@ create_irq_mapping(vm_irq_manager_t *manager, virq_t virq_num, cap_id_t hwirq,
 	dict_t *dict = manager->mapping_dict;
 	assert(dict != NULL);
 
-	assert(virq_num != VIRQ_INVALID);
+	assert(virq_num != VIRQ_NUM_INVALID);
 
 	if ((virq_num < VIRQ_FIRST_VALID) || (virq_num > VIRQ_LAST_VALID)) {
 		ret.err = RM_ERROR_ARGUMENT_INVALID;
@@ -780,32 +857,39 @@ create_irq_mapping(vm_irq_manager_t *manager, virq_t virq_num, cap_id_t hwirq,
 		// FIXME, assumes hw_irq num == virq_num when does_own is true
 		irq_info->hw_irq = virq_num;
 	} else {
-		irq_info->hw_irq = VIRQ_INVALID;
+		irq_info->hw_irq = VIRQ_NUM_INVALID;
+	}
+
+	if (!irq_info->is_reserved) {
+		error_t dict_err =
+			dict_add(dict, (dict_key_t)virq_num, (void *)irq_info);
+		if (dict_err != OK) {
+			ret.err = RM_ERROR_NOMEM;
+			free(irq_info);
+			goto out;
+		}
 	}
 
 	// map irq
 	ret.err = map_irq(irq_info, manager->vic);
 
-	if (!irq_info->is_reserved) {
-		if (ret.err == RM_OK) {
-			dict_add(dict, (dict_key_t)virq_num, (void *)irq_info);
-		} else {
-			free(irq_info);
-			goto out;
-		}
+	if (!irq_info->is_reserved && (ret.err != RM_OK)) {
+		(void)dict_remove(dict, (dict_key_t)virq_num, NULL);
+		free(irq_info);
+		goto out;
 	}
 
 out:
 	if (ret.err == RM_OK) {
 		ret.virq_num = virq_num;
 	} else {
-		ret.virq_num = VIRQ_INVALID;
+		ret.virq_num = VIRQ_NUM_INVALID;
 	}
 
 	return ret;
 }
 
-vm_irq_manager_t *
+static vm_irq_manager_t *
 irq_manager_lookup(vmid_t vmid)
 {
 	vm_irq_manager_t *ret = NULL;
@@ -824,7 +908,7 @@ out:
 	return ret;
 }
 
-irq_manager_get_ret_t
+static irq_manager_get_ret_t
 irq_manager_get(vmid_t vmid, virq_t virq_num)
 {
 	irq_manager_get_ret_t ret = {
@@ -853,18 +937,24 @@ out:
 	return ret;
 }
 
-virq_handle_manager_alloc_ret_t
-virq_handle_manager_alloc(irq_mapping_info_t *irq_info, vmid_t owner,
+static virq_handle_manager_alloc_ret_t
+virq_handle_manager_alloc(irq_mapping_info_t *info, vmid_t owner,
 			  vmid_t borrower, label_t label)
 {
-	assert(irq_info != NULL);
-
-	virq_handle_t key = (virq_handle_t)dict_get_first_free_key(
-		handle_manager.handle_dict);
-
 	virq_handle_manager_alloc_ret_t ret = {
 		.err = RM_OK,
 	};
+
+	assert(info != NULL);
+
+	dict_key_ret_t key_ret =
+		dict_get_first_free_key(handle_manager.handle_dict);
+	if (key_ret.err != OK) {
+		ret.err = RM_ERROR_NORESOURCE;
+		goto out;
+	}
+
+	virq_handle_t key = (virq_handle_t)key_ret.key;
 
 	virq_handle_info_t *handle_info = calloc(1, sizeof(*handle_info));
 	if (handle_info == NULL) {
@@ -872,24 +962,30 @@ virq_handle_manager_alloc(irq_mapping_info_t *irq_info, vmid_t owner,
 		goto out;
 	}
 
+	error_t err = dict_add(handle_manager.handle_dict, (dict_key_t)key,
+			       (void *)handle_info);
+	if (err != OK) {
+		ret.err = RM_ERROR_NOMEM;
+		free(handle_info);
+		goto out;
+	}
+
 	// fill the data into handle
 	handle_info->is_borrowed = false;
 	// need to be set during accept
-	handle_info->holder_virq = VIRQ_INVALID;
+	handle_info->holder_virq = VIRQ_NUM_INVALID;
 	handle_info->owner	 = owner;
-	handle_info->owner_info	 = irq_info;
+	handle_info->owner_info	 = info;
 	handle_info->holder	 = borrower;
 	handle_info->label	 = label;
 	handle_info->virq_handle = key;
 
-	dict_add(handle_manager.handle_dict, (dict_key_t)key,
-		 (void *)handle_info);
 	ret.handle = key;
 out:
 	return ret;
 }
 
-virq_handle_manager_get_ret_t
+static virq_handle_manager_get_ret_t
 virq_handle_manager_get(virq_handle_t handle)
 {
 	virq_handle_manager_get_ret_t ret;
@@ -907,13 +1003,13 @@ virq_handle_manager_get(virq_handle_t handle)
 	return ret;
 }
 
-void
+static void
 virq_handle_manager_free(virq_handle_t handle, virq_handle_info_t *info)
 {
 	dict_t *dict = handle_manager.handle_dict;
-	assert(dict_contains(dict, (dict_key_t)handle));
 
-	dict_remove(dict, (dict_key_t)handle);
+	error_t ret = dict_remove(dict, (dict_key_t)handle, NULL);
+	assert(ret == OK);
 
 	free(info);
 }
@@ -1081,7 +1177,7 @@ irq_manager_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	return ret;
 }
 
-void
+static void
 handle_accept(vmid_t client_id, uint16_t seq_num, virq_handle_t handle,
 	      virq_t virq_num)
 {
@@ -1113,7 +1209,7 @@ out:
 	return;
 }
 
-void
+static void
 handle_lend(vmid_t client_id, uint16_t seq_num, vmid_t borrower,
 	    virq_t virq_num, label_t label)
 {
@@ -1163,7 +1259,7 @@ out:
 	return;
 }
 
-void
+static void
 handle_release(vmid_t client_id, uint16_t seq_num, virq_handle_t handle)
 {
 	printf("handle_release: handle(0x%x)\n", handle);
@@ -1190,7 +1286,7 @@ out:
 	return;
 }
 
-void
+static void
 handle_reclaim(vmid_t client_id, uint16_t seq_num, virq_handle_t handle)
 {
 	printf("handle_reclaim: handle(0x%x)\n", handle);
@@ -1218,7 +1314,7 @@ out:
 	return;
 }
 
-void
+static void
 handle_notify(vmid_t client_id, uint16_t seq_num, virq_handle_t handle,
 	      virq_notify_flag_t flags, size_t vmids_cnt,
 	      rm_irq_notify_vmid_t *vmids)
@@ -1304,7 +1400,7 @@ out:
 	rm_standard_reply(client_id, VM_IRQ_NOTIFY, seq_num, notify_err);
 }
 
-void
+static void
 handle_unmap(vmid_t client_id, uint16_t seq_num, size_t virq_num_cnt,
 	     virq_t virq_nums[])
 {
@@ -1320,12 +1416,13 @@ handle_unmap(vmid_t client_id, uint16_t seq_num, size_t virq_num_cnt,
 	rm_standard_reply(client_id, VM_IRQ_UNMAP, seq_num, err);
 }
 
-void
+static void
 dump(vm_irq_manager_t *manager)
 {
 	if (manager != NULL) {
 		printf("=== irq mappings ===\n");
-		dict_t	       *dict     = manager->mapping_dict;
+		dict_t		   *dict     = manager->mapping_dict;
+		count_t		    max_irq  = MAX_IRQ;
 		irq_mapping_info_t *map_info = NULL;
 		int		    fmt_cnt  = 0;
 		const int	    item_cnt = 14;
@@ -1333,11 +1430,11 @@ dump(vm_irq_manager_t *manager)
 		printf("owned: {\n");
 		printf("key: virq_num->hwirq:\n");
 		fmt_cnt = 0;
-		for (dict_key_t virq = 0; virq < dict->capacity; ++virq) {
+		for (dict_key_t virq = 0; virq <= max_irq; ++virq) {
 			map_info = (irq_mapping_info_t *)dict_get(dict, virq);
 			if ((map_info != NULL) && (map_info->is_mapped) &&
 			    (map_info->is_owner)) {
-				printf("%3ld: %3d->%3ld", virq, map_info->virq,
+				printf("%3d: %3d->%3ld", virq, map_info->virq,
 				       map_info->hw_irq_cap);
 				++fmt_cnt;
 
@@ -1356,12 +1453,12 @@ dump(vm_irq_manager_t *manager)
 		printf("lent: {\n");
 		printf("key: virq_num->hwirq:\n");
 		fmt_cnt = 0;
-		for (dict_key_t virq = 0; virq < dict->capacity; ++virq) {
+		for (dict_key_t virq = 0; virq <= max_irq; virq++) {
 			map_info = (irq_mapping_info_t *)dict_get(dict, virq);
 			if ((map_info != NULL) && (!map_info->is_mapped) &&
 			    (map_info->is_owner)) {
-				printf("%3ld: %3d->%#lx\n", virq,
-				       map_info->virq, map_info->hw_irq_cap);
+				printf("%3d: %3d->%#lx\n", virq, map_info->virq,
+				       map_info->hw_irq_cap);
 				++fmt_cnt;
 
 				if (fmt_cnt % item_cnt == 0) {
@@ -1379,12 +1476,12 @@ dump(vm_irq_manager_t *manager)
 		printf("borrowed: {\n");
 		printf("key: virq_num->hwirq:\n");
 		fmt_cnt = 0;
-		for (dict_key_t virq = 0; virq < dict->capacity; ++virq) {
+		for (dict_key_t virq = 0; virq <= max_irq; virq++) {
 			map_info = (irq_mapping_info_t *)dict_get(dict, virq);
 			if ((map_info != NULL) && (map_info->is_mapped) &&
 			    (!map_info->is_owner)) {
-				printf("%3ld: %3d->%#lx\n", virq,
-				       map_info->virq, map_info->hw_irq_cap);
+				printf("%3d: %3d->%#lx\n", virq, map_info->virq,
+				       map_info->hw_irq_cap);
 				++fmt_cnt;
 
 				if (fmt_cnt % item_cnt == 0) {
@@ -1402,12 +1499,13 @@ dump(vm_irq_manager_t *manager)
 
 	printf("=== irq handles ===\n");
 
-	dict_t	       *dict	= handle_manager.handle_dict;
+	dict_t		   *dict	= handle_manager.handle_dict;
+	count_t		    max_handle	= MAX_IRQ_HANDLE;
 	virq_handle_info_t *handle_info = NULL;
-	for (dict_key_t handle = 0; handle < dict->capacity; ++handle) {
+	for (dict_key_t handle = 0; handle <= max_handle; ++handle) {
 		handle_info = (virq_handle_info_t *)dict_get(dict, handle);
 		if (handle_info != NULL) {
-			printf("\thandle(0x%8lx): is_borrowed(%s) "
+			printf("\thandle(0x%8x): is_borrowed(%s) "
 			       "holder_virq(%3d) owner_virq(%3d) hwirq(%#lx) "
 			       "owner(0x%3x) holder(0x%3x)\n",
 			       handle, handle_info->is_borrowed ? "Y" : "N",
@@ -1418,4 +1516,77 @@ dump(vm_irq_manager_t *manager)
 		}
 	}
 	printf("\n\n");
+}
+
+virq_t
+irq_manager_virq_for_hypercall(interrupt_data_t virq)
+{
+	return virq.irq;
+}
+
+virq_t
+irq_manager_get_max_virq(void)
+{
+	return VIRQ_LAST_VALID;
+}
+
+// Release VM's mapped irqs
+// Returns bool to indicate that all mapped irqs have been released
+bool
+vm_reset_handle_release_irqs(vmid_t vmid)
+{
+	virq_handle_t	    handle;
+	virq_handle_info_t *handle_info;
+
+	// release/reclaim virq if it's borrowed, (so it frees handle as well)
+	dict_foreach(handle_info, handle, handle_manager.handle_dict)
+	{
+		if ((handle_info == NULL) || (handle_info->holder != vmid)) {
+			continue;
+		}
+
+		rm_error_t release_ret = irq_manager_release_irq(handle_info);
+		if (release_ret != RM_OK) {
+			(void)printf(
+				"Error: failed to release irq(%u) for VM(%u)\n",
+				handle_info->holder_virq, vmid);
+			continue;
+		}
+
+		rm_error_t reclaim_ret = irq_manager_reclaim_irq(handle_info);
+		if (reclaim_ret != RM_OK) {
+			(void)printf(
+				"Error: failed to reclaim irq(%u) from VM (%u)"
+				" to VM(%u)\n",
+				handle_info->holder_virq, vmid,
+				handle_info->owner);
+		}
+
+		// XXX send notification to owner
+	}
+
+	// free irq manager for this VM now
+	vm_irq_manager_t *manager = irq_manager_lookup(vmid);
+	assert(manager != NULL);
+
+	virq_t		    virq;
+	irq_mapping_info_t *irq_info;
+	dict_foreach(irq_info, virq, manager->mapping_dict)
+	{
+		if (irq_info == NULL) {
+			continue;
+		}
+
+		// We need to also unmap the restricted irqs (is_owner), so that
+		// the irq can be reused after the VM reset
+		if (irq_info->is_mapped) {
+			(void)irq_manager_do_release_irq(manager, irq_info);
+		}
+	}
+
+	dict_deinit(manager->mapping_dict);
+	free(manager);
+	// might need to set vm->vmconfig->irq_manager = NULL;
+
+	return true;
 }

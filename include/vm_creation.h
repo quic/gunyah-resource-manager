@@ -6,6 +6,9 @@
 #define GIC_SPI_NUM 988
 #define GIC_LPI_NUM 8192
 
+error_t
+rm_vm_create(const rm_env_data_t *env_data);
+
 typedef struct {
 	cap_id_t *vic_hwirqs;
 	cap_id_t *vic_msi_sources;
@@ -14,79 +17,68 @@ typedef struct {
 } hwirq_caps_t;
 
 error_t
-hlos_vm_create(hwirq_caps_t hwirq_caps, boot_env_data_t *env_data);
+hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data);
 
 error_t
 hlos_vm_start(void);
 
-error_t
-hlos_map_memory(paddr_t phys, vmaddr_t ipa, size_t size,
-		pgtable_access_t access, pgtable_vm_memtype_t memtype);
+rm_error_t
+vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
+			 resource_handle_t image_mp_handle,
+			 uint64_t image_offset, uint64_t image_size,
+			 uint64_t dt_offset, uint64_t dt_size);
 
-error_t
-hlos_map_io_memory(paddr_t phys, vmaddr_t ipa, size_t size, cap_id_t me_cap);
-
-error_t
-hlos_unmap_io_memory(vmaddr_t addr, size_t size, bool check_mapped,
-		     cap_id_t me_cap);
-
-typedef struct {
-	error_t		     err;
-	uint8_t		     pad_to_paddr[4];
-	paddr_t		     paddr;
-	pgtable_access_t     access;
-	pgtable_vm_memtype_t memtype;
-} hlos_memory_result_t;
-
-hlos_memory_result_t
-hlos_memory_is_mapped(vmaddr_t ipa, size_t size, bool io_memory);
-
-typedef struct {
-	error_t	 err;
-	uint32_t mp_handle;
-} svm_setup_ret_t;
-
-error_t
-svm_create(vmid_t vmid);
-
-svm_setup_ret_t
-svm_setup(vmid_t vmid);
-
-error_t
-svm_poweron(vmid_t vmid);
-
-typedef struct vm_mem_range vm_mem_range_t;
-
-struct vm_mem_range {
-	cap_id_t	me;
-	vmaddr_t	ipa;
-	paddr_t		phys;
-	size_t		size;
-	vm_mem_range_t *node_next;
-	vm_mem_range_t *node_prev;
-};
+typedef struct vm_auth_param {
+	uint32_t auth_param_type;
+	uint32_t auth_param;
+} vm_auth_param_t;
 
 rm_error_t
-svm_add_mem_range(vm_t *svm, cap_id_t me, vmaddr_t ipa, paddr_t phys,
-		  size_t size);
-
-vm_mem_range_t *
-svm_lookup_mem_range(vm_t *svm, vmaddr_t ipa, size_t size);
+vm_creation_auth(vm_t *vm, count_t num_auth_params,
+		 vm_auth_param_t *auth_params);
 
 rm_error_t
-svm_remove_mem_range(vm_t *svm, vm_mem_range_t *mem_range);
+vm_creation_init(vm_t *vm);
+
+void
+svm_takedown(vmid_t vmid);
+
+void
+svm_destroy(vmid_t vmid);
+
+error_t
+svm_create(vm_t *svm);
 
 bool
 vm_creation_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			void *buf, size_t len);
 
 error_t
-vm_creation_process_resource(vmid_t vmid);
+vm_creation_process_resource(vm_t *vm);
 
 typedef struct memparcel memparcel_t;
 
 error_t
-vm_creation_process_memparcel(vmid_t vmid, memparcel_t *mp);
+vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp);
+
+uintptr_result_t
+map_dtb(size_t dtb_offset, size_t dtb_size, uint32_t mp_handle,
+	size_t ipa_size);
 
 error_t
-hlos_vm_setup(boot_env_data_t *env_data);
+unmap_dtb(uint32_t mp_handle);
+
+error_t
+vm_creation_config_vm_info_area(vm_config_t *vmcfg);
+
+error_t
+vm_creation_map_vm_info_area(vm_config_t *vmcfg);
+
+void
+vm_creation_vm_info_area_teardown(vm_config_t *vmcfg);
+
+bool
+vm_reset_handle_cleanup(vm_t *vm);
+
+bool
+vm_reset_handle_destroy(vm_t *vm);

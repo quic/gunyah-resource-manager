@@ -228,16 +228,21 @@ gunyah_hyp_addrspace_attach_thread(cap_id_t addrspace, cap_id_t thread);
 
 error_t
 gunyah_hyp_addrspace_map(cap_id_t addrspace, cap_id_t memextent, vmaddr_t vbase,
-			 memextent_mapping_attrs_t map_attrs);
+			 memextent_mapping_attrs_t map_attrs,
+			 addrspace_map_flags_t map_flags, size_t offset,
+			 size_t size);
 
 error_t
 gunyah_hyp_addrspace_unmap(cap_id_t addrspace, cap_id_t memextent,
-			   vmaddr_t vbase);
+			   vmaddr_t vbase, addrspace_map_flags_t map_flags,
+			   size_t offset, size_t size);
 
 error_t
 gunyah_hyp_addrspace_update_access(cap_id_t addrspace, cap_id_t memextent,
 				   vmaddr_t		    vbase,
-				   memextent_access_attrs_t access_attrs);
+				   memextent_access_attrs_t access_attrs,
+				   addrspace_map_flags_t    map_flags,
+				   size_t offset, size_t size);
 
 error_t
 gunyah_hyp_addrspace_configure(cap_id_t addrspace, vmid_t vmid);
@@ -247,7 +252,8 @@ gunyah_hyp_addrspace_attach_vdma(cap_id_t addrspace, cap_id_t dma_device,
 				 index_t index);
 
 error_t
-gunyah_hyp_memextent_unmap_all(cap_id_t memextent);
+gunyah_hyp_memextent_modify(cap_id_t memextent, memextent_modify_flags_t flags,
+			    size_t offset, size_t size);
 
 error_t
 gunyah_hyp_memextent_configure(cap_id_t memextent, paddr_t phys_base,
@@ -263,11 +269,11 @@ error_t
 gunyah_hyp_vcpu_configure(cap_id_t cap_id, vcpu_option_flags_t vcpu_options);
 
 error_t
-gunyah_hyp_vcpu_poweron(cap_id_t cap_id, uint64_t entry_point,
-			uint64_t context);
+gunyah_hyp_vcpu_poweron(cap_id_t cap_id, uint64_t entry_point, uint64_t context,
+			vcpu_poweron_flags_t flags);
 
 error_t
-gunyah_hyp_vcpu_poweroff(cap_id_t cap_id);
+gunyah_hyp_vcpu_poweroff(cap_id_t cap_id, vcpu_poweroff_flags_t flags);
 
 error_t
 gunyah_hyp_vcpu_kill(cap_id_t cap_id);
@@ -336,3 +342,81 @@ gunyah_hyp_prng_get_entropy(count_t num_bytes);
 
 error_t
 gunyah_hyp_cspace_revoke_caps_from(cap_id_t src_cspace, cap_id_t master_cap);
+
+typedef struct gunyah_hyp_addrspace_lookup_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	size_t _Alignas(register_t) offset;
+	size_t _Alignas(register_t) size;
+	memextent_mapping_attrs_t _Alignas(register_t) map_attrs;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+} gunyah_hyp_addrspace_lookup_result_t;
+
+gunyah_hyp_addrspace_lookup_result_t
+gunyah_hyp_addrspace_lookup(cap_id_t addrspace, cap_id_t memextent,
+			    vmaddr_t vbase, size_t size);
+
+error_t
+gunyah_hyp_addrspace_configure_info_area(cap_id_t addrspace,
+					 cap_id_t info_area_me, vmaddr_t ipa);
+
+error_t
+gunyah_hyp_vcpu_bind_virq(cap_id_t vcpu, cap_id_t vic, virq_t virq,
+			  vcpu_virq_type_t virq_type);
+
+error_t
+gunyah_hyp_vcpu_unbind_virq(cap_id_t vcpu, vcpu_virq_type_t virq_type);
+
+error_t
+gunyah_hyp_addrspace_configure_vmmio(cap_id_t addrspace, vmaddr_t vbase,
+				     size_t			    size,
+				     addrspace_vmmio_configure_op_t op);
+
+error_t
+gunyah_hyp_memextent_donate(memextent_donate_options_t options, cap_id_t from,
+			    cap_id_t to, size_t offset, size_t size);
+
+error_t
+gunyah_hyp_addrspace_attach_vdevice(cap_id_t addrspace, cap_id_t vdevice,
+				    index_t index, vmaddr_t vbase, size_t size);
+
+error_t
+gunyah_hyp_vcpu_register_write(cap_id_t vcpu, vcpu_register_set_t register_set,
+			       index_t register_index, uint64_t value);
+
+typedef struct gunyah_hyp_vcpu_run_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	vcpu_run_state_t _Alignas(register_t) vcpu_state;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+	register_t _Alignas(register_t) state_data_0;
+	register_t _Alignas(register_t) state_data_1;
+	register_t _Alignas(register_t) state_data_2;
+} gunyah_hyp_vcpu_run_result_t;
+
+gunyah_hyp_vcpu_run_result_t
+gunyah_hyp_vcpu_run(cap_id_t cap_id, register_t resume_data_0,
+		    register_t resume_data_1, register_t resume_data_2);
+
+error_t
+gunyah_hyp_vpm_group_configure(cap_id_t			vpm_group,
+			       vpm_group_option_flags_t flags);
+
+error_t
+gunyah_hyp_vgic_set_mpidr_mapping(cap_id_t vic, uint64_t mask,
+				  count_t aff0_shift, count_t aff1_shift,
+				  count_t aff2_shift, count_t aff3_shift,
+				  bool mt);
+
+typedef struct gunyah_hyp_vcpu_run_check_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	vcpu_run_state_t _Alignas(register_t) vcpu_state;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+	register_t _Alignas(register_t) state_data_0;
+	register_t _Alignas(register_t) state_data_1;
+	register_t _Alignas(register_t) state_data_2;
+} gunyah_hyp_vcpu_run_check_result_t;
+
+gunyah_hyp_vcpu_run_check_result_t
+gunyah_hyp_vcpu_run_check(cap_id_t cap_id);

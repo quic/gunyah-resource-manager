@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-#define LOG(fmt, ...) printf(fmt, __VA_ARGS__)
+#define LOG(fmt, ...) (void)printf(fmt, __VA_ARGS__)
+
+#define LOG_LOC(msg) (void)printf("%s %d: %s\n", __FILE__, __LINE__, msg)
+#define LOG_ERR(err) (void)printf("Error: %s %d: %d\n", __FILE__, __LINE__, err)
 
 typedef uint32_t rm_error_t;
 
