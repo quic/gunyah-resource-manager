@@ -10,10 +10,6 @@ The Resource Manager provides a run-time service for secure dynamic VM loading a
 
 The Resource Manager is built as a bare metal VM with musl libc and requires the [Gunyah libc Runtime](https://github.com/quic/gunyah-c-runtime).
 
-## Limitations
-
-This release of the Resource Manager is limited to setting up a primary VM. Future releases will provide the ability to load and manage secondary VMs.
-
 ## License
 
 SPDX-License-Identifier: BSD-3-Clause
