@@ -131,6 +131,12 @@
             "**/*.sh",
             "**/*.rs"
           ],
+          "skip-paths-matching": {
+            "patterns": [
+              "tools/cpptest/gunyahkw.h",
+              "tools/misc/convert-utf-8.sh"
+            ]
+          },
           "lineCount": 20,
           "patterns": [
             "© 20[2-9][0-9] Qualcomm Innovation Center, Inc",
