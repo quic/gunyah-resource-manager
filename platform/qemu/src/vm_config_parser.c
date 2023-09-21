@@ -82,7 +82,7 @@ parse_segments(vm_config_parser_data_t *vd, void *fdt, int node_ofs)
 
 	if (fdt_getprop_s32(fdt, segments_ofs, "ramdisk",
 			    &vd->platform.ramfs_idx) != OK) {
-		printf("Warning: ramdisk segment index\n");
+		(void)printf("Warning: ramdisk segment index\n");
 
 		vd->platform.ramfs_idx = -1;
 	}

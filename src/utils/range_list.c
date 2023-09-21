@@ -354,15 +354,15 @@ insert_range(range_list_t *list, range_t *left, range_t *new_range,
 		assert(!util_add_overflows(right->size, size));
 		right->size += size;
 	} else {
-		range_t *insert_range = calloc(1, sizeof(*new_range));
-		if (insert_range == NULL) {
+		range_t *insert_range_temp = calloc(1, sizeof(*new_range));
+		if (insert_range_temp == NULL) {
 			ret = ERROR_NOMEM;
 			goto out;
 		}
 
-		*insert_range = *new_range;
+		*insert_range_temp = *new_range;
 
-		insert_after_left_node(list, left, insert_range);
+		insert_after_left_node(list, left, insert_range_temp);
 	}
 
 out:
@@ -479,10 +479,10 @@ range_list_find_range_by_region(range_list_t *list, uint64_t region_base,
 		}
 
 		size_t remaining_size =
-			cur->base_address + (cur->size - 1) >= base_address
-				? cur->base_address + (cur->size - 1) -
-					  base_address + 1
-				: 0;
+			((cur->base_address + (cur->size - 1U)) >= base_address)
+				? ((cur->base_address + (cur->size - 1U) + 1U) -
+				   base_address)
+				: 0U;
 
 		if (remaining_size >= range_size) {
 			ret.err		 = OK;
@@ -525,7 +525,8 @@ range_list_find_range(range_list_t *allocator, uint64_t base_address,
 					? cur->size - (ret_address -
 						       cur->base_address)
 					: 0UL;
-			if (size <= remaining_size) {
+			if ((size <= remaining_size) &&
+			    (cur->data == INVALID_DATA)) {
 				ret.err		   = OK;
 				ret.base_address   = ret_address;
 				ret.selected_range = cur;
@@ -608,10 +609,11 @@ range_list_update(range_list_t *list, uint64_t base_address, size_t size,
 	}
 
 	// make sure selected range covers the whole range requested to update
-	if (((selected_range->base_address != 0) &&
-	     (base_address + (size - 1) < (selected_range->base_address - 1))) ||
+	if (((selected_range->base_address != 0U) &&
+	     ((base_address + (size - 1U)) <
+	      (selected_range->base_address - 1U))) ||
 	    (base_address >
-	     (selected_range->base_address + (selected_range->size - 1)))) {
+	     (selected_range->base_address + (selected_range->size - 1U)))) {
 		ret = ERROR_NORESOURCES;
 		goto out;
 	}
@@ -690,32 +692,35 @@ range_list_dump(range_list_t *list, const char *prefix)
 	range_t *cur;
 
 	if (is_empty(list->range_list)) {
-		printf("%sEmpty list ", prefix);
+		(void)printf("%sEmpty list ", prefix);
 #ifndef NDEBUG
-		printf("%snode count(%zu)\n", prefix, list->range_node_cnt);
+		(void)printf("%snode count(%zu)\n", prefix,
+			     list->range_node_cnt);
 #else
-		printf("\n");
+		(void)printf("\n");
 #endif
 	} else {
-		printf("%sRange list ", prefix);
+		(void)printf("%sRange list ", prefix);
 #ifndef NDEBUG
-		printf("%snode count(%zu)\n", prefix, list->range_node_cnt);
+		(void)printf("%snode count(%zu)\n", prefix,
+			     list->range_node_cnt);
 #else
-		printf("\n");
+		(void)printf("\n");
 #endif
 		loop_list(cur, &list->range_list, range_)
 		{
 			if (cur->data != INVALID_DATA) {
-				printf("%s\ttagged(%lx) [0x%lx, 0x%lx), ",
-				       prefix, cur->data, cur->base_address,
-				       cur->base_address + cur->size);
+				(void)printf("%s\ttagged(%lx) [0x%lx, 0x%lx), ",
+					     prefix, cur->data,
+					     cur->base_address,
+					     cur->base_address + cur->size);
 			} else {
-				printf("%s\t[0x%lx, 0x%lx), ", prefix,
-				       cur->base_address,
-				       cur->base_address + cur->size);
+				(void)printf("%s\t[0x%lx, 0x%lx), ", prefix,
+					     cur->base_address,
+					     cur->base_address + cur->size);
 			}
 		}
-		printf("\n");
+		(void)printf("\n");
 	}
 }
 #endif

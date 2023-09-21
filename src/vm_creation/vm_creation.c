@@ -39,6 +39,7 @@
 #include <platform_dt.h>
 #include <platform_vm_config.h>
 #include <platform_vm_config_parser.h>
+#include <random.h>
 #include <rm-rpc-fifo.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
@@ -87,10 +88,10 @@ accept_iomem_memparcel(vmid_t vmid, memparcel_t *mp,
 		       struct vdevice_iomem *config);
 
 static error_t
-accept_memparcel_fixed(vmid_t vmid, const memparcel_t *mp, vmaddr_t ipa,
+accept_memparcel_fixed(const vm_t *vm, const memparcel_t *mp, vmaddr_t ipa,
 		       size_t sz);
 
-static error_t
+static rm_error_t
 accept_memparcel_private(vm_t *vm, const memparcel_t *mp);
 
 static error_t
@@ -98,16 +99,6 @@ process_memparcels(vm_t *vm);
 
 static error_t
 process_cfgcpio(vm_t *vm);
-
-typedef struct {
-	error_t err;
-	uint8_t err_padding[4];
-
-	uint64_t seed;
-} get_random_seed_ret_t;
-
-static get_random_seed_ret_t
-get_random_seed(void);
 
 static error_t
 patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb);
@@ -410,6 +401,7 @@ vm_creation_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		handled = true;
 		break;
 	default:
+		// all VM creation msg_id handled
 		break;
 	}
 
@@ -905,13 +897,11 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 		// reserved-memory node for it. The check for this is simple
 		// because getting it wrong can't compromise the VM; it will
 		// only reduce the available private memory.
-		vmaddr_result_t ipa_ret =
-			memparcel_get_mapped_ipa(mp, vmid, 0U);
-		if ((ipa_ret.e == OK) &&
-		    (ipa_ret.r >= cur_vm->vm_config->mem_ipa_base) &&
-		    ((ipa_ret.r - cur_vm->vm_config->mem_ipa_base) <
-		     cur_vm->mem_size)) {
+		if (memparcel_is_private(mp, vmid)) {
 #if VM_CREATION_VERBOSE_DEBUG
+			vmaddr_result_t ipa_ret =
+				memparcel_get_mapped_ipa(mp, vmid, 0U);
+			assert(ipa_ret.e == OK);
 			(void)printf("memparcel %#" PRIx32 " (%#" PRIx32 ")"
 				     " is private memory: %#zx (%#zx)\n",
 				     memparcel_get_handle(mp),
@@ -1033,7 +1023,8 @@ create_memory_node(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 			for (count_t i = ranges_size; i < new_size; i++) {
 				new_ranges[i] = (dto_addrrange_t){ 0 };
 			}
-			ranges = new_ranges;
+			ranges_size = new_size;
+			ranges	    = new_ranges;
 		}
 
 		// Fill in the range array
@@ -1412,7 +1403,7 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 
 		// Patch the region node with the memparcel's RM handle
 		char path[128];
-		snprintf(path, sizeof(path), "/reserved-memory/%s", name);
+		(void)snprintf(path, sizeof(path), "/reserved-memory/%s", name);
 		dto_modify_begin_by_path(dto, path);
 
 		dto_property_add_u32(dto, "qcom,rm-mem-handle",
@@ -1743,7 +1734,7 @@ create_dt_nodes(dto_t *dto, vmid_t vmid)
 
 	dto_property_add_string(dto, "qcom,image-name", cur_vm->name);
 
-	if (cur_vm->uri_len != 0) {
+	if (cur_vm->uri_len != 0U) {
 		dto_property_add_string(dto, "qcom,vm-uri", cur_vm->uri);
 	}
 
@@ -1874,7 +1865,7 @@ vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp)
 			if (!need_allocate) {
 				if (!memparcel_is_shared(mp, vm->vmid)) {
 					ret = accept_memparcel_fixed(
-						vm->vmid, mp, base_ipa,
+						vm, mp, base_ipa,
 						memparcel_get_size(mp));
 					if (ret != OK) {
 						(void)printf(
@@ -1924,8 +1915,11 @@ process_image_memparcel(vm_t *vm)
 				       .rights = MEM_RIGHTS_RWX } };
 	uint8_t	    trans_type	 = TRANS_TYPE_LEND;
 	uint8_t	    accept_flags = MEM_ACCEPT_FLAG_DONE |
-			       MEM_ACCEPT_FLAG_MAP_CONTIGUOUS |
 			       MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
+
+	if (!vm->vm_config->mem_map_direct) {
+		accept_flags |= MEM_ACCEPT_FLAG_MAP_CONTIGUOUS;
+	}
 
 	if (!vm->vm_config->mem_unsanitized) {
 		accept_flags |= MEM_ACCEPT_FLAG_SANITIZE;
@@ -2010,9 +2004,13 @@ process_firmware_memparcel(vm_t *vm)
 	acl_entry_t acl_lend[] = {
 		{ .vmid = vm->vmid, .rights = MEM_RIGHTS_RWX },
 	};
-	uint8_t accept_flags =
-		MEM_ACCEPT_FLAG_DONE | MEM_ACCEPT_FLAG_MAP_CONTIGUOUS |
-		MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR | MEM_ACCEPT_FLAG_SANITIZE;
+	uint8_t accept_flags = MEM_ACCEPT_FLAG_DONE |
+			       MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR |
+			       MEM_ACCEPT_FLAG_SANITIZE;
+
+	if (!vm->vm_config->mem_map_direct) {
+		accept_flags |= MEM_ACCEPT_FLAG_MAP_CONTIGUOUS;
+	}
 
 	err = memparcel_accept(vm->vmid, util_array_size(acl_lend),
 			       util_array_size(sgl_accept), 0U, acl_lend,
@@ -2071,25 +2069,17 @@ process_memparcels(vm_t *vm)
 
 	// Auto-accept any memparcel that can be used as private memory
 	foreach_memparcel_by_target_vmid (mp, vm->vmid) {
-		uint8_result_t vm_rights_ret =
-			memparcel_get_vm_rights(mp, vm->vmid);
-
 		if (!memparcel_is_shared(mp, vm->vmid) &&
-		    (memparcel_get_label(mp) == 0U) &&
-		    (memparcel_get_trans_type(mp) != TRANS_TYPE_SHARE) &&
-		    (memparcel_get_mem_type(mp) == MEM_TYPE_NORMAL) &&
-		    (vm_rights_ret.e == OK) &&
-		    (vm_rights_ret.r == MEM_RIGHTS_RWX)) {
-			ret = accept_memparcel_private(vm, mp);
-			if (ret != OK) {
+		    memparcel_is_private(mp, vm->vmid)) {
+			rm_ret = accept_memparcel_private(vm, mp);
+			if (rm_ret != RM_OK) {
 				(void)printf(
 					"Warning: accept private mp %#" PRIx32
 					" failed: %d\n",
-					memparcel_get_handle(mp), (int)ret);
+					memparcel_get_handle(mp), rm_ret);
 			}
 		}
 	}
-	ret = OK;
 
 	if (vm->mem_size < vm->vm_config->mem_size_min) {
 		(void)printf(
@@ -2209,7 +2199,7 @@ accept_iomem_memparcel(vmid_t vmid, memparcel_t *mp,
 				      (count_t)config->rm_sglist_len);
 	// validate physical address here
 	// FIXME: do we allow to provide partial sgl list?
-	if ((region_cnt != 0) && (region_cnt != config->rm_sglist_len)) {
+	if ((region_cnt != 0U) && (region_cnt != config->rm_sglist_len)) {
 		ret = ERROR_DENIED;
 		goto out;
 	}
@@ -2263,10 +2253,11 @@ out:
 }
 
 static error_t
-accept_memparcel_fixed(vmid_t vmid, const memparcel_t *mp, vmaddr_t ipa,
+accept_memparcel_fixed(const vm_t *vm, const memparcel_t *mp, vmaddr_t ipa,
 		       size_t sz)
 {
-	error_t ret = OK;
+	error_t ret  = OK;
+	vmid_t	vmid = vm->vmid;
 
 	// FIXME: should we allowed different rights?
 	acl_entry_t acl[1U] = { { .vmid = vmid, .rights = MEM_RIGHTS_RW } };
@@ -2274,9 +2265,17 @@ accept_memparcel_fixed(vmid_t vmid, const memparcel_t *mp, vmaddr_t ipa,
 	count_t region_cnt = memparcel_get_num_regions(mp);
 	assert(region_cnt > 0);
 
-	sgl_entry_t sgl[1] = { { .ipa = ipa, .size = sz } };
+	sgl_entry_t sgl[1]  = { { .ipa = ipa, .size = sz } };
+	uint16_t    sgl_len = util_array_size(sgl);
 
-	uint8_t flags = MEM_ACCEPT_FLAG_DONE | MEM_ACCEPT_FLAG_MAP_CONTIGUOUS;
+	uint8_t flags = MEM_ACCEPT_FLAG_DONE;
+
+	if (vm->vm_config->mem_map_direct) {
+		// Ignore the fixed IPA.
+		sgl_len = 0U;
+	} else {
+		flags |= MEM_ACCEPT_FLAG_MAP_CONTIGUOUS;
+	}
 
 	vmid_t owner = memparcel_get_owner(mp);
 
@@ -2305,9 +2304,9 @@ accept_memparcel_fixed(vmid_t vmid, const memparcel_t *mp, vmaddr_t ipa,
 		flags |= MEM_ACCEPT_FLAG_SANITIZE;
 	}
 
-	rm_error_t rm_err = memparcel_accept(vmid, 1U, 1U, 0U, acl, sgl, NULL,
-					     0U, memparcel_get_handle(mp), 0U,
-					     memparcel_get_mem_type(mp),
+	rm_error_t rm_err = memparcel_accept(vmid, 1U, sgl_len, 0U, acl, sgl,
+					     NULL, 0U, memparcel_get_handle(mp),
+					     0U, memparcel_get_mem_type(mp),
 					     memparcel_get_trans_type(mp),
 					     flags);
 	if (rm_err != RM_OK) {
@@ -2320,15 +2319,15 @@ out:
 	return ret;
 }
 
-static error_t
+static rm_error_t
 accept_memparcel_private(vm_t *vm, const memparcel_t *mp)
 {
-	size_t	size = memparcel_get_size(mp);
-	error_t ret  = OK;
+	size_t	   size = memparcel_get_size(mp);
+	rm_error_t ret	= RM_OK;
 
 	if (util_add_overflows(size, vm->mem_size) ||
 	    ((size + vm->mem_size) > vm->vm_config->mem_size_max)) {
-		ret = ERROR_ADDR_OVERFLOW;
+		ret = RM_ERROR_ARGUMENT_INVALID;
 		(void)printf("accept private mp: too large; %zu > %zu - %zu\n",
 			     size, vm->vm_config->mem_size_max, vm->mem_size);
 		goto out;
@@ -2338,24 +2337,44 @@ accept_memparcel_private(vm_t *vm, const memparcel_t *mp)
 		.ipa  = vm->vm_config->mem_ipa_base + vm->mem_size,
 		.size = size,
 	} };
+	uint16_t    sgl_len	   = util_array_size(sgl_accept);
 
 	acl_entry_t acl[1U]	 = { { .vmid   = vm->vmid,
 				       .rights = MEM_RIGHTS_RWX } };
+	uint8_t	    trans_type	 = TRANS_TYPE_LEND;
 	uint8_t	    accept_flags = MEM_ACCEPT_FLAG_DONE |
-			       MEM_ACCEPT_FLAG_MAP_CONTIGUOUS |
 			       MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
+
+	if (vm->vm_config->mem_map_direct) {
+		// The memparcel may be scattered and/or discontiguous with the
+		// image memparcel; ignore the SGL.
+		sgl_len = 0U;
+	} else {
+		accept_flags |= MEM_ACCEPT_FLAG_MAP_CONTIGUOUS;
+	}
 
 	if (!vm->vm_config->mem_unsanitized) {
 		accept_flags |= MEM_ACCEPT_FLAG_SANITIZE;
 	}
 
-	rm_error_t rm_err =
-		memparcel_accept(vm->vmid, 1U, 1U, 0U, acl, sgl_accept, NULL,
-				 0U, vm->mem_mp_handle, 0U, MEM_TYPE_NORMAL,
-				 TRANS_TYPE_LEND, accept_flags);
-	if (rm_err != RM_OK) {
-		ret = ERROR_DENIED;
-	} else {
+#if defined(CONFIG_DEBUG) && defined(PLATFORM_VM_DEBUG_ACCESS_ALLOWED) &&      \
+	PLATFORM_VM_DEBUG_ACCESS_ALLOWED
+	if (!platform_get_security_state()) {
+		// See process_image_memparcel().
+		trans_type = memparcel_get_trans_type(mp);
+		if (trans_type == TRANS_TYPE_DONATE) {
+			ret = RM_ERROR_ARGUMENT_INVALID;
+			goto out;
+		}
+
+		accept_flags &= ~MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
+	}
+#endif
+
+	ret = memparcel_accept(vm->vmid, 1U, sgl_len, 0U, acl, sgl_accept, NULL,
+			       0U, memparcel_get_handle(mp), 0U,
+			       MEM_TYPE_NORMAL, trans_type, accept_flags);
+	if (ret == RM_OK) {
 		vm->mem_size += size;
 	}
 
@@ -2521,7 +2540,7 @@ process_cfgcpio(vm_t *vm)
 			size_t i = file_len - 1U;
 			while (isspace((int)duplicate[i])) {
 				duplicate[i] = '\0';
-				if (i == 0) {
+				if (i == 0U) {
 					break;
 				}
 
@@ -2554,30 +2573,6 @@ out_unmapped:
 	if (ret != OK) {
 		(void)printf("process_cfgcpio failed, ret = %d\n", (int)ret);
 	}
-	return ret;
-}
-
-extern gunyah_hyp_hypervisor_identify_result_t hyp_id;
-
-static get_random_seed_ret_t
-get_random_seed(void)
-{
-	get_random_seed_ret_t ret = { .err = ERROR_UNIMPLEMENTED };
-
-	if (hyp_api_flags0_get_prng(&hyp_id.api_flags_0)) {
-		gunyah_hyp_prng_get_entropy_result_t prng;
-		do {
-			prng = gunyah_hyp_prng_get_entropy(sizeof(uint32_t) *
-							   2);
-		} while (prng.error == ERROR_BUSY);
-
-		ret.err = prng.error;
-		if (prng.error == OK) {
-			ret.seed = (uint64_t)prng.data0;
-			ret.seed |= (uint64_t)prng.data1 << 32;
-		}
-	}
-
 	return ret;
 }
 
@@ -2656,7 +2651,7 @@ create_iomem_nodes(dto_t *dto, vmid_t vmid)
 			ret = ERROR_ARGUMENT_SIZE;
 			goto out;
 		}
-		count_t regs_size = region_cnt * 2 * 2;
+		count_t regs_size = region_cnt * 2U * 2U;
 
 		regs = calloc(regs_size, sizeof(regs[0]));
 		if (regs == NULL) {
@@ -2664,8 +2659,9 @@ create_iomem_nodes(dto_t *dto, vmid_t vmid)
 			goto out;
 		}
 		for (index_t i = 0; i < region_cnt; ++i) {
-			fdt_fill_u64(&regs[i * 4], memparcel_get_phys(mp, i).r);
-			fdt_fill_u64(&regs[i * 4 + 2],
+			fdt_fill_u64(&regs[i * 4U],
+				     memparcel_get_phys(mp, i).r);
+			fdt_fill_u64(&regs[(i * 4U) + 2U],
 				     memparcel_get_region_size(mp, i).r);
 		}
 
@@ -2726,10 +2722,10 @@ patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb)
 {
 	error_t ret = OK;
 
-	get_random_seed_ret_t seed_ret = get_random_seed();
-	if (seed_ret.err != OK) {
+	uint64_result_t seed = random_get_entropy64();
+	if (seed.e != OK) {
 		(void)printf("vm %d, failed to get random seed\n", vm->vmid);
-		ret = seed_ret.err;
+		ret = seed.e;
 		goto out;
 	}
 
@@ -2743,7 +2739,7 @@ patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb)
 
 	CHECK_DTO(ret, dto_modify_begin_by_path(dto, "/chosen"));
 
-	CHECK_DTO(ret, dto_property_add_u64(dto, "kaslr-seed", seed_ret.seed));
+	CHECK_DTO(ret, dto_property_add_u64(dto, "kaslr-seed", seed.r));
 
 	if (vm->ramfs_size > 0U) {
 		assert(!util_add_overflows(vm->ramfs_offset,
@@ -2762,7 +2758,7 @@ patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb)
 						    (uint32_t)ramfs_ipa_end));
 	}
 
-	if ((vm->cfgcpio_cmdline != NULL) && (vm->cfgcpio_cmdline_len > 0)) {
+	if ((vm->cfgcpio_cmdline != NULL) && (vm->cfgcpio_cmdline_len > 0U)) {
 		char	   *bootargs_total = NULL;
 		const char *bootargs	   = NULL;
 		int	    bootargs_len   = 0;

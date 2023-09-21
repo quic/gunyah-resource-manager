@@ -54,7 +54,7 @@ vector_init_internal(count_t init_capacity, count_t capacity_step_sz,
 
 	ret->element_sz = element_sz;
 
-	if (init_capacity == 0) {
+	if (init_capacity == 0U) {
 		ret->capacity = DEFAULT_INIT_CAPACITY;
 	} else {
 		ret->capacity = init_capacity;
@@ -66,7 +66,7 @@ vector_init_internal(count_t init_capacity, count_t capacity_step_sz,
 		goto err1;
 	}
 
-	if (capacity_step_sz == 0) {
+	if (capacity_step_sz == 0U) {
 		ret->capacity_step_sz = DEFAULT_CAPACITY_STEP;
 	} else {
 		ret->capacity_step_sz = capacity_step_sz;
@@ -82,14 +82,10 @@ vector_init_internal(count_t init_capacity, count_t capacity_step_sz,
 	goto out;
 
 err2:
-	if (ret->data != NULL) {
-		free(ret->data);
-	}
+	free(ret->data);
 err1:
-	if (ret != NULL) {
-		free(ret);
-		ret = NULL;
-	}
+	free(ret);
+	ret = NULL;
 out:
 	return ret;
 }
@@ -117,7 +113,7 @@ vector_push_back_internal(vector_t *vector, const void *element)
 {
 	error_t e = OK;
 
-	if (vector->data == NULL) {
+	if ((vector == NULL) || (vector->data == NULL)) {
 		e = ERROR_NOMEM;
 		goto err;
 	}
@@ -128,7 +124,7 @@ vector_push_back_internal(vector_t *vector, const void *element)
 
 	uintptr_t base	 = (uintptr_t)vector->data;
 	size_t	  offset = vector->elements * vector->element_sz;
-	memcpy((void *)(base + offset), element, vector->element_sz);
+	(void)memcpy((void *)(base + offset), element, vector->element_sz);
 	vector->elements++;
 
 err:
@@ -145,7 +141,7 @@ vector_pop_back_internal(vector_t *vector)
 static void *
 vector_pop_back_threadsafe_internal(vector_t *vector, void *tmp)
 {
-	if (vector->elements == 0) {
+	if (vector->elements == 0U) {
 		tmp = NULL;
 		goto out;
 	}
@@ -159,45 +155,12 @@ vector_pop_back_threadsafe_internal(vector_t *vector, void *tmp)
 	size_t	  offset = vector->elements * vector->element_sz;
 
 	void *ret = (void *)(base + offset);
-	memcpy(tmp, ret, vector->element_sz);
+	(void)memcpy(tmp, ret, vector->element_sz);
 
 	(void)vector_resize(vector);
 
 out:
 	return tmp;
-}
-
-error_t
-vector_insert_internal(vector_t *vector, index_t idx, const void *element)
-{
-	error_t e = OK;
-
-	if (vector->data == NULL) {
-		e = ERROR_NOMEM;
-		goto err;
-	}
-	assert(vector->elements > idx);
-
-	e = vector_resize(vector);
-	if (e != OK) {
-		goto err;
-	}
-
-	size_t sz = vector->elements - idx;
-	sz *= vector->element_sz;
-
-	uintptr_t base	     = (uintptr_t)vector->data;
-	size_t	  offset_dst = (idx + 1) * vector->element_sz;
-	size_t	  offset_src = idx * vector->element_sz;
-
-	memcpy((void *)(base + offset_dst), (void *)(base + offset_src), sz);
-
-	// set value to element at idx
-	memcpy((void *)(base + offset_src), element, vector->element_sz);
-
-	vector->elements++;
-err:
-	return e;
 }
 
 void
@@ -210,16 +173,16 @@ vector_delete_keep_order(vector_t *vector, index_t idx)
 	}
 	assert(vector->elements > idx);
 
-	size_t sz = vector->elements - (idx + 1);
+	size_t sz = vector->elements - ((size_t)idx + 1U);
 	sz *= vector->element_sz;
 
 	uintptr_t base	     = (uintptr_t)vector->data;
-	size_t	  offset_src = (idx + 1) * vector->element_sz;
+	size_t	  offset_src = ((size_t)idx + 1U) * vector->element_sz;
 	size_t	  offset_dst = idx * vector->element_sz;
 
-	if (sz != 0) {
-		memcpy((void *)(base + offset_dst), (void *)(base + offset_src),
-		       sz);
+	if (sz != 0U) {
+		(void)memcpy((void *)(base + offset_dst),
+			     (void *)(base + offset_src), sz);
 	}
 	vector->elements--;
 
@@ -260,12 +223,12 @@ vector_swap_threadsafe(vector_t *vector, index_t idx1, index_t idx2, void *tmp)
 	size_t	  offset2 = idx2 * vector->element_sz;
 
 	// 1 -> tmp
-	memmove(tmp, (void *)(base + offset1), vector->element_sz);
+	(void)memmove(tmp, (void *)(base + offset1), vector->element_sz);
 	// 2 -> 1
-	memmove((void *)(base + offset1), (void *)(base + offset2),
-		vector->element_sz);
+	(void)memmove((void *)(base + offset1), (void *)(base + offset2),
+		      vector->element_sz);
 	// tmp -> 2
-	memmove((void *)(base + offset2), tmp, vector->element_sz);
+	(void)memmove((void *)(base + offset2), tmp, vector->element_sz);
 
 out:
 	return;
@@ -306,7 +269,7 @@ vector_resize(vector_t *vector)
 		goto out;
 	}
 
-	if ((capacity > 0) && (capacity != vector->capacity)) {
+	if ((capacity > 0U) && (capacity != vector->capacity)) {
 		size_t sz    = capacity * vector->element_sz;
 		vector->data = realloc(vector->data, sz);
 		if (vector->data == NULL) {
@@ -343,13 +306,13 @@ out:
 index_t
 vector_end(const vector_t *vector)
 {
-	return vector->elements != 0 ? (index_t)(vector->elements - 1) : 0U;
+	return (vector->elements != 0U) ? (index_t)(vector->elements - 1U) : 0U;
 }
 
 bool
 vector_is_empty(const vector_t *vector)
 {
-	return vector->elements == 0;
+	return vector->elements == 0U;
 }
 
 bool

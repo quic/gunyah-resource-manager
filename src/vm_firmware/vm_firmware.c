@@ -274,8 +274,8 @@ bool
 vm_firmware_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			void *buf, size_t len)
 {
-	bool	   handled = false;
-	rm_error_t err	   = RM_ERROR_UNIMPLEMENTED;
+	bool	   handled;
+	rm_error_t err = RM_ERROR_UNIMPLEMENTED;
 
 	switch (msg_id) {
 	case FW_MILESTONE:
@@ -288,6 +288,7 @@ vm_firmware_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		break;
 	default:
 		// Not a firmware command
+		handled = false;
 		break;
 	}
 
@@ -393,26 +394,31 @@ vm_firmware_copy_to_vm(vm_t *vm)
 
 	if (fw_data->size > vm->fw_size) {
 		ret = RM_ERROR_MEM_INVALID;
+		LOG_ERR(ret);
+		goto out;
 	}
 
-	uintptr_result_t addr_r =
-		memparcel_map_rm(vm->fw_mp_handle, vm->fw_offset, vm->fw_size);
+	uintptr_result_t addr_r = memparcel_map_rm(
+		vm->fw_mp_handle, vm->fw_offset, fw_data->size);
 	if (addr_r.e != OK) {
 		ret = rm_error_from_hyp(addr_r.e);
 		LOG_ERR(ret);
 		goto out;
 	}
-	uint8_t *temp_fw_ptr = (uint8_t *)addr_r.r;
 
+	uint8_t *temp_fw_ptr = (uint8_t *)addr_r.r;
 	(void)memcpy(temp_fw_ptr, fw_data->image, fw_data->size);
-	if (vm->fw_size > fw_data->size) {
-		(void)memset(temp_fw_ptr + fw_data->size, 0,
-			     vm->fw_size - fw_data->size);
-	}
-	cache_clean_by_va(temp_fw_ptr, vm->fw_size);
+	cache_clean_by_va(temp_fw_ptr, fw_data->size);
 
 	error_t err = memparcel_unmap_rm(vm->fw_mp_handle);
 	assert(err == OK);
+
+	if (vm->fw_size > fw_data->size) {
+		err = memparcel_sanitize(vm->fw_mp_handle,
+					 vm->fw_offset + fw_data->size,
+					 vm->fw_size - fw_data->size);
+		assert(err == OK);
+	}
 
 	ret = RM_OK;
 out:
@@ -457,18 +463,13 @@ vm_firmware_vm_start(vm_t *vm)
 	// Platform specific VM handling should perform any required cache
 	// flushing.
 	if (vm->auth_type != VM_AUTH_TYPE_PLATFORM) {
-		uintptr_result_t addr_r =
-			memparcel_map_rm(vm->mem_mp_handle, 0U, vm->mem_size);
-		if (addr_r.e != OK) {
-			ret = rm_error_from_hyp(addr_r.e);
-			goto out;
-		}
-		cache_clean_by_va((uint8_t *)addr_r.r, vm->mem_size);
-		error_t err = memparcel_unmap_rm(vm->mem_mp_handle);
+		error_t err = memparcel_cache_flush(vm->mem_mp_handle, 0U,
+						    vm->mem_size);
 		if (err != OK) {
 			ret = rm_error_from_hyp(err);
 			goto out;
 		}
+		cache_invalidate_inst_all();
 	}
 
 	size_t vcpu_count      = vector_size(vmcfg->vcpus);

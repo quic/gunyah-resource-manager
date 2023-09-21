@@ -4,6 +4,7 @@
 /.ninja_log
 /.sconsign.dblite
 /build*/
+*.[od]
 
 # Ignore Python precompiled bitcode
 *.pyc

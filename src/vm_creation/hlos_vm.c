@@ -5,6 +5,7 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,7 @@
 #include <vm_creation.h>
 #include <vm_memory.h>
 #include <vm_mgnt.h>
+#include <vm_passthrough_config.h>
 #include <vm_vcpu.h>
 
 #define HLOS_VCPU_PRIORITY  ROOTVM_PRIORITY
@@ -127,7 +129,7 @@ hlos_vm_create_secondary_vcpus(const vm_config_t *vmcfg, cap_id_t partition_cap,
 
 out:
 	if (ret != OK) {
-		printf("Error creating vCPU %d\n", i);
+		(void)printf("Error creating vCPU %d\n", i);
 	}
 	return ret;
 }
@@ -160,7 +162,7 @@ hlos_vm_get_rm_vcpu_cap(vm_config_t *hlos_cfg)
 	copy_ret = gunyah_hyp_cspace_copy_cap_from(
 		rmcfg->cspace, vcpu->master_cap, hlos_cfg->cspace, rights);
 	if (copy_ret.error != OK) {
-		printf("Failed: copy vcpu cap from rm cspace\n");
+		(void)printf("Failed: copy vcpu cap from rm cspace\n");
 		ret = copy_ret.error;
 		goto out;
 	}
@@ -174,7 +176,7 @@ out:
 static cap_id_result_t
 hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
 		   cap_id_t addrspace_cap, cap_id_t root_thread_cap,
-		   cap_id_t *vcpus_caps, cap_id_t *msi_src_caps,
+		   cap_id_t *vcpus_caps, const cap_id_t *msi_src_caps,
 		   count_t msi_src_count)
 {
 	error_t		err;
@@ -189,7 +191,6 @@ hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
 	}
 
 	vic_option_flags_t vic_options = vic_option_flags_default();
-	vic_option_flags_set_disable_default_addr(&vic_options, false);
 	// Try configuring the VIC with the maximum number of IRQ numbers
 	// reserved for MSIs; if that fails, retry with no IRQs reserved for
 	// MSIs. This is a stand-in for proper probing of MSI support. Note that
@@ -223,7 +224,10 @@ hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
 					 rm_get_platform_root_vcpu_index());
 	if (err != OK) {
 		ret = cap_id_result_error(err);
-		printf("HLOS: Failed to attach VIC to vCPU 0, error %d\n", err);
+		(void)printf(
+			"HLOS: Failed to attach VIC to vCPU 0, error %" PRId32
+			"\n",
+			(int32_t)err);
 		goto out;
 	}
 
@@ -237,8 +241,10 @@ hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
 		err = gunyah_hyp_vic_attach_vcpu(v.new_cap, vcpus_caps[i], i);
 		if (err != OK) {
 			ret = cap_id_result_error(err);
-			printf("HLOS: Failed to attach VIC to vCPU %d, error %d\n",
-			       i, err);
+			(void)printf(
+				"HLOS: Failed to attach VIC to vCPU %d, error %" PRId32
+				"\n",
+				i, (int32_t)err);
 			goto out;
 		}
 	}
@@ -257,8 +263,10 @@ hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
 						       msi_src_caps[i], 0U);
 		if ((err != OK) && (err != ERROR_CSPACE_WRONG_OBJECT_TYPE)) {
 			ret = cap_id_result_error(err);
-			printf("HLOS: Failed to attach VDMA for MSI %d, error %d\n",
-			       i, err);
+			(void)printf(
+				"HLOS: Failed to attach VDMA for MSI %d, error %" PRId32
+				"\n",
+				i, (int32_t)err);
 			goto out;
 		}
 
@@ -266,8 +274,10 @@ hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
 						     msi_src_caps[i]);
 		if (err != OK) {
 			ret = cap_id_result_error(err);
-			printf("HLOS: Failed to bind MSI %d, error %d\n", i,
-			       err);
+			(void)printf(
+				"HLOS: Failed to bind MSI %d, error %" PRId32
+				"\n",
+				i, (int32_t)err);
 			goto out;
 		}
 	}
@@ -284,9 +294,12 @@ out:
 }
 
 error_t
-hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data)
+hlos_vm_create(const rm_env_data_t *env_data)
 {
 	error_t ret = OK;
+
+	assert(env_data != NULL);
+	assert(env_data->irq_env != NULL);
 
 	vm_t *hlos = vm_lookup(VMID_HLOS);
 	assert(hlos != NULL);
@@ -297,7 +310,6 @@ hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data)
 	cap_id_t *vcpu_caps = NULL;
 
 	// Create new cspace
-
 	gunyah_hyp_partition_create_cspace_result_t cs;
 	cs = gunyah_hyp_partition_create_cspace(rm_partition_cap,
 						rm_cspace_cap);
@@ -351,7 +363,7 @@ hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data)
 #endif
 
 	if (env_data->hlos_handles_ras) {
-		printf("HLOS is RAS handler\n");
+		(void)printf("HLOS is RAS handler\n");
 		// Set HLOS as the VM that handles RAS errors
 		vcpu_option_flags_set_ras_error_handler(&vcpu_options, true);
 		ras_handler_vm = VMID_HLOS;
@@ -551,11 +563,14 @@ hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data)
 		goto out;
 	}
 
+	const cap_id_t *vic_msi_sources = env_data->irq_env->vic_msi_source;
+	count_t		vic_msi_source_count =
+		util_array_size(env_data->irq_env->vic_msi_source);
+
 	cap_id_result_t vic_ret;
 	vic_ret = hlos_vm_create_vic(rm_partition_cap, rm_cspace_cap,
 				     as.new_cap, vcpu.new_cap, vcpu_caps,
-				     hwirq_caps.vic_msi_sources,
-				     hwirq_caps.vic_msi_source_count);
+				     vic_msi_sources, vic_msi_source_count);
 	if (vic_ret.e != OK) {
 		ret = vic_ret.e;
 		LOG_ERR(ret);
@@ -573,8 +588,10 @@ hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data)
 
 		ret = gunyah_hyp_object_activate(vcpu_caps[i]);
 		if (ret != OK) {
-			printf("HLOS: Failed to activate vCPU %d, error %d\n",
-			       i, ret);
+			(void)printf(
+				"HLOS: Failed to activate vCPU %d, error %" PRId32
+				"\n",
+				i, (int32_t)ret);
 			goto out;
 		}
 
@@ -597,10 +614,15 @@ hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data)
 	}
 
 	// Create IRQ manager for HLOS VM
-	vm_irq_manager_t *irq_manager = irq_manager_create(
-		vic_ret.r, hwirq_caps.vic_hwirq_count, hwirq_caps.vic_hwirqs);
-	assert(irq_manager != NULL);
-	vm_config_set_irq_manager(vmcfg, irq_manager);
+	ret = irq_manager_vm_init(hlos, vic_ret.r, PLATFORM_IRQ_MAX);
+	if (ret != OK) {
+		goto out;
+	}
+
+	ret = irq_manager_vm_hwirq_map_all_direct(hlos);
+	if (ret != OK) {
+		goto out;
+	}
 
 	vm_config_hlos_vdevices_setup(vmcfg, vic_ret.r);
 
@@ -635,9 +657,20 @@ hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data)
 		goto out;
 	}
 
+	// Unmap IO address ranges which are part of device passthrough
+	// configuration
+	ret = vm_passthrough_config_unmap_ioranges(env_data);
+	if (ret != OK) {
+		LOG_ERR(ret);
+		goto out;
+	}
+
 out:
 	free(vcpu_caps);
 
+	if (ret != OK) {
+		LOG_ERR(ret);
+	}
 	return ret;
 }
 

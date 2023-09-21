@@ -5,6 +5,7 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,7 +59,7 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 			 uint64_t image_offset, uint64_t image_size,
 			 uint64_t dt_offset, uint64_t dt_size)
 {
-	rm_error_t rm_err;
+	rm_error_t rm_err = RM_OK;
 
 	assert((vm != NULL) && vm_mgnt_state_change_valid(vm, VM_STATE_AUTH));
 
@@ -71,8 +72,8 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 	memparcel_t *image_mp =
 		memparcel_lookup_by_target_vmid(vm->vmid, image_mp_handle);
 	if (image_mp == NULL) {
-		printf("Error: vm %d failed to look up memparcel %d\n",
-		       vm->vmid, image_mp_handle);
+		(void)printf("Error: vm %d failed to look up memparcel %d\n",
+			     vm->vmid, image_mp_handle);
 		rm_err = RM_ERROR_MEM_INVALID;
 		goto out;
 	}
@@ -93,8 +94,8 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 	}
 
 	if (vm->mem_base_tag == ADDRESS_RANGE_NO_TAG) {
-		printf("Error: invalid base tag for vm %d mp %d\n", vm->vmid,
-		       image_mp_handle);
+		(void)printf("Error: invalid base tag for vm %d mp %d\n",
+			     vm->vmid, image_mp_handle);
 		rm_err = RM_ERROR_MEM_INVALID;
 		goto out;
 	}
@@ -103,10 +104,11 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 	    ((image_offset + image_size) > vm->mem_size) ||
 	    util_add_overflows(dt_offset, dt_size) ||
 	    ((dt_offset + dt_size) > vm->mem_size)) {
-		printf("Error: vm %d image ranges are invalid: image %#zx+%#zx,"
-		       " DT %#zx+%#zx, mem size %#zx\n",
-		       vm->vmid, image_offset, image_size, dt_offset, dt_size,
-		       vm->mem_size);
+		(void)printf(
+			"Error: vm %d image ranges are invalid: image %#zx+%#zx,"
+			" DT %#zx+%#zx, mem size %#zx\n",
+			vm->vmid, image_offset, image_size, dt_offset, dt_size,
+			vm->mem_size);
 		rm_err = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -125,24 +127,30 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 	cs = gunyah_hyp_partition_create_cspace(rm_partition_cap,
 						rm_cspace_cap);
 	if (cs.error != OK) {
-		printf("Error: vm %d failed to create cspace, error %d\n",
-		       vm->vmid, (int)cs.error);
+		(void)printf(
+			"Error: vm %d failed to create cspace, error %" PRId32
+			"\n",
+			vm->vmid, (int32_t)cs.error);
 		rm_err = rm_error_from_hyp(cs.error);
 		goto out;
 	}
 
 	error_t err = gunyah_hyp_cspace_configure(cs.new_cap, MAX_CAPS);
 	if (err != OK) {
-		printf("Error: vm %d failed to configure cspace, error %d\n",
-		       vm->vmid, (int)err);
+		(void)printf(
+			"Error: vm %d failed to configure cspace, error %" PRId32
+			"\n",
+			vm->vmid, (int32_t)err);
 		rm_err = rm_error_from_hyp(err);
 		goto out_destroy_cspace;
 	}
 
 	err = gunyah_hyp_object_activate(cs.new_cap);
 	if (err != OK) {
-		printf("Error: vm %d failed to activate cspace, error %d\n",
-		       vm->vmid, (int)err);
+		(void)printf(
+			"Error: vm %d failed to activate cspace, error %" PRId32
+			"\n",
+			vm->vmid, (int32_t)err);
 		rm_err = rm_error_from_hyp(err);
 		goto out_destroy_cspace;
 	}
@@ -150,7 +158,8 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 	// Create VM config
 	vm_config_t *vmcfg = vm_config_alloc(vm, cs.new_cap, rm_partition_cap);
 	if (vmcfg == NULL) {
-		printf("Error: vm %d failed to allocate config\n", vm->vmid);
+		(void)printf("Error: vm %d failed to allocate config\n",
+			     vm->vmid);
 		rm_err = RM_ERROR_NOMEM;
 		goto out_destroy_cspace;
 	}
@@ -169,120 +178,31 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 		vm->sensitive		       = true;
 		break;
 	default:
-		printf("Error: vm %d bad auth mode %d\n", vm->vmid, (int)auth);
+		(void)printf("Error: vm %d bad auth mode %d\n", vm->vmid,
+			     (uint32_t)auth);
 		rm_err = RM_ERROR_ARGUMENT_INVALID;
+		break;
+	}
+
+	if (rm_err != RM_OK) {
 		goto out_destroy_cspace;
 	}
+
 	vm->auth_type = auth;
 
 	err = vm_memory_setup(vm);
 	if (err != OK) {
-		printf("Error: vm %d memory setup failed, error %d\n", vm->vmid,
-		       err);
+		(void)printf("Error: vm %d memory setup failed, error %" PRId32
+			     "\n",
+			     vm->vmid, (int32_t)err);
 		rm_err = rm_error_from_hyp(err);
 		goto out_dealloc_vm_config;
-	}
-
-	// Init address range allocator
-	size_result_t ar_ret = vm_address_range_init(vm);
-	if (ar_ret.e != OK) {
-		printf("Error: vm %d address range init failed, error %d\n",
-		       vm->vmid, ar_ret.e);
-		rm_err = rm_error_from_hyp(ar_ret.e);
-		goto out_teardown_vm_memory;
-	}
-	vm->as_size = ar_ret.r;
-
-	// Create, configure, activate, and attach address space
-	gunyah_hyp_partition_create_addrspace_result_t as;
-	as = gunyah_hyp_partition_create_addrspace(rm_partition_cap,
-						   rm_cspace_cap);
-	if (as.error != OK) {
-		printf("Error: vm %d failed to create addrspace, error %d\n",
-		       vm->vmid, (int)as.error);
-		rm_err = rm_error_from_hyp(as.error);
-		goto out_deinit_address_range;
-	}
-
-	err = gunyah_hyp_addrspace_configure(as.new_cap, vm->vmid);
-	if (err != OK) {
-		printf("Error: vm %d failed to configure addrspace, error %d\n",
-		       vm->vmid, (int)err);
-		rm_err = rm_error_from_hyp(err);
-		goto out_destroy_addrspace;
-	}
-
-	err = vm_creation_config_vm_info_area(vmcfg);
-	if (err != OK) {
-		printf("Error: vm %d failed to configure info area, error %d\n",
-		       vm->vmid, (int)err);
-		rm_err = rm_error_from_hyp(err);
-		goto out_destroy_addrspace;
-	}
-	err = gunyah_hyp_addrspace_configure_info_area(
-		as.new_cap, vmcfg->vm_info_area_me_cap,
-		vmcfg->vm->vm_info_area_ipa);
-	if (err != OK) {
-		printf("Error: vm %d failed to attach info area, error %d\n",
-		       vm->vmid, (int)err);
-		rm_err = rm_error_from_hyp(err);
-		goto out_vm_info_area_teardown;
-	}
-
-	// Register a default VMMIO region for unauthenticated VMs
-	if (vm->auth_type != VM_AUTH_TYPE_PLATFORM) {
-		// The address range is from Google's protected virtual platform
-		// spec, which is not platform-specific.
-		err = gunyah_hyp_addrspace_configure_vmmio(
-			as.new_cap, 0UL, 0x40000000UL,
-			ADDRSPACE_VMMIO_CONFIGURE_OP_ADD);
-		if (err != OK) {
-			(void)printf(
-				"Error: vm %d failed to activate VMMIO area, error %d\n",
-				vm->vmid, (int)err);
-			rm_err = rm_error_from_hyp(err);
-			goto out;
-		}
-	}
-
-	err = gunyah_hyp_object_activate(as.new_cap);
-	if (err != OK) {
-		printf("Error: vm %d failed to activate addrspace, error %d\n",
-		       vm->vmid, (int)err);
-		rm_err = rm_error_from_hyp(err);
-		goto out_vm_info_area_teardown;
-	}
-	vmcfg->addrspace = as.new_cap;
-
-	err = vm_creation_map_vm_info_area(vmcfg);
-	if (err != OK) {
-		printf("Error: vm %d failed to map info area, error %d\n",
-		       vm->vmid, (int)err);
-		rm_err = rm_error_from_hyp(err);
-		goto out_vm_info_area_teardown;
-	}
-
-	err = platform_vm_create(vm, false);
-	if (err != OK) {
-		printf("Error: vm %d platform_vm_create failed (%d)\n",
-		       vm->vmid, (int)err);
-		rm_err = rm_error_from_hyp(err);
-		goto out_vm_info_area_teardown;
 	}
 
 	rm_err = RM_OK;
 
 	goto out;
 
-out_vm_info_area_teardown:
-	vm_creation_vm_info_area_teardown(vmcfg);
-out_destroy_addrspace:
-	err = gunyah_hyp_cspace_delete_cap_from(rm_cspace_cap, as.new_cap);
-	assert(err == OK);
-out_deinit_address_range:
-	vm_address_range_destroy(vm);
-out_teardown_vm_memory:
-	vm_memory_teardown(vm);
 out_dealloc_vm_config:
 	vm_config_dealloc(vm);
 out_destroy_cspace:
@@ -300,9 +220,10 @@ vm_creation_init(vm_t *vm)
 	// parse vm-config node & create first class object
 	uintptr_result_t map_ret = map_dtb(vm->dt_offset, vm->dt_size,
 					   vm->mem_mp_handle, vm->mem_size);
-	printf("DTB: offset:0x%lx, size:0x%zx\n", vm->dt_offset, vm->dt_size);
+	(void)printf("DTB: offset:0x%lx, size:0x%zx\n", vm->dt_offset,
+		     vm->dt_size);
 	if (map_ret.e != OK) {
-		printf("Error: failed to map device tree\n");
+		(void)printf("Error: failed to map device tree\n");
 		err = RM_ERROR_MEM_INVALID;
 		goto out;
 	}
@@ -319,8 +240,10 @@ vm_creation_init(vm_t *vm)
 	(void)unmap_dtb(vm->mem_mp_handle);
 
 	if (parse_ret.err != OK) {
-		printf("Error: failed to parse device tree, ret = %d\n",
-		       parse_ret.err);
+		(void)printf(
+			"Error: failed to parse device tree, ret = %" PRId32
+			"\n",
+			(int32_t)parse_ret.err);
 		error_t free_ret = dtb_parser_free(ops, parse_ret.r);
 		assert(free_ret == OK);
 		err = RM_ERROR_MEM_INVALID;
@@ -333,8 +256,9 @@ vm_creation_init(vm_t *vm)
 	error_t update_ret =
 		vm_config_update_parsed(vm->vm_config, parse_ret.r);
 	if (update_ret != OK) {
-		printf("Error: failed to update vm_config, ret = %d\n",
-		       update_ret);
+		(void)printf("Error: failed to update vm_config, ret = %" PRId32
+			     "\n",
+			     (int32_t)update_ret);
 
 		error_t free_ret = dtb_parser_free(ops, parse_ret.r);
 		assert(free_ret == OK);
@@ -346,8 +270,9 @@ vm_creation_init(vm_t *vm)
 	error_t create_ret =
 		vm_config_create_vdevices(vm->vm_config, parse_ret.r);
 	if (create_ret != OK) {
-		printf("Error: failed to create vdevices, ret = %d\n",
-		       create_ret);
+		(void)printf("Error: failed to create vdevices, ret = %" PRId32
+			     "\n",
+			     (int32_t)create_ret);
 
 		error_t free_ret = dtb_parser_free(ops, parse_ret.r);
 		assert(free_ret == OK);
@@ -387,9 +312,9 @@ svm_destroy(vmid_t vmid)
 	error_t platform_vm_destroy_ret = platform_vm_destroy(vm, false);
 	assert(platform_vm_destroy_ret == OK);
 
-	vm_creation_vm_info_area_teardown(vm->vm_config);
-
 	vm_config_destroy_vm_objects(vm);
+
+	irq_manager_vm_deinit(vm);
 
 	vm_config_dealloc(vm);
 }

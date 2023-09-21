@@ -24,6 +24,8 @@ struct vcpu_s {
 
 	interrupt_data_t halt_virq;
 	event_t		 halt_event;
+
+	bool exited;
 };
 typedef struct vcpu_s vcpu_t;
 

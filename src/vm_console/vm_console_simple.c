@@ -176,13 +176,13 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 
 	vmid_t to = (target == 0U) ? console->owner : console->self;
 
-	memcpy(notif_buf, &notif, sizeof(notif));
-	memcpy(notif_buf + sizeof(notif), content, num_bytes);
+	(void)memcpy(notif_buf, (const char *)&notif, sizeof(notif));
+	(void)memcpy((uint8_t *)notif_buf + sizeof(notif), content, num_bytes);
 
 	err = rm_rpc_fifo_send_notification(to, NOTIFY_VM_CONSOLE_CHARS,
 					    notif_buf, notif_size, true);
 	if (err != RM_OK) {
-		printf("vm_console: Failed to send char notification\n");
+		(void)printf("vm_console: Failed to send char notification\n");
 		exit(1);
 	}
 

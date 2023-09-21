@@ -66,7 +66,7 @@ open_socket(rm_rpc_transport_t *transport, const char *path, bool rx)
 
 	if (rx) {
 		struct sockaddr_un addr;
-		memset(&addr, 0, sizeof(addr));
+		(void)memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strlcpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 
@@ -77,7 +77,8 @@ open_socket(rm_rpc_transport_t *transport, const char *path, bool rx)
 			goto open_socket_return;
 		}
 	} else {
-		memset(&transport->tx_addr, 0, sizeof(transport->tx_addr));
+		(void)memset(&transport->tx_addr, 0,
+			     sizeof(transport->tx_addr));
 		transport->tx_addr.sun_family = AF_UNIX;
 		strlcpy(transport->tx_addr.sun_path, path,
 			sizeof(transport->tx_addr.sun_path) - 1);
@@ -114,7 +115,7 @@ rm_rpc_send_packet(rm_rpc_tx_data_t *tx, void *buf, size_t len)
 	if (bytes == (ssize_t)len) {
 		err = RM_OK;
 	} else if (bytes >= 0) {
-		printf("Only sent %ld/%lu bytes!\n", bytes, len);
+		(void)printf("Only sent %ld/%zu bytes!\n", bytes, len);
 		err = RM_ERROR_BUSY;
 	} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
 		err = RM_ERROR_BUSY;
@@ -179,8 +180,8 @@ transport_rx_callback(event_t *event, void *data)
 static void
 get_socket_paths(vmid_t my_id, vmid_t other_id, char path[2][PATH_LEN])
 {
-	snprintf(path[0], PATH_LEN, "/tmp/rm-rpc-%d-%d", my_id, other_id);
-	snprintf(path[1], PATH_LEN, "/tmp/rm-rpc-%d-%d", other_id, my_id);
+	(void)snprintf(path[0], PATH_LEN, "/tmp/rm-rpc-%d-%d", my_id, other_id);
+	(void)snprintf(path[1], PATH_LEN, "/tmp/rm-rpc-%d-%d", other_id, my_id);
 }
 
 static rm_error_t

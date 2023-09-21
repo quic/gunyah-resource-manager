@@ -54,7 +54,7 @@ log_reconfigure(uintptr_t *log_buf, size_t size)
 	// Allocate a new buffer
 	rm_log_area = aligned_alloc(LOG_AREA_ALIGN, size);
 	if (rm_log_area != NULL) {
-		memset(rm_log_area, 0, size);
+		(void)memset(rm_log_area, 0, size);
 
 		struct tty_set_buffer_req req = { (uintptr_t)rm_log_area,
 						  size };

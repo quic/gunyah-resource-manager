@@ -23,7 +23,7 @@ platform_vm_config_create_vdevices(vm_config_t		   *vmcfg,
 
 	ret = vgic_vm_config_add(vmcfg, data);
 	if (ret != OK) {
-		printf("Error: failed to handle virtual GIC\n");
+		(void)printf("Error: failed to handle virtual GIC\n");
 		goto out;
 	}
 
@@ -39,7 +39,7 @@ platform_vm_config_hlos_vdevices_setup(vm_config_t *vmcfg)
 
 	ret = vgic_vm_config_add(vmcfg, NULL);
 	if (ret != OK) {
-		printf("Error: failed to handle virtual GIC\n");
+		(void)printf("Error: failed to handle virtual GIC\n");
 		goto out;
 	}
 

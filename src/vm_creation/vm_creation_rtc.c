@@ -50,7 +50,7 @@ dto_create_vrtc(struct vdevice_node *node, dto_t *dto)
 	size_t sz   = strlen(node->generate) + DTB_NODE_NAME_MAX;
 	char  *path = (char *)malloc(sz);
 	if (path == NULL) {
-		printf("Error: failed to allocate path for RTC\n");
+		(void)printf("Error: failed to allocate path for RTC\n");
 		e = ERROR_NOMEM;
 		goto err_begin;
 	}
@@ -58,7 +58,7 @@ dto_create_vrtc(struct vdevice_node *node, dto_t *dto)
 	// The kernel driver for PL031 needs a clock node associated with the
 	// AMBA device or it will fail to probe, so we create a dummy clock node
 	// with a unique phandle value to associate with the RTC node.
-	snprintf(path, sz, "%s/vrtc-pclk", node->generate);
+	(void)snprintf(path, sz, "%s/vrtc-pclk", node->generate);
 	e = dto_construct_begin_path(dto, path);
 	if (e != OK) {
 		goto err_free;
@@ -85,13 +85,13 @@ dto_create_vrtc(struct vdevice_node *node, dto_t *dto)
 	}
 
 	// Now create the vRTC node
-	snprintf(path, sz, "%s/vrtc", node->generate);
+	(void)snprintf(path, sz, "%s/vrtc", node->generate);
 	e = dto_construct_begin_path(dto, path);
 	if (e != OK) {
 		goto err_free;
 	}
 
-	char *c[] = { "arm,pl031", "arm,primecell" };
+	const char *c[] = { "arm,pl031", "arm,primecell" };
 	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
 		goto err;

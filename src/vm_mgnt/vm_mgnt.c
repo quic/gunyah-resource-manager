@@ -12,6 +12,7 @@
 
 #include <rm_types.h>
 #include <util.h>
+#include <utils/dict.h>
 #include <utils/vector.h>
 
 #include <compiler.h>
@@ -51,7 +52,7 @@ static uint64_t peripheral_vmids;
 // Bitmap of unallocated dynamic VMIDs, offset by VMID_DYNAMIC_BASE.
 static uint64_t free_dynamic_vmids;
 
-static vector_t *all_vms;
+static dict_t *all_vms;
 
 RM_PADDED(typedef struct peer_info {
 	uint16_t     id_len;
@@ -137,9 +138,10 @@ vm_mgnt_state_change_valid(const vm_t *vm, vm_state_t vm_state)
 			 (vm->vm_state == VM_STATE_PAUSED));
 		break;
 	case VM_STATE_RESETTING:
-		valid = (vm->vm_state == VM_STATE_EXITED) ||
-			(vm->vm_state == VM_STATE_READY) ||
-			(vm->vm_state == VM_STATE_INIT_FAILED);
+		valid = !vm->no_reset &&
+			((vm->vm_state == VM_STATE_EXITED) ||
+			 (vm->vm_state == VM_STATE_READY) ||
+			 (vm->vm_state == VM_STATE_INIT_FAILED));
 		break;
 	case VM_STATE_RESET:
 		valid = vm->vm_state == VM_STATE_RESETTING;
@@ -227,9 +229,11 @@ vm_reset_callback(event_t *event, void *data)
 
 	switch (vm->reset_stage) {
 	case VM_RESET_STAGE_INIT:
-		state_completed = true;
-		vm->reset_stage = VM_RESET_STAGE_DESTROY_VDEVICES;
-		trigger		= true;
+		state_completed = vm_reset_handle_init(vm);
+		if (state_completed) {
+			vm->reset_stage = VM_RESET_STAGE_DESTROY_VDEVICES;
+		}
+		trigger = true;
 		break;
 	case VM_RESET_STAGE_DESTROY_VDEVICES:
 		state_completed = vm_reset_handle_destroy_vdevices(vm);
@@ -285,7 +289,7 @@ vm_reset_callback(event_t *event, void *data)
 	return;
 }
 
-static rm_error_t
+rm_error_t
 vm_mgnt_new_vm(vmid_t vmid, vmid_t owner)
 {
 	rm_error_t ret = RM_OK;
@@ -298,9 +302,11 @@ vm_mgnt_new_vm(vmid_t vmid, vmid_t owner)
 		goto out;
 	}
 
-	vm->vmid     = vmid;
-	vm->owner    = owner;
-	vm->vm_state = VM_STATE_LOAD;
+	vm->vmid	  = vmid;
+	vm->owner	  = owner;
+	vm->vm_state	  = VM_STATE_LOAD;
+	vm->mem_mp_handle = MEMPARCEL_INVALID_HANDLE;
+	vm->fw_mp_handle  = MEMPARCEL_INVALID_HANDLE;
 
 	vm->peers = vector_init(vm_t *, 2U, 2U);
 	if (vm->peers == NULL) {
@@ -327,9 +333,13 @@ vm_mgnt_new_vm(vmid_t vmid, vmid_t owner)
 		goto out;
 	}
 
-	err = vector_push_back(all_vms, vm);
+	err = dict_add(all_vms, vmid, vm);
 	if (err != OK) {
-		ret = RM_ERROR_NOMEM;
+		if (err == ERROR_NOMEM) {
+			ret = RM_ERROR_NOMEM;
+		} else {
+			ret = RM_ERROR_DENIED;
+		}
 		goto out;
 	}
 
@@ -364,15 +374,9 @@ vm_mgnt_delete_vm(vmid_t vmid)
 
 	(void)event_deregister(&vm->reset_event);
 
-	// Delete VM from all_vms vector
-	size_t cnt = vector_size(all_vms);
-	for (index_t i = 0; i < cnt; i++) {
-		vm_t **vm_search = vector_at_ptr(vm_t *, all_vms, i);
-		if ((*vm_search)->vmid == vmid) {
-			vector_delete(all_vms, i);
-			break;
-		}
-	}
+	// Delete VM from all_vms
+	error_t err = dict_remove(all_vms, vmid, NULL);
+	assert(err == OK);
 
 	vm_deregister_all_peers(vm);
 	vector_deinit(vm->peers);
@@ -386,6 +390,7 @@ void
 vm_mgnt_set_name(vm_t *vm, const char *name)
 {
 	(void)strlcpy(vm->name, name, VM_MAX_NAME_LEN);
+	vm->name_len = (uint16_t)strlen(vm->name);
 }
 
 rm_error_t
@@ -399,7 +404,10 @@ vm_mgnt_init(void)
 
 	free_dynamic_vmids = util_mask(VMID_DYNAMIC_END - VMID_DYNAMIC_BASE);
 
-	all_vms = vector_init(vm_t *, 2U, 2U);
+	assert(all_vms == NULL);
+	static_assert(VMID_HYP == 0U, "VMID_HYP != 0");
+
+	all_vms = dict_init(1U, VMID_LAST);
 	if (all_vms == NULL) {
 		(void)printf("Error no mem for vm mgnt init");
 		ret = RM_ERROR_NOMEM;
@@ -416,6 +424,7 @@ vm_mgnt_init(void)
 	assert(rm != NULL);
 	vm_mgnt_set_name(rm, "RM");
 
+	// TODO: possibly move this to hlos_vm_create()
 	ret = vm_mgnt_new_vm(VMID_HLOS, VMID_RM);
 	if (ret != RM_OK) {
 		(void)printf("failed to create hlos vm_t");
@@ -432,18 +441,9 @@ out:
 vm_t *
 vm_lookup(vmid_t vmid)
 {
-	vm_t *ret = NULL;
+	assert(all_vms != NULL);
 
-	size_t cnt = vector_size(all_vms);
-	for (index_t i = 0; i < cnt; i++) {
-		vm_t **vm = vector_at_ptr(vm_t *, all_vms, i);
-		if ((*vm)->vmid == vmid) {
-			ret = *vm;
-			break;
-		}
-	}
-
-	return ret;
+	return dict_get(all_vms, vmid);
 }
 
 bool
@@ -513,6 +513,8 @@ vm_mgnt_handle_allocate(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	rm_error_t ret;
 	vmid_t	   vmid = 0;
 
+	assert(all_vms != NULL);
+
 	// FIXME: make these checks more generic
 	if (client_id != VMID_HLOS) {
 		ret = RM_ERROR_DENIED;
@@ -550,7 +552,7 @@ vm_mgnt_handle_allocate(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		vmid = 0;
 	}
 
-	if (vmid == 0) {
+	if (vmid == 0U) {
 		ret = RM_ERROR_NORESOURCE;
 		goto out;
 	}
@@ -615,10 +617,10 @@ vm_mgnt_handle_deallocate(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	}
 
 	if (vmid >= VMID_DYNAMIC_BASE) {
-		vmid = vmid - VMID_DYNAMIC_BASE;
+		vmid_t vmid_dynamic = vmid - VMID_DYNAMIC_BASE;
 		// A dynamic VMID can be 0.
-		assert((vmid >= 0) && (vmid < 64));
-		free_dynamic_vmids |= util_bit(vmid);
+		assert((vmid_dynamic >= 0) && (vmid_dynamic < 64));
+		free_dynamic_vmids |= util_bit(vmid_dynamic);
 	} else {
 		assert((vmid > 0) && (vmid < 64));
 		free_secondary_vmids |= util_bit(vmid);
@@ -866,25 +868,28 @@ vm_mgnt_handle_reset(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	if (vm->qtee_registered) {
-		ret = RM_ERROR_UNIMPLEMENTED;
-		goto out;
-	}
-
-	vm_config_t *vmcfg = vm->vm_config;
-	if (vmcfg->trusted_config) {
-		(void)printf("VM_RESET: of VM %d disabled\n", vmid);
+	if (vm->no_reset) {
+		(void)printf("VM_RESET: of VM %d not allowed\n", vmid);
 		ret = RM_ERROR_DENIED;
 		goto out;
 	}
 
-	if (vm->vm_state == VM_STATE_READY) {
-		kill_all_vcpus(vm);
+	if (vm->qtee_registered) {
+		(void)printf("VM_RESET: of registered VM %d\n", vmid);
+	}
+
+	vm_config_t *vmcfg = vm->vm_config;
+	if (vmcfg->trusted_config) {
+		(void)printf("VM_RESET: of trusted VM %d\n", vmid);
 	}
 
 	if (!vm_mgnt_state_change_valid(vm, VM_STATE_RESETTING)) {
 		ret = RM_ERROR_VM_STATE;
 		goto out;
+	}
+
+	if ((vm->vm_state != VM_STATE_EXITED) && (vm->vm_config != NULL)) {
+		kill_all_vcpus(vm);
 	}
 
 	ret = vm_mgnt_update_vm_state(vm, VM_STATE_RESETTING);
@@ -1168,7 +1173,7 @@ vm_mgnt_handle_get_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	uint8_t *buf8 = (uint8_t *)buf;
 	vmid_t	 vmid = buf8[0] | (vmid_t)((vmid_t)buf8[1] << 8);
-	if (vmid == 0) {
+	if (vmid == 0U) {
 		vmid = client_id;
 	}
 
@@ -1206,7 +1211,7 @@ vm_mgnt_handle_get_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	size_t uri_align_len = util_balign_up(uri_len, 4);
 	if (uri_len != 0U) {
 		id_entries++;
-		id_msg_size += 4 + uri_align_len;
+		id_msg_size += 4U + uri_align_len;
 	}
 
 	// add VM signing authority
@@ -1287,13 +1292,14 @@ out:
 }
 
 static bool
-cmp_uri(vm_t *vm, uint8_t *uri, uint16_t uri_len)
+cmp_uri(const vm_t *vm, const uint8_t *uri, size_t uri_len)
 {
-	return (vm->uri_len == uri_len) && (memcmp(vm->uri, uri, uri_len) == 0);
+	return (vm->uri_len == uri_len) &&
+	       (memcmp(vm->uri, (const char *)uri, uri_len) == 0);
 }
 
 static bool
-cmp_guid(vm_t *vm, uint8_t *guid, uint16_t guid_len)
+cmp_guid(const vm_t *vm, const uint8_t *guid, size_t guid_len)
 {
 	assert(guid_len == VM_GUID_LEN);
 
@@ -1301,10 +1307,10 @@ cmp_guid(vm_t *vm, uint8_t *guid, uint16_t guid_len)
 }
 
 static bool
-cmp_name(vm_t *vm, uint8_t *name, uint16_t name_len)
+cmp_name(const vm_t *vm, const uint8_t *name, size_t name_len)
 {
 	return (vm->name_len == name_len) &&
-	       (memcmp((uint8_t *)vm->name, name, name_len) == 0);
+	       (memcmp(vm->name, (const char *)name, name_len) == 0);
 }
 
 error_t
@@ -1389,17 +1395,50 @@ vm_deregister_peers(vm_t *vm1, vm_t *vm2)
 	}
 }
 
+typedef bool (*id_cmp_t)(const vm_t *vm, const uint8_t *id_buf, size_t id_len);
+
+struct check_vm_data {
+	vm_t	      *vm;
+	const uint8_t *id_buf;
+	size_t	       id_len;
+	id_cmp_t       id_cmp;
+};
+
+static bool
+check_vm_id(dict_key_t key, void *d, void *x)
+{
+	struct check_vm_data *c = (struct check_vm_data *)x;
+	assert(c != NULL);
+
+	vm_t *vm = (vm_t *)d;
+	(void)key;
+
+	assert(vm != NULL);
+	assert(c->id_cmp != NULL);
+
+	bool ret;
+	if (c->id_cmp(vm, c->id_buf, c->id_len)) {
+		c->vm = vm;
+		// Found a matching VM, stop iteration
+		ret = true;
+	} else {
+		ret = false;
+	}
+	return ret;
+}
+
 vm_t *
 vm_lookup_by_id(const char *peer_id)
 {
-	vm_t *ret = NULL;
+	vm_t *ret;
+	assert(all_vms != NULL);
 
 	peer_info_t info;
-	uint8_t	   *id_buf	 = NULL;
 	char	   *copy_peer_id = NULL;
 
 	if (peer_id == NULL) {
 		(void)printf("Error: Null peer_id for vm_lookup_by_id\n");
+		ret = NULL;
 		goto out;
 	}
 
@@ -1418,10 +1457,8 @@ vm_lookup_by_id(const char *peer_id)
 		goto out;
 	}
 
-	bool (*id_cmp)(vm_t *, uint8_t *, uint16_t);
-
-	uint8_t	 guid[VM_GUID_LEN];
-	uint16_t id_len = 0;
+	uint8_t		     guid[VM_GUID_LEN];
+	struct check_vm_data c = { 0 };
 
 	switch (info.id_type) {
 	case VM_ID_TYPE_GUID: {
@@ -1433,72 +1470,64 @@ vm_lookup_by_id(const char *peer_id)
 			goto out;
 		}
 
-		id_cmp = cmp_guid;
-		id_buf = guid;
-		id_len = VM_GUID_LEN;
+		c.id_cmp = cmp_guid;
+		c.id_buf = guid;
+		c.id_len = VM_GUID_LEN;
 		break;
 	}
 	case VM_ID_TYPE_URI:
-		id_cmp = cmp_uri;
-		id_buf = (uint8_t *)info.id_buf;
-		id_len = info.id_len;
+		c.id_cmp = cmp_uri;
+		c.id_buf = (uint8_t *)info.id_buf;
+		c.id_len = info.id_len;
 		break;
 	case VM_ID_TYPE_NAME:
-		id_cmp = cmp_name;
-		id_buf = (uint8_t *)info.id_buf;
-		id_len = info.id_len;
+		c.id_cmp = cmp_name;
+		c.id_buf = (uint8_t *)info.id_buf;
+		c.id_len = info.id_len;
 		break;
 	case VM_ID_TYPE_SIGN_AUTH:
 	default:
 		(void)printf("Error: Invalid ID type %d\n", info.id_type);
+		ret = NULL;
 		goto out;
 	}
 
-	size_t cnt = vector_size(all_vms);
-	for (index_t i = 0; i < cnt; i++) {
-		vm_t **vm = vector_at_ptr(vm_t *, all_vms, i);
-		// in case that guid and uri is optional, the comparison would
-		// fail.
-		if (id_cmp(*vm, id_buf, id_len)) {
-			ret = *vm;
-			break;
-		}
-	}
+	c.vm = NULL;
+	(void)dict_iterate(all_vms, check_vm_id, &c);
+	ret = c.vm;
 out:
 	free(copy_peer_id);
-
 	return ret;
 }
 
 static rm_error_t
 vm_mgnt_lookup_by_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
-		     uint8_t *id_buf, uint16_t id_len,
-		     bool (*id_cmp)(vm_t *, uint8_t *, uint16_t))
+		     uint8_t *id_buf, uint16_t id_len, id_cmp_t id_cmp)
 {
 	rm_error_t err;
-	size_t	   num_vms = vector_size(all_vms);
 
+	assert(all_vms != NULL);
 	assert(id_buf != NULL);
 
 	// Use a bitmap to track matching VMs.
-	assert(num_vms < 64);
-	uint64_t vm_bitmap = 0;
-	uint32_t vm_count  = 0;
+	uint32_t vm_count = 0;
 
-	for (index_t i = 0; i < num_vms; i++) {
-		vm_t **vm = vector_at_ptr(vm_t *, all_vms, i);
-
-		if (!is_vm_query_allowed(*vm, client_id)) {
+	// It isn't best that we have to iterate the dict twice.
+	// Consider optimizing this.
+	dict_key_t key;
+	vm_t	  *vm;
+	dict_foreach(vm, key, all_vms)
+	{
+		if ((vm == NULL) || !is_vm_query_allowed(vm, client_id)) {
 			continue;
 		}
 
-		if (id_cmp(*vm, id_buf, id_len)) {
-			vm_bitmap |= (uint64_t)1 << i;
+		if (id_cmp(vm, id_buf, id_len)) {
 			vm_count++;
 		}
 	}
 
-	size_t	 ret_size = 8 + (4 * vm_count);
+	size_t	 ret_size = 8U + (4U * (size_t)vm_count);
 	uint8_t *ret_buf  = calloc(1, ret_size);
 	if (ret_buf == NULL) {
 		err = RM_ERROR_NOMEM;
@@ -1512,18 +1541,17 @@ vm_mgnt_lookup_by_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	(void)memcpy(buf8, (uint8_t *)&vm_count, sizeof(uint32_t));
 	buf8 += 4;
 
-	while (vm_bitmap != 0) {
-		index_t i = compiler_ctz(vm_bitmap);
-		vm_bitmap &= ~util_bit(i);
+	dict_foreach(vm, key, all_vms)
+	{
+		if ((vm == NULL) || !is_vm_query_allowed(vm, client_id) ||
+		    !id_cmp(vm, id_buf, id_len)) {
+			continue;
+		}
 
-		vm_t **vm = vector_at_ptr(vm_t *, all_vms, i);
-		assert(*vm != NULL);
-
-		(void)memcpy(buf8, (uint8_t *)&(*vm)->vmid, sizeof(vmid_t));
+		(void)memcpy(buf8, (uint8_t *)&vm->vmid, sizeof(vmid_t));
 		buf8 += 4;
+		assert(buf8 <= (ret_buf + ret_size));
 	}
-
-	assert(buf8 == (ret_buf + ret_size));
 
 	err = rm_rpc_fifo_reply(client_id, msg_id, seq_num, ret_buf, ret_size);
 	if (err != RM_OK) {
@@ -1552,13 +1580,13 @@ vm_mgnt_handle_lookup_uri(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	uint8_t *buf8	 = (uint8_t *)buf;
 	uint16_t uri_len = buf8[0] | (uint16_t)((uint16_t)buf8[1] << 8);
-	if (uri_len > (VM_MAX_URI_LEN - 1)) {
+	if (uri_len > (uint16_t)(VM_MAX_URI_LEN - 1)) {
 		ret = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
 	size_t uri_align_len = util_balign_up(uri_len, 4);
-	if ((uri_align_len + 4) != len) {
+	if ((uri_align_len + 4U) != len) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -1589,7 +1617,7 @@ vm_mgnt_handle_lookup_guid(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	if (len != VM_GUID_LEN) {
+	if (len != (size_t)VM_GUID_LEN) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -1620,13 +1648,13 @@ vm_mgnt_handle_lookup_name(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	uint8_t *buf8	  = (uint8_t *)buf;
 	uint16_t name_len = buf8[0] | (uint16_t)((uint16_t)buf8[1] << 8);
-	if (name_len > (VM_MAX_NAME_LEN - 1)) {
+	if (name_len > (uint16_t)(VM_MAX_NAME_LEN - 1)) {
 		ret = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
 	size_t name_align_len = util_balign_up(name_len, 4);
-	if ((name_align_len + 4) != len) {
+	if ((name_align_len + 4U) != len) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -1657,7 +1685,7 @@ vm_mgnt_handle_set_time_base(vmid_t client_id, uint32_t msg_id,
 	if (len == 20U) {
 		uint16_t *buf16 = (uint16_t *)buf;
 		vmid		= buf16[0];
-		if (vmid == 0) {
+		if (vmid == 0U) {
 			vmid = client_id;
 		}
 
@@ -1939,6 +1967,7 @@ vm_mgnt_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		handled = true;
 		break;
 	default:
+		// all msg_id are handled
 		break;
 	}
 

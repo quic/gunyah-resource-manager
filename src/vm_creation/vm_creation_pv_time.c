@@ -5,6 +5,7 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,7 +52,7 @@ vm_creation_config_vm_info_area(vm_config_t *vmcfg)
 		ret = ERROR_NOMEM;
 		goto out;
 	}
-	memset(rm_ipa, 0, size);
+	(void)memset(rm_ipa, 0, size);
 
 	size_t offset = (size_t)((vmaddr_t)rm_ipa - rm_get_me_ipa_base());
 
@@ -69,8 +70,10 @@ vm_creation_config_vm_info_area(vm_config_t *vmcfg)
 		INVALID_ADDRESS, size, PAGE_SIZE);
 	if (alloc_ret.err != OK) {
 		ret = alloc_ret.err;
-		printf("Failed to allocate IPA for stats area, error %d\n",
-		       ret);
+		(void)printf(
+			"Failed to allocate IPA for stats area, error %" PRId32
+			"\n",
+			(int32_t)ret);
 		goto error_delete_me_cap;
 	}
 

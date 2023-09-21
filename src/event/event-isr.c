@@ -69,17 +69,17 @@ flush_pending_list(void)
 }
 
 static bool
-do_event_wait(int timeout)
+do_event_wait(int32_t timeout)
 {
 	assert_preempt_disabled();
 
-	int ret;
+	int32_t ret;
 
 	do {
 		if (timeout > 0) {
 			struct timespec ts = {
-				.tv_sec	 = timeout / NS_PER_S,
-				.tv_nsec = timeout % NS_PER_S,
+				.tv_sec	 = (int64_t)timeout / NS_PER_S,
+				.tv_nsec = (int64_t)timeout % NS_PER_S,
 			};
 			ret = clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL);
 		} else if (timeout < 0) {
@@ -96,7 +96,7 @@ do_event_wait(int timeout)
 }
 
 static void
-event_loop_common(int timeout)
+event_loop_common(int32_t timeout)
 {
 	preempt_disable();
 
@@ -126,7 +126,7 @@ event_loop_enter(void)
 }
 
 void
-event_loop_enter_suspend(int timeout)
+event_loop_enter_suspend(int32_t timeout)
 {
 	event_loop_common(timeout);
 }
@@ -160,7 +160,7 @@ event_flush_pending(void)
 }
 
 bool
-event_wait_pending(int timeout)
+event_wait_pending(int32_t timeout)
 {
 	bool pending;
 

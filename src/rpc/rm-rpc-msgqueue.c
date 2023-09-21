@@ -18,6 +18,7 @@
 #include <event.h>
 #include <fcntl.h>
 #include <guest_interface.h>
+#include <panic.h>
 #include <platform.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>
@@ -123,7 +124,10 @@ err_rx_event:
 	}
 err_rx_virq:
 	if (err != RM_OK) {
-		deregister_isr(info_ret.tx_virq);
+		rm_error_t e = deregister_isr(info_ret.tx_virq);
+		if (e != RM_OK) {
+			panic("deregister failed");
+		}
 	}
 err_tx_event:
 	if (err != RM_OK) {
@@ -332,11 +336,16 @@ takedown_transport(rm_rpc_transport_t *transport, vmid_t my_id, vmid_t other_id)
 	if (info_ret.err != RM_OK) {
 		goto out;
 	}
-
-	deregister_isr(info_ret.rx_virq);
+	rm_error_t ret;
+	ret = deregister_isr(info_ret.rx_virq);
+	if (ret != RM_OK) {
+		panic("deregister failed");
+	}
 	(void)event_deregister(&transport->rx_event);
-
-	deregister_isr(info_ret.tx_virq);
+	ret = deregister_isr(info_ret.tx_virq);
+	if (ret != RM_OK) {
+		panic("deregister failed");
+	}
 	(void)event_deregister(&transport->tx_event);
 
 out:

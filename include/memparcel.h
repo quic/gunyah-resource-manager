@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-#define MAX_LIST_ENTRIES 512
+#define MAX_LIST_ENTRIES 512U
 
-typedef uint32_t	   mem_handle_t;
-typedef struct vector_s	   vector_t;
-typedef struct region_list region_list_t;
+typedef uint32_t	     mem_handle_t;
+typedef struct vector_s	     vector_t;
+typedef struct region_list_s region_list_t;
 
 bool
 memparcel_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
@@ -17,6 +17,15 @@ memparcel_map_rm(mem_handle_t mp_handle, size_t offset, size_t size);
 
 error_t
 memparcel_unmap_rm(mem_handle_t handle);
+
+error_t
+memparcel_sanitize(mem_handle_t handle, size_t offset, size_t size);
+
+error_t
+memparcel_cache_clean(mem_handle_t handle, size_t offset, size_t size);
+
+error_t
+memparcel_cache_flush(mem_handle_t handle, size_t offset, size_t size);
 
 RM_PADDED(typedef struct {
 	void	  *ptr;
@@ -65,6 +74,9 @@ memparcel_is_shared(const memparcel_t *mp, vmid_t vmid);
 
 bool
 memparcel_is_exclusive(const memparcel_t *mp, vmid_t vmid);
+
+bool
+memparcel_is_private(const memparcel_t *mp, vmid_t vmid);
 
 error_t
 memparcel_get_shared_vmids(const memparcel_t *mp, vector_t *vmids);

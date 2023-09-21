@@ -100,14 +100,14 @@ void
 rm_rpc_init_rx_data(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 {
 	(void)vm_id;
-	memset(rx_data, 0, sizeof(*rx_data));
+	(void)memset(rx_data, 0, sizeof(*rx_data));
 }
 
 void
 rm_rpc_init_tx_data(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 {
 	(void)vm_id;
-	memset(tx_data, 0, sizeof(*tx_data));
+	(void)memset(tx_data, 0, sizeof(*tx_data));
 }
 
 static void
@@ -115,7 +115,7 @@ do_xmit(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 {
 	rm_error_t err = RM_OK;
 
-	while (tx_data->rem > 0) {
+	while (tx_data->rem > 0U) {
 		size_t	size;
 		uint8_t msg_type = (tx_data->rem == tx_data->num_fragments + 1U)
 					   ? tx_data->msg_type
@@ -127,12 +127,12 @@ do_xmit(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 		write_rpc_header(transport_buf, hdr);
 
 		size_t rem_len = tx_data->len - tx_data->pos;
-		if (rem_len > 0) {
+		if (rem_len > 0U) {
 			size = (RM_RPC_MAX_CONTENT > rem_len)
 				       ? rem_len
 				       : RM_RPC_MAX_CONTENT;
-			memcpy(transport_buf + RM_RPC_HEADER_SIZE,
-			       tx_data->buf + tx_data->pos, size);
+			(void)memcpy(transport_buf + RM_RPC_HEADER_SIZE,
+				     tx_data->buf + tx_data->pos, size);
 		} else {
 			size = 0;
 		}
@@ -146,12 +146,12 @@ do_xmit(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 			// Try later
 			break;
 		} else {
-			printf("send_packet error\n");
+			(void)printf("send_packet error\n");
 			exit(1);
 		}
 	}
 
-	if ((tx_data->rem == 0) && (tx_cb != NULL)) {
+	if ((tx_data->rem == 0U) && (tx_cb != NULL)) {
 		in_tx_cb = true;
 		tx_cb(err, vm_id, tx_data->buf, tx_data->len);
 		in_tx_cb = false;
@@ -161,7 +161,7 @@ do_xmit(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 void
 rm_rpc_tx_callback(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 {
-	if (tx_data->rem != 0) {
+	if (tx_data->rem != 0U) {
 		do_xmit(vm_id, tx_data);
 	}
 }
@@ -177,18 +177,19 @@ start_xmit(vmid_t vm_id, uint8_t msg_type, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	if ((tx_data->rem != 0) || in_tx_cb) {
+	if ((tx_data->rem != 0U) || in_tx_cb) {
 		err = RM_ERROR_BUSY;
 		goto out;
 	}
 
-	size_t num_fragments = (len > 0) ? ((len + RM_RPC_MAX_CONTENT - 1) /
-					    RM_RPC_MAX_CONTENT) -
-						   1
-					 : 0;
+	size_t num_fragments = (len > 0U)
+				       ? (((len + (RM_RPC_MAX_CONTENT - 1U)) /
+					   RM_RPC_MAX_CONTENT) -
+					  1U)
+				       : 0U;
 	assert(num_fragments <= RM_RPC_MAX_FRAGMENTS);
 
-	tx_data->rem	       = num_fragments + 1;
+	tx_data->rem	       = num_fragments + 1U;
 	tx_data->msg_id	       = msg_id;
 	tx_data->seq_num       = seq_num;
 	tx_data->num_fragments = (uint8_t)num_fragments;
@@ -247,10 +248,10 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 			rx_data->partial = false;
 		}
 
-		size_t alloc_size =
-			(num_fragments == 0U)
-				? len
-				: (num_fragments + 1U) * RM_RPC_MAX_CONTENT;
+		size_t alloc_size = (num_fragments == 0U)
+					    ? len
+					    : (((size_t)num_fragments + 1U) *
+					       RM_RPC_MAX_CONTENT);
 		assert(len <= alloc_size);
 
 		uint8_t *data_buf = NULL;
@@ -258,15 +259,16 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 		if (alloc_size > 0U) {
 			data_buf = malloc(alloc_size);
 			if (data_buf == NULL) {
-				printf("rm-rpc: Failed to allocate recv buffer "
-				       "for VM %d, message ID %lx\n",
-				       (int)vm_id, (unsigned long)msg_id);
+				(void)printf(
+					"rm-rpc: Failed to allocate recv buffer "
+					"for VM %d, message ID %lx\n",
+					(uint32_t)vm_id, (unsigned long)msg_id);
 				err = RM_OK;
 				goto do_recv_return;
 			}
 
 			if (len != 0U) {
-				memcpy(data_buf, recv_buf, len);
+				(void)memcpy(data_buf, recv_buf, len);
 			}
 		}
 
@@ -304,7 +306,7 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 		assert((rx_data->len + len) <= rx_data->alloc_size);
 
 		uint8_t *data_buf = rx_data->buf + rx_data->len;
-		memcpy(data_buf, recv_buf, len);
+		(void)memcpy(data_buf, recv_buf, len);
 		rx_data->rem_fragments--;
 		rx_data->len += len;
 
@@ -419,7 +421,7 @@ rm_rpc_register_tx_complete_handler(rm_rpc_tx_callback_t callback)
 }
 
 void
-rm_rpc_wait(int suspend_timeout)
+rm_rpc_wait(int32_t suspend_timeout)
 {
 	event_loop_enter_suspend(suspend_timeout);
 }

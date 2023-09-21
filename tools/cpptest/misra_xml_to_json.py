@@ -47,7 +47,18 @@ deviation_map = {
     ],
     'MISRAC2012-RULE_21_6-a': [
         (None, re.compile(r"Usage of 'printf' function")),
+    ],
+    'MISRAC2012-RULE_10_3-b': [
+        (None, re.compile(r"number '2'.*'essentially Enum'.*"
+                          r"'__c11_atomic_load'.*'essentially signed'")),
+        (None, re.compile(r"number '3'.*'essentially Enum'.*"
+                          r"'__c11_atomic_(store'|exchange'|fetch_).*"
+                          r"'essentially signed'")),
+        (None, re.compile(r"number '[45]'.*'essentially Enum'.*"
+                          r"'__c11_atomic_compare_exchange_(strong|weak)'.*"
+                          r"'essentially signed'")),
     ]
+
 }
 
 

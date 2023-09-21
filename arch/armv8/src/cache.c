@@ -78,3 +78,15 @@ cache_flush_by_va(void *ptr, size_t size)
 	// No barrier is needed after the CMOs, because we are flushing lines to
 	// be accessed by RM through the same mapping.
 }
+
+void
+cache_invalidate_inst_all(void)
+{
+	uint64_t   ctr_el0 = read_ctr();
+	const bool dic	   = ((ctr_el0 & util_bit(29U)) != 0U);
+
+	if (!dic) {
+		// See comment in cache_clean_by_va().
+		__asm__ volatile("ic ialluis; dsb ish" ::: "memory");
+	}
+}

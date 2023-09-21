@@ -10,6 +10,13 @@ typedef struct {
 	dict_key_t key;
 } dict_key_ret_t;
 
+// Dictionary iterator callback
+// key - the current key
+// data - the current data
+// arg - user provided argument passed from dict_iterate
+// return true to stop iteration
+typedef bool (*dict_iter_callback_t)(dict_key_t key, void *data, void *arg);
+
 // Initialize a new dictionary
 dict_t *
 dict_init(dict_key_t key_min, dict_key_t key_max);
@@ -39,8 +46,13 @@ dict_add(dict_t *dict, dict_key_t key, void *data);
 error_t
 dict_remove(dict_t *dict, dict_key_t key, void **data);
 
+// Iterate all keys in the dictionary, calling the provided function for each.
+// Returns ERROR_NORESOURCES if the dict is empty.
+error_t
+dict_iterate(dict_t *dict, dict_iter_callback_t fn, void *arg);
+
 void
-dict_deinit(dict_t *dict);
+dict_deinit(dict_t **dict_p);
 
 dict_key_t
 dict_get_min_key(dict_t *dict);
@@ -48,6 +60,9 @@ dict_get_min_key(dict_t *dict);
 dict_key_t
 dict_get_max_key(dict_t *dict);
 
+// A simple iterator that performs a lookup for each possible key in the dict's
+// range. It is less efficient that dict_iterate() however can be used inline
+// without requiring a callback function pointer.
 #define dict_foreach(info, key, dict)                                          \
 	for (key = dict_get_min_key(dict), info		= dict_get(dict, key); \
 	     key <= dict_get_max_key(dict); key++, info = dict_get(dict, key))

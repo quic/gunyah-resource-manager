@@ -25,10 +25,10 @@ gunyah_hyp_hypervisor_identify(void)
 			   "x12", "x13", "x14", "x15", "x16", "x17");
 
 	return (gunyah_hyp_hypervisor_identify_result_t){
-		.hyp_api_info = (hyp_api_info_t){ (uint64_t)out_x0_ },
-		.api_flags_0  = (hyp_api_flags0_t){ (uint64_t)out_x1_ },
-		.api_flags_1  = (hyp_api_flags1_t){ (uint64_t)out_x2_ },
-		.api_flags_2  = (hyp_api_flags2_t){ (uint64_t)out_x3_ },
+		.hyp_api_info = hyp_api_info_cast((uint64_t)out_x0_),
+		.api_flags_0  = hyp_api_flags0_cast((uint64_t)out_x1_),
+		.api_flags_1  = hyp_api_flags1_cast((uint64_t)out_x2_),
+		.api_flags_2  = hyp_api_flags2_cast((uint64_t)out_x3_),
 	};
 }
 
@@ -1300,7 +1300,7 @@ gunyah_hyp_addrspace_lookup(cap_id_t addrspace, cap_id_t memextent,
 		.error	   = (error_t)out_x0_,
 		.offset	   = (size_t)out_x1_,
 		.size	   = (size_t)out_x2_,
-		.map_attrs = (memextent_mapping_attrs_t){ (uint32_t)out_x3_ },
+		.map_attrs = memextent_mapping_attrs_cast((uint32_t)out_x3_),
 	};
 }
 
@@ -1409,15 +1409,17 @@ gunyah_hyp_memextent_donate(memextent_donate_options_t options, cap_id_t from,
 
 error_t
 gunyah_hyp_addrspace_attach_vdevice(cap_id_t addrspace, cap_id_t vdevice,
-				    index_t index, vmaddr_t vbase, size_t size)
+				    index_t index, vmaddr_t vbase, size_t size,
+				    addrspace_attach_vdevice_flags_t flags)
 {
 	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(addrspace);
 	register uint64_t	in_x1_ __asm__("x1") = (uint64_t)(vdevice);
 	register uint32_t	in_x2_ __asm__("x2") = (uint32_t)(index);
 	register uint64_t	in_x3_ __asm__("x3") = (uint64_t)(vbase);
 	register uint64_t	in_x4_ __asm__("x4") = (uint64_t)(size);
-	register uint64_t	in_x5_ __asm__("x5") = 0x0U;
-	register uint32_t	out_x0_ __asm__("x0");
+	register uint64_t	in_x5_ __asm__("x5") =
+		(uint64_t)((uint64_t)flags.raw);
+	register uint32_t out_x0_ __asm__("x0");
 
 	__asm__ volatile("hvc 0x6062"
 			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),

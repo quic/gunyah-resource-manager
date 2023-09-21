@@ -11,12 +11,14 @@
 #include <string.h>
 
 #include <rm_types.h>
+#include <util.h>
 
 #include <qcbor/qcbor.h>
 
 // Include after qcbor
 #include <platform_env.h>
 #include <rm_env_data.h>
+#include <vm_passthrough_config.h>
 
 static inline void
 qcbor_item_conv_uint64(qcbor_item_t *qcbor_item_ptr)
@@ -64,6 +66,118 @@ DEFINE_QCBOR_ITEM_HANDLER(uint64_t)
 DEFINE_QCBOR_ARRAY_ITEM_HANDLER(uint32_t)
 DEFINE_QCBOR_ARRAY_ITEM_HANDLER(uint64_t)
 
+DEFINE_QCBOR_MD_ARRAY_ITEM_HANDLER(uint32_t)
+DEFINE_QCBOR_MD_ARRAY_ITEM_HANDLER(uint64_t)
+
+// 1D array of vm_device_descriptor_t type where data of type "uint32_t" is
+// decoded into the respective member. Can be used to decode a 1D array of dtype
+// as well.
+DEFINE_QCBOR_DYNAMIC_STRUCT_ARRAY_ITEM_HANDLER(vmid_t, vm_device_descriptor_t)
+DEFINE_QCBOR_DYNAMIC_STRUCT_ARRAY_ITEM_HANDLER(uint32_t, vm_device_descriptor_t)
+// 1D array of vm_device_descriptor_t type where another 1D array of type
+// "uint32_t" or "uint64_t" is decoded into the respective member. Can be used
+// to decode a generic 2D array as well, where the outer 1D array is a structure
+// whose members are "count_t in_dimension" and a "dtype *data_ptr". Here
+// *data_ptr points to the inner array.
+DEFINE_QCBOR_DYNAMIC_MD_STRUCT_ARRAY_ITEM_HANDLER(uint32_t,
+						  vm_device_descriptor_t,
+						  uint32_t)
+DEFINE_QCBOR_DYNAMIC_MD_STRUCT_ARRAY_ITEM_HANDLER(uint64_t,
+						  vm_device_descriptor_t,
+						  uint32_t)
+
+// This API decodes the passthrough device assignments which is encode as a map.
+// Add any enhancement into passthrough device assignments data structure here
+// for decoding.
+static inline bool
+process_qcbor_map_vm_device_assignment(
+	const char *fname, qcbor_item_t *qcbor_item_ptr,
+	qcbor_dec_ctxt_t	*qcbor_decode_ctxt,
+	vm_device_assignments_t *device_assignments)
+{
+	bool ret = false;
+	if (strncmp(qcbor_item_ptr->label.string.ptr, fname,
+		    qcbor_item_ptr->label.string.len) == 0) {
+		if (qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_MAP) {
+			goto out;
+		}
+
+		while (1) {
+			if (QCBORDecode_GetNext(qcbor_decode_ctxt,
+						qcbor_item_ptr) !=
+			    QCBOR_SUCCESS) {
+				break;
+			}
+			qcbor_item_conv_uint64(qcbor_item_ptr);
+
+			if (qcbor_item_ptr->uLabelType ==
+			    (uint8_t)QCBOR_TYPE_TEXT_STRING) {
+				if (process_qcbor_item(num_devices,
+						       qcbor_item_ptr,
+						       device_assignments)) {
+					continue;
+				}
+				if (device_assignments->num_devices != 0U) {
+					if (process_qcbor_dynamic_struct_array_item(
+						    vmid, qcbor_item_ptr,
+						    qcbor_decode_ctxt, 1,
+						    device_assignments->devices,
+						    0,
+						    offsetof(
+							    vm_device_descriptor_t,
+							    vmid),
+						    vm_device_descriptor_t)) {
+						continue;
+					}
+					if (process_qcbor_dynamic_md_struct_array_item(
+						    irqs, qcbor_item_ptr,
+						    qcbor_decode_ctxt, 1,
+						    device_assignments->devices,
+						    0,
+						    offsetof(
+							    vm_device_descriptor_t,
+							    irqs),
+						    offsetof(
+							    vm_device_descriptor_t,
+							    num_irqs),
+						    vm_device_descriptor_t)) {
+						continue;
+					}
+					if (process_qcbor_dynamic_md_struct_array_item(
+						    mmio_ranges, qcbor_item_ptr,
+						    qcbor_decode_ctxt, 2,
+						    device_assignments->devices,
+						    0,
+						    offsetof(
+							    vm_device_descriptor_t,
+							    mmio_ranges),
+						    offsetof(
+							    vm_device_descriptor_t,
+							    num_mmio_ranges),
+						    vm_device_descriptor_t)) {
+						continue;
+					}
+				}
+			} else {
+				// Handle integer label types
+			}
+
+			// Something we don't know about, so get to next node
+			// past this node
+			while (qcbor_item_ptr->uNextNestLevel > 1U) {
+				if (QCBORDecode_GetNext(qcbor_decode_ctxt,
+							qcbor_item_ptr) !=
+				    QCBOR_SUCCESS) {
+					break;
+				}
+			}
+		}
+		ret = true;
+	}
+out:
+	return ret;
+}
+
 bool
 check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 			      qcbor_dec_ctxt_t *qcbor_decode_ctxt,
@@ -74,7 +188,8 @@ check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 
 	if (strncmp(qcbor_item_ptr->label.string.ptr, fname,
 		    qcbor_item_ptr->label.string.len) == 0) {
-		if (qcbor_item_ptr->uDataType == QCBOR_TYPE_TEXT_STRING) {
+		if (qcbor_item_ptr->uDataType ==
+		    (uint8_t)QCBOR_TYPE_TEXT_STRING) {
 			uint32_t bytes_to_copy;
 
 			bytes_to_copy =
@@ -84,81 +199,13 @@ check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 				bytes_to_copy = max_dest_bytes;
 			}
 
-			memcpy(dstp, qcbor_item_ptr->val.string.ptr,
-			       bytes_to_copy);
+			(void)memcpy(
+				dstp,
+				(const char *)qcbor_item_ptr->val.string.ptr,
+				bytes_to_copy);
 
-			if (copied_bytesp) {
+			if (copied_bytesp != NULL) {
 				*copied_bytesp = bytes_to_copy;
-			}
-			return true;
-		}
-	}
-	return false;
-}
-
-// For multi-dimensional array. For now implemented for 2D array
-static inline bool
-check_qcbor_uint64_t_md_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
-			      qcbor_dec_ctxt_t *qcbor_decode_ctxt,
-			      uint32_t max_array_cnt, uint32_t array_stride,
-			      uint64_t *dstp, uint32_t *items_foundp)
-{
-	if (strncmp(qcbor_item_ptr->label.string.ptr, fname,
-		    qcbor_item_ptr->label.string.len) == 0) {
-		if (qcbor_item_ptr->uDataType == QCBOR_TYPE_ARRAY) {
-			uint32_t data_cnt, idx = 0, start_nesting, out_item_cnt,
-					   i;
-
-			data_cnt      = qcbor_item_ptr->val.uCount;
-			start_nesting = qcbor_item_ptr->uNestingLevel;
-
-			out_item_cnt = max_array_cnt;
-
-			if (data_cnt < out_item_cnt) {
-				out_item_cnt = data_cnt;
-			}
-
-			while (idx < data_cnt) {
-				if (QCBORDecode_GetNext(qcbor_decode_ctxt,
-							qcbor_item_ptr) != 0) {
-					break;
-				}
-
-				if ((qcbor_item_ptr->uDataType !=
-				     QCBOR_TYPE_ARRAY) ||
-				    (qcbor_item_ptr->val.uCount !=
-				     array_stride)) {
-					break;
-				}
-
-				for (i = 0; i < array_stride; ++i) {
-					if (QCBORDecode_GetNext(
-						    qcbor_decode_ctxt,
-						    qcbor_item_ptr) != 0) {
-						goto done;
-					}
-
-					if (idx < max_array_cnt) {
-						qcbor_item_conv_uint64(
-							qcbor_item_ptr);
-						dstp[(idx * array_stride) + i] =
-							(uint64_t)qcbor_item_ptr
-								->val.uint64;
-					}
-				}
-
-				++idx;
-			}
-		done:
-			if (items_foundp) {
-				*items_foundp = idx;
-			}
-
-			while (qcbor_item_ptr->uNextNestLevel > start_nesting) {
-				if (QCBORDecode_GetNext(qcbor_decode_ctxt,
-							qcbor_item_ptr) != 0) {
-					break;
-				}
 			}
 			return true;
 		}
@@ -172,19 +219,40 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 	uint32_t *cbor_data_ptr, cbor_data_size;
 
 	if ((env_hdr == NULL) || (rm_env == NULL)) {
-		goto Exit;
+		goto exit;
 	}
 
-	if (env_hdr->signature != RM_ENV_DATA_SIGNATURE) {
-		goto Exit;
+	if (env_hdr->signature != (uint32_t)RM_ENV_DATA_SIGNATURE) {
+		goto exit;
 	}
+
+	rm_irq_env_data_t *irq_env = malloc(sizeof(*irq_env));
+	assert(irq_env != NULL);
+
+	rm_env->irq_env = irq_env;
+
+	vm_device_assignments_t *device_assignments =
+		calloc(1, sizeof(*device_assignments));
+	assert(device_assignments != NULL);
+	rm_env->device_assignments = device_assignments;
 
 	// Set anything that needs all bits be set to 1's
-	memset(&rm_env->vic_hwirq, 0xFF, sizeof(rm_env->vic_hwirq));
-	memset(&rm_env->vic_msi_source, 0xFF, sizeof(rm_env->vic_msi_source));
-	memset(&rm_env->gic_xlate_me, 0xFF, sizeof(rm_env->gic_xlate_me));
-
-	rm_env->uart_me_capid = CSPACE_CAP_INVALID;
+	for (index_t i = 0; i < util_array_size(irq_env->vic_hwirq); i++) {
+		irq_env->vic_hwirq[i] = CSPACE_CAP_INVALID;
+	}
+	for (index_t i = 0; i < util_array_size(irq_env->vic_msi_source); i++) {
+		irq_env->vic_msi_source[i] = CSPACE_CAP_INVALID;
+	}
+	rm_env->addrspace_capid = CSPACE_CAP_INVALID;
+	rm_env->vcpu_capid	= CSPACE_CAP_INVALID;
+	rm_env->device_me_capid = CSPACE_CAP_INVALID;
+	rm_env->partition_capid = CSPACE_CAP_INVALID;
+	rm_env->cspace_capid	= CSPACE_CAP_INVALID;
+	rm_env->me_capid	= CSPACE_CAP_INVALID;
+	rm_env->smc_wqs[0]	= CSPACE_CAP_INVALID;
+	rm_env->smc_wqs[1]	= CSPACE_CAP_INVALID;
+	rm_env->vic		= CSPACE_CAP_INVALID;
+	rm_env->uart_me_capid	= CSPACE_CAP_INVALID;
 
 	cbor_data_ptr =
 		(uint32_t *)(((uint32_t *)env_hdr) +
@@ -193,7 +261,7 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 
 	qcbor_dec_ctxt_t qcbor_decode_ctxt;
 	qcbor_item_t	 qcbor_item;
-	int		 nReturn = -1;
+	int32_t		 nReturn = -1;
 
 	QCBORDecode_Init(&qcbor_decode_ctxt,
 			 (const_useful_buff_t){ cbor_data_ptr, cbor_data_size },
@@ -202,9 +270,9 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 	// Make sure the top level entry is a map
 	if (QCBORDecode_GetNext(&qcbor_decode_ctxt, &qcbor_item) !=
 		    QCBOR_SUCCESS ||
-	    qcbor_item.uDataType != QCBOR_TYPE_MAP) {
+	    qcbor_item.uDataType != (uint8_t)QCBOR_TYPE_MAP) {
 		(void)nReturn;
-		goto Exit;
+		goto exit;
 	}
 
 	while (1) {
@@ -214,7 +282,7 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 		}
 		qcbor_item_conv_uint64(&qcbor_item);
 
-		if (qcbor_item.uLabelType == QCBOR_TYPE_TEXT_STRING) {
+		if (qcbor_item.uLabelType == (uint8_t)QCBOR_TYPE_TEXT_STRING) {
 			// FIXME:
 			// Consider using a hash table.
 
@@ -331,30 +399,30 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 				    &rm_env->num_reserved_dev_irqs)) {
 				continue;
 			}
-			if (process_qcbor_array_item(gic_xlate_me, &qcbor_item,
-						     &qcbor_decode_ctxt, rm_env,
-						     0)) {
-				continue;
-			}
 			if (process_qcbor_array_item(smc_wqs, &qcbor_item,
 						     &qcbor_decode_ctxt, rm_env,
 						     0)) {
 				continue;
 			}
 			if (process_qcbor_array_item(vic_hwirq, &qcbor_item,
-						     &qcbor_decode_ctxt, rm_env,
-						     0)) {
+						     &qcbor_decode_ctxt,
+						     irq_env, 0)) {
 				continue;
 			}
 			if (process_qcbor_array_item(
 				    vic_msi_source, &qcbor_item,
-				    &qcbor_decode_ctxt, rm_env, 0)) {
+				    &qcbor_decode_ctxt, irq_env, 0)) {
 				continue;
 			}
 			if (process_qcbor_md_array_item(
 				    free_ranges, &qcbor_item,
-				    &qcbor_decode_ctxt, rm_env,
-				    &rm_env->free_ranges_count)) {
+				    &qcbor_decode_ctxt, rm_env, 2,
+				    &rm_env->free_ranges_count, 0, uint64_t)) {
+				continue;
+			}
+			if (process_qcbor_map_vm_device_assignment(
+				    "vm_device_assignments", &qcbor_item,
+				    &qcbor_decode_ctxt, device_assignments)) {
 				continue;
 			}
 			if (platform_process_qcbor_items(&qcbor_item,
@@ -368,13 +436,13 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 
 		// Something we don't know about, so get to next node past this
 		// node
-		while (qcbor_item.uNextNestLevel > 1) {
+		while (qcbor_item.uNextNestLevel > 1U) {
 			if (QCBORDecode_GetNext(&qcbor_decode_ctxt,
 						&qcbor_item) != QCBOR_SUCCESS) {
 				break;
 			}
 		}
 	}
-Exit:
+exit:
 	return;
 }

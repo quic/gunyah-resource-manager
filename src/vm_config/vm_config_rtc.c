@@ -5,6 +5,7 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +49,7 @@
 #include "vm_config_rtc.h"
 #include "vm_parser_rtc.h"
 
-#define ALIGN_4KB (4UL * 1024)
+#define ALIGN_4KB (4UL * 1024U)
 
 error_t
 vm_config_vrtc_set_time_base(vm_t *vm, uint64_t time_base,
@@ -74,7 +75,7 @@ add_rtc_dev_node(vm_config_t *vmcfg, vmaddr_t ipa)
 
 	vdevice_node_t *node = calloc(1, sizeof(*node));
 	if (node == NULL) {
-		printf("Failed to allocate vRTC configuration node\n");
+		(void)printf("Failed to allocate vRTC configuration node\n");
 		err = ERROR_NOMEM;
 		goto out;
 	}
@@ -84,14 +85,14 @@ add_rtc_dev_node(vm_config_t *vmcfg, vmaddr_t ipa)
 	node->visible	   = true;
 	node->generate	   = strdup("/vsoc");
 	if (node->generate == NULL) {
-		printf("Failed to allocate vRTC generate string\n");
+		(void)printf("Failed to allocate vRTC generate string\n");
 		err = ERROR_NOMEM;
 		goto out;
 	}
 
 	struct vdevice_rtc *cfg = calloc(1, sizeof(*cfg));
 	if (cfg == NULL) {
-		printf("Failed to allocate vRTC configuration buffer\n");
+		(void)printf("Failed to allocate vRTC configuration buffer\n");
 		err = ERROR_NOMEM;
 		goto out;
 	}
@@ -133,8 +134,10 @@ add_rtc(vm_config_t *vmcfg, rtc_data_t *d)
 		RTC_IPA_SIZE, ALIGN_4KB);
 	if (alloc_ret.err != OK) {
 		err = alloc_ret.err;
-		printf("Failed to allocate IPA for vRTC at %lu, error %d\n",
-		       d->ipa_base, err);
+		(void)printf(
+			"Failed to allocate IPA for vRTC at %lu, error %" PRId32
+			"\n",
+			d->ipa_base, (int32_t)err);
 		goto out;
 	}
 	vmaddr_t ipa = alloc_ret.base;
@@ -143,7 +146,9 @@ add_rtc(vm_config_t *vmcfg, rtc_data_t *d)
 	ret = platform_vrtc_create_and_configure(rm_get_rm_partition(),
 						 rm_get_rm_cspace(), ipa);
 	if (ret.e != OK) {
-		printf("Create_Config virtual RTC failed, error %d\n", ret.e);
+		(void)printf("Create_Config virtual RTC failed, error %" PRId32
+			     "\n",
+			     (int32_t)ret.e);
 		err = ret.e;
 		goto out_free;
 	}
@@ -151,7 +156,9 @@ add_rtc(vm_config_t *vmcfg, rtc_data_t *d)
 	cap_id_t cap = ret.r;
 	err	     = gunyah_hyp_object_activate(cap);
 	if (err != OK) {
-		printf("Activating virtual RTC failed, error %d\n", err);
+		(void)printf("Activating virtual RTC failed, error %" PRId32
+			     "\n",
+			     (int32_t)err);
 		goto out_free;
 	}
 
@@ -185,7 +192,7 @@ handle_rtc(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 
 	// Make sure RTC virtualisation is supported
 	if (!platform_has_vrtc_support()) {
-		printf("Virtual RTC requested but not supported\n");
+		(void)printf("Virtual RTC requested but not supported\n");
 		ret = ERROR_UNIMPLEMENTED;
 		goto out;
 	}
@@ -199,7 +206,7 @@ handle_rtc(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 
 	ret = platform_vrtc_attach_addrspace(vmcfg->rtc, vmcfg->addrspace);
 	if (ret != OK) {
-		printf("Failed attach RTC\n");
+		(void)printf("Failed attach RTC\n");
 		goto out;
 	}
 
@@ -235,21 +242,21 @@ parse_vrtc(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	listener_return_t ret = RET_CLAIMED;
 
-	if (vector_size(vd->rtc) != 0) {
+	if (vector_size(vd->rtc) != 0U) {
 		// Only one vRTC allowed per VM
 		ret = RET_ERROR;
 		goto out;
 	}
 
 	rtc_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	bool	have_base = true;
 	error_t err = fdt_getprop_u64(fdt, node_ofs, "base", &cfg.ipa_base);
 	if (err != OK) {
 		if (err == ERROR_FAILURE) {
 			// Wrong size for base
-			printf("vRTC: Base invalid\n");
+			(void)printf("vRTC: Base invalid\n");
 			ret = RET_ERROR;
 			goto out;
 		} else {
@@ -261,18 +268,20 @@ parse_vrtc(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	if (have_base) {
 		if (cfg.allocate_base) {
-			printf("vRTC error: Base and allocate-base both present\n");
+			(void)printf(
+				"vRTC error: Base and allocate-base both present\n");
 			ret = RET_ERROR;
 			goto out;
 		}
 		if (!util_is_baligned(cfg.ipa_base, PAGE_SIZE)) {
-			printf("vRTC: Base not aligned\n");
+			(void)printf("vRTC: Base not aligned\n");
 			ret = RET_ERROR;
 			goto out;
 		}
 	} else {
 		if (!cfg.allocate_base) {
-			printf("vRTC error: Neither base nor allocate-base present\n");
+			(void)printf(
+				"vRTC error: Neither base nor allocate-base present\n");
 			ret = RET_ERROR;
 			goto out;
 		}

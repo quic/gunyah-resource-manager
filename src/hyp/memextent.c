@@ -257,6 +257,28 @@ memextent_zero_range(cap_id_t me, size_t offset, size_t size)
 	return gunyah_hyp_memextent_modify(me, flags, offset, size);
 }
 
+error_t
+memextent_cache_clean_range(cap_id_t me, size_t offset, size_t size)
+{
+	memextent_modify_flags_t flags = memextent_modify_flags_default();
+	memextent_modify_flags_set_op(&flags,
+				      MEMEXTENT_MODIFY_OP_CACHE_CLEAN_RANGE);
+	memextent_modify_flags_set_no_sync(&flags, true);
+
+	return gunyah_hyp_memextent_modify(me, flags, offset, size);
+}
+
+error_t
+memextent_cache_flush_range(cap_id_t me, size_t offset, size_t size)
+{
+	memextent_modify_flags_t flags = memextent_modify_flags_default();
+	memextent_modify_flags_set_op(&flags,
+				      MEMEXTENT_MODIFY_OP_CACHE_FLUSH_RANGE);
+	memextent_modify_flags_set_no_sync(&flags, true);
+
+	return gunyah_hyp_memextent_modify(me, flags, offset, size);
+}
+
 void
 memextent_sync_all(cap_id_t me)
 {

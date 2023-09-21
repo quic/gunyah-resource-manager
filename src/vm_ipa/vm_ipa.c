@@ -67,9 +67,9 @@ reserve_alloc_list(vm_t *vm, ipa_reserve_req_alloc_list_t *list,
 	(*resp)->reserved_entires = entries;
 
 	if (err != RM_OK) {
-		for (; i > 0; i--) {
-			vmaddr_t base	  = ipa_list[i - 1];
-			size_t	 ipa_size = list[i - 1].size;
+		for (; i > 0U; i--) {
+			vmaddr_t base	  = ipa_list[i - 1U];
+			size_t	 ipa_size = list[i - 1U].size;
 			error_t	 vm_err =
 				vm_address_range_untag(vm, base, ipa_size, tag);
 			assert(vm_err == OK);
@@ -99,9 +99,9 @@ reserve_fixed_list(vm_t *vm, ipa_reserve_req_fixed_list_t *list,
 	}
 
 	if (err != RM_OK) {
-		while (i > 0) {
-			vmaddr_t base = list[i - 1].base;
-			size_t	 size = list[i - 1].size;
+		while (i > 0U) {
+			vmaddr_t base = list[i - 1U].base;
+			size_t	 size = list[i - 1U].size;
 			error_t	 vm_err =
 				vm_address_range_untag(vm, base, size, tag);
 			assert(vm_err == OK);
@@ -214,11 +214,12 @@ bool
 vm_ipa_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		   void *buf, size_t len)
 {
-	bool handled = true;
+	bool handled;
 
 	switch (msg_id) {
 	case IPA_RESERVE:
 		reserve_ipa(client_id, seq_num, buf, len);
+		handled = true;
 		break;
 	case IPA_UNRESERVE:
 		LOG_LOC("IPA_UNRESERVE");

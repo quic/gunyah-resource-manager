@@ -25,7 +25,7 @@
 #include <vm_config.h>
 
 rm_error_t
-register_isr(virq_t virq, int trigger, isr_t isr, void *data)
+register_isr(virq_t virq, int32_t trigger, isr_t isr, void *data)
 {
 	const char *dev = "/dev/gicv3";
 
@@ -38,12 +38,12 @@ register_isr(virq_t virq, int trigger, isr_t isr, void *data)
 	}
 
 	struct irq_set_trigger_req req_set_trigger = {
-		.irq	 = (int)virq,
+		.irq	 = (int32_t)virq,
 		.trigger = trigger,
 	};
 
 	int ret = 0;
-	ret = ioctl(fd, IOCTL_SET_IRQ_TRIGGER, (unsigned long)&req_set_trigger);
+	ret = ioctl(fd, (int)IOCTL_SET_IRQ_TRIGGER, (uint64_t)&req_set_trigger);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 		goto err1;
@@ -51,29 +51,29 @@ register_isr(virq_t virq, int trigger, isr_t isr, void *data)
 
 	struct register_isr_req req_register_isr = {
 		.isr  = isr,
-		.irq  = (int)virq,
+		.irq  = (int32_t)virq,
 		.data = data,
 	};
 
-	ret = ioctl(fd, IOCTL_REGISTER_ISR, (unsigned long)&req_register_isr);
+	ret = ioctl(fd, (int)IOCTL_REGISTER_ISR, (uint64_t)&req_register_isr);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 		goto err1;
 	}
 
-	ret = ioctl(fd, IOCTL_ENABLE_IRQ, (unsigned long)&virq);
+	ret = ioctl(fd, (int)IOCTL_ENABLE_IRQ, (uint64_t)&virq);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 	}
 
 err1:
-	close(fd);
+	(void)close(fd);
 err:
 	return e;
 }
 
 static bool
-isr_simple(int virq_num, void *data)
+isr_simple(int32_t virq_num, void *data)
 {
 	bool ret = false;
 
@@ -84,7 +84,7 @@ isr_simple(int virq_num, void *data)
 		goto out;
 	}
 
-	event_trigger(event);
+	(void)event_trigger(event);
 	ret = true;
 
 out:
@@ -116,17 +116,17 @@ deregister_isr(virq_t virq)
 		goto err;
 	}
 
-	int ret = ioctl(fd, IOCTL_DISABLE_IRQ, (unsigned long)&virq);
+	int ret = ioctl(fd, (int)IOCTL_DISABLE_IRQ, (uint64_t)&virq);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 	}
 
-	ret = ioctl(fd, IOCTL_DEREGISTER_ISR, (unsigned long)&virq);
+	ret = ioctl(fd, (int)IOCTL_DEREGISTER_ISR, (uint64_t)&virq);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 	}
 
-	close(fd);
+	(void)close(fd);
 err:
 	return e;
 }

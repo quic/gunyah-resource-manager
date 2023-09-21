@@ -75,14 +75,14 @@ platform_uart_map(rm_env_data_t *env_data)
 				    env_data->uart_address, PGTABLE_ACCESS_RW,
 				    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
 		if (ret != OK) {
-			printf("UART mapping failed\n");
+			(void)printf("UART mapping failed\n");
 			exit(1);
 		}
 
 		uart_address  = env_data->uart_address;
 		g_uart_log_en = true;
 	} else {
-		printf("No uart_address configured");
+		(void)printf("No uart_address configured");
 		g_uart_log_en = false;
 	}
 }

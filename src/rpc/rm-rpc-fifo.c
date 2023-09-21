@@ -193,7 +193,7 @@ send_pending_notifications(fifo_status_t *status)
 
 		e = rm_rpc_send_notification(status->vm_id, n->notif_id, n->buf,
 					     n->len);
-		if (e != OK) {
+		if (e != RM_OK) {
 			break;
 		}
 
@@ -220,8 +220,9 @@ rm_rpc_fifo_reply(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, void *buf,
 		e = send_pending_reply(status);
 		// If we couldn't send the pending reply, drop it
 		if (e != RM_OK) {
-			printf("rm-rpc-fifo: Dropped pending reply for VM %d!\n",
-			       (int)vm_id);
+			(void)printf(
+				"rm-rpc-fifo: Dropped pending reply for VM %d!\n",
+				(uint32_t)vm_id);
 			free(status->reply_buf);
 			status->reply_buf = NULL;
 		}
@@ -265,8 +266,9 @@ rm_rpc_fifo_send_notification(vmid_t vm_id, uint32_t notif_id, void *buf,
 	if ((e == RM_ERROR_BUSY) && allow_pending) {
 		// If we are at max notif count, drop the oldest notification
 		if (status->pending_notif_count == MAX_NOTIFICATION_PENDING) {
-			printf("rm-rpc-fifo: Dropped pending notif for VM %d!\n",
-			       (int)vm_id);
+			(void)printf(
+				"rm-rpc-fifo: Dropped pending notif for VM %d!\n",
+				(uint32_t)vm_id);
 			delete_pending_notif(status, status->pending_notif_list,
 					     false);
 		}
@@ -302,7 +304,7 @@ rm_rpc_fifo_tx_callback(vmid_t vm_id)
 
 	if ((status->reply_buf != NULL) ||
 	    (status->pending_notif_list != NULL)) {
-		event_trigger(&find_ret.status->send_pending_event);
+		(void)event_trigger(&find_ret.status->send_pending_event);
 	}
 }
 
@@ -369,23 +371,23 @@ rm_reply_error(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	char  *out_buf = malloc(size);
 
 	if (out_buf == NULL) {
-		printf("OOM: fail to alloc rm_reply\n");
+		(void)printf("OOM: fail to alloc rm_reply\n");
 		exit(1);
 	}
 
-	rm_standard_rep_t rep;
-	rep.err = err;
+	rm_standard_rep_t rep = (rm_standard_rep_t){ .err = err };
 
-	memcpy(out_buf, &rep, sizeof(rm_standard_rep_t));
+	(void)memcpy(out_buf, (const char *)&rep, sizeof(rm_standard_rep_t));
 	if (len > 0U) {
-		memcpy(out_buf + sizeof(rm_standard_rep_t), data, len);
+		(void)memcpy((void *)(out_buf + sizeof(rm_standard_rep_t)),
+			     data, len);
 	}
 
 	rm_error_t rpc_err =
 		rm_rpc_fifo_reply(client_id, msg_id, seq_num, out_buf, size);
 	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
-		printf("rm_reply: err(%d)\n", rpc_err);
+		(void)printf("rm_reply: err(%d)\n", rpc_err);
 		exit(1);
 	}
 }
@@ -398,17 +400,17 @@ rm_notify(vmid_t client_id, uint32_t notif_id, void *data, size_t len)
 	char *out_buf = malloc(len);
 
 	if (out_buf == NULL) {
-		printf("OOM: fail to alloc rm_notify\n");
+		(void)printf("OOM: fail to alloc rm_notify\n");
 		exit(1);
 	}
 
-	memcpy(out_buf, data, len);
+	(void)memcpy((void *)out_buf, data, len);
 
 	rm_error_t rpc_err = rm_rpc_fifo_send_notification(client_id, notif_id,
 							   out_buf, len, true);
 	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
-		printf("rm_reply: err(%d)\n", rpc_err);
+		(void)printf("rm_reply: err(%d)\n", rpc_err);
 		exit(1);
 	}
 }

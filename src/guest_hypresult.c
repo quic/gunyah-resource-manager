@@ -248,6 +248,32 @@ addrspace_vmmio_configure_op_ptr_result_ok(addrspace_vmmio_configure_op_t *ret)
 	return (addrspace_vmmio_configure_op_ptr_result_t){ .r = ret, .e = OK };
 }
 
+addrspace_attach_vdevice_flags_result_t
+addrspace_attach_vdevice_flags_result_error(error_t err)
+{
+	return (addrspace_attach_vdevice_flags_result_t){ .e = err };
+}
+
+addrspace_attach_vdevice_flags_result_t
+addrspace_attach_vdevice_flags_result_ok(addrspace_attach_vdevice_flags_t ret)
+{
+	return (addrspace_attach_vdevice_flags_result_t){ .r = ret, .e = OK };
+}
+
+addrspace_attach_vdevice_flags_ptr_result_t
+addrspace_attach_vdevice_flags_ptr_result_error(error_t err)
+{
+	return (addrspace_attach_vdevice_flags_ptr_result_t){ .e = err };
+}
+
+addrspace_attach_vdevice_flags_ptr_result_t
+addrspace_attach_vdevice_flags_ptr_result_ok(
+	addrspace_attach_vdevice_flags_t *ret)
+{
+	return (addrspace_attach_vdevice_flags_ptr_result_t){ .r = ret,
+							      .e = OK };
+}
+
 hyp_variant_result_t
 hyp_variant_result_error(error_t err)
 {
@@ -630,6 +656,58 @@ pgtable_access_ptr_result_t
 pgtable_access_ptr_result_ok(pgtable_access_t *ret)
 {
 	return (pgtable_access_ptr_result_t){ .r = ret, .e = OK };
+}
+
+root_env_mmio_range_properties_result_t
+root_env_mmio_range_properties_result_error(error_t err)
+{
+	return (root_env_mmio_range_properties_result_t){ .e = err };
+}
+
+root_env_mmio_range_properties_result_t
+root_env_mmio_range_properties_result_ok(root_env_mmio_range_properties_t ret)
+{
+	return (root_env_mmio_range_properties_result_t){ .r = ret, .e = OK };
+}
+
+root_env_mmio_range_properties_ptr_result_t
+root_env_mmio_range_properties_ptr_result_error(error_t err)
+{
+	return (root_env_mmio_range_properties_ptr_result_t){ .e = err };
+}
+
+root_env_mmio_range_properties_ptr_result_t
+root_env_mmio_range_properties_ptr_result_ok(
+	root_env_mmio_range_properties_t *ret)
+{
+	return (root_env_mmio_range_properties_ptr_result_t){ .r = ret,
+							      .e = OK };
+}
+
+root_env_mmio_range_descriptor_result_t
+root_env_mmio_range_descriptor_result_error(error_t err)
+{
+	return (root_env_mmio_range_descriptor_result_t){ .e = err };
+}
+
+root_env_mmio_range_descriptor_result_t
+root_env_mmio_range_descriptor_result_ok(root_env_mmio_range_descriptor_t ret)
+{
+	return (root_env_mmio_range_descriptor_result_t){ .r = ret, .e = OK };
+}
+
+root_env_mmio_range_descriptor_ptr_result_t
+root_env_mmio_range_descriptor_ptr_result_error(error_t err)
+{
+	return (root_env_mmio_range_descriptor_ptr_result_t){ .e = err };
+}
+
+root_env_mmio_range_descriptor_ptr_result_t
+root_env_mmio_range_descriptor_ptr_result_ok(
+	root_env_mmio_range_descriptor_t *ret)
+{
+	return (root_env_mmio_range_descriptor_ptr_result_t){ .r = ret,
+							      .e = OK };
 }
 
 priority_result_t
@@ -1018,6 +1096,30 @@ microseconds_ptr_result_ok(microseconds_t *ret)
 	return (microseconds_ptr_result_t){ .r = ret, .e = OK };
 }
 
+milliseconds_result_t
+milliseconds_result_error(error_t err)
+{
+	return (milliseconds_result_t){ .e = err };
+}
+
+milliseconds_result_t
+milliseconds_result_ok(milliseconds_t ret)
+{
+	return (milliseconds_result_t){ .r = ret, .e = OK };
+}
+
+milliseconds_ptr_result_t
+milliseconds_ptr_result_error(error_t err)
+{
+	return (milliseconds_ptr_result_t){ .e = err };
+}
+
+milliseconds_ptr_result_t
+milliseconds_ptr_result_ok(milliseconds_t *ret)
+{
+	return (milliseconds_ptr_result_t){ .r = ret, .e = OK };
+}
+
 trace_class_result_t
 trace_class_result_error(error_t err)
 {
@@ -1112,6 +1214,30 @@ vcpu_register_set_ptr_result_t
 vcpu_register_set_ptr_result_ok(vcpu_register_set_t *ret)
 {
 	return (vcpu_register_set_ptr_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_option_flags_result_t
+vcpu_option_flags_result_error(error_t err)
+{
+	return (vcpu_option_flags_result_t){ .e = err };
+}
+
+vcpu_option_flags_result_t
+vcpu_option_flags_result_ok(vcpu_option_flags_t ret)
+{
+	return (vcpu_option_flags_result_t){ .r = ret, .e = OK };
+}
+
+vcpu_option_flags_ptr_result_t
+vcpu_option_flags_ptr_result_error(error_t err)
+{
+	return (vcpu_option_flags_ptr_result_t){ .e = err };
+}
+
+vcpu_option_flags_ptr_result_t
+vcpu_option_flags_ptr_result_ok(vcpu_option_flags_t *ret)
+{
+	return (vcpu_option_flags_ptr_result_t){ .r = ret, .e = OK };
 }
 
 vcpu_poweron_flags_result_t
@@ -1402,28 +1528,28 @@ rm_env_data_hdr_ptr_result_ok(rm_env_data_hdr_t *ret)
 	return (rm_env_data_hdr_ptr_result_t){ .r = ret, .e = OK };
 }
 
-vcpu_option_flags_result_t
-vcpu_option_flags_result_error(error_t err)
+vgic_gicr_attach_flags_result_t
+vgic_gicr_attach_flags_result_error(error_t err)
 {
-	return (vcpu_option_flags_result_t){ .e = err };
+	return (vgic_gicr_attach_flags_result_t){ .e = err };
 }
 
-vcpu_option_flags_result_t
-vcpu_option_flags_result_ok(vcpu_option_flags_t ret)
+vgic_gicr_attach_flags_result_t
+vgic_gicr_attach_flags_result_ok(vgic_gicr_attach_flags_t ret)
 {
-	return (vcpu_option_flags_result_t){ .r = ret, .e = OK };
+	return (vgic_gicr_attach_flags_result_t){ .r = ret, .e = OK };
 }
 
-vcpu_option_flags_ptr_result_t
-vcpu_option_flags_ptr_result_error(error_t err)
+vgic_gicr_attach_flags_ptr_result_t
+vgic_gicr_attach_flags_ptr_result_error(error_t err)
 {
-	return (vcpu_option_flags_ptr_result_t){ .e = err };
+	return (vgic_gicr_attach_flags_ptr_result_t){ .e = err };
 }
 
-vcpu_option_flags_ptr_result_t
-vcpu_option_flags_ptr_result_ok(vcpu_option_flags_t *ret)
+vgic_gicr_attach_flags_ptr_result_t
+vgic_gicr_attach_flags_ptr_result_ok(vgic_gicr_attach_flags_t *ret)
 {
-	return (vcpu_option_flags_ptr_result_t){ .r = ret, .e = OK };
+	return (vgic_gicr_attach_flags_ptr_result_t){ .r = ret, .e = OK };
 }
 
 cap_id_result_t

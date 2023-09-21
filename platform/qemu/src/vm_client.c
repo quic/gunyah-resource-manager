@@ -44,7 +44,7 @@ platform_get_sign_authority_string(vm_sign_t sign)
 		ret = "None";
 		break;
 	default:
-		printf("Error: invalid sign %d\n", sign);
+		(void)printf("Error: invalid sign %d\n", sign);
 		ret = NULL;
 		break;
 	}

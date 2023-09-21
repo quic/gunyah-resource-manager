@@ -23,7 +23,7 @@ rm_error_t
 register_uart(void)
 {
 	const char *dev	   = "/dev/console";
-	char	   *banner = "[RM]";
+	const char *banner = "[RM]";
 
 	rm_error_t e = RM_OK;
 
@@ -44,14 +44,14 @@ register_uart(void)
 		.console = uart_write,
 	};
 
-	ret = ioctl(fd, IOCTL_REGISTER_CONSOLE,
-		    (unsigned long)&req_register_console);
+	ret = ioctl(fd, (int)IOCTL_REGISTER_CONSOLE,
+		    (uint64_t)&req_register_console);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 		goto err1;
 	}
 
-	ret = ioctl(fd, IOCTL_SET_PREFIX_CONSOLE, banner);
+	ret = ioctl(fd, (int)IOCTL_SET_PREFIX_CONSOLE, banner);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 		goto err1;
@@ -60,7 +60,7 @@ register_uart(void)
 	uart_registered = true;
 
 err1:
-	close(fd);
+	(void)close(fd);
 err:
 	return e;
 }
@@ -83,14 +83,14 @@ deregister_uart(void)
 		goto err;
 	}
 
-	int ret = ioctl(fd, IOCTL_DEREGISTER_CONSOLE, 0);
+	int ret = ioctl(fd, (int)IOCTL_DEREGISTER_CONSOLE, 0);
 	if (ret != 0) {
 		e = RM_ERROR_DENIED;
 	}
 
 	uart_registered = false;
 
-	close(fd);
+	(void)close(fd);
 err:
 	return e;
 }

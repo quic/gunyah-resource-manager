@@ -4,7 +4,7 @@
 
 // We limit the size of the address space so we can store page-aligned addresses
 // in 32 bits.
-#define ADDR_LIMIT ((size_t)1U << (32U + PAGE_BITS))
+#define ADDR_LIMIT util_bit(32 + PAGE_BITS)
 
 // This enum gives information on the use of memory being mapped in a VM.
 // The mapping behaviour of memory may differ depending on its usage.

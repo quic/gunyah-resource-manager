@@ -30,7 +30,7 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	rm_error_t ret;
 	vmid_t	   vmid;
 
-	if (len != 4) {
+	if (len != 4U) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -49,12 +49,12 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	ret = vm_config_get_resource_descs(client_id, vmid, descs);
 	if (ret != RM_OK) {
-		goto out;
+		goto out_deinit;
 	}
 
 	resource_entries = (uint32_t)vector_size(descs);
 
-	size_t resp_size = (2 * sizeof(uint32_t)) +
+	size_t resp_size = (2U * sizeof(uint32_t)) +
 			   (resource_entries * sizeof(rm_hyp_resource_resp_t));
 	char *resp = calloc(1, resp_size);
 	if (resp == NULL) {
@@ -65,14 +65,15 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	memcpy(resp, &ret, sizeof(ret));
 	memcpy(resp + sizeof(uint32_t), &resource_entries,
 	       sizeof(resource_entries));
-	memcpy(resp + (2 * sizeof(uint32_t)), vector_raw_data(descs),
-	       resource_entries * sizeof(rm_hyp_resource_resp_t));
+	(void)memcpy((void *)(resp + (2U * sizeof(uint32_t))),
+		     vector_raw_data(descs),
+		     resource_entries * sizeof(rm_hyp_resource_resp_t));
 
 	rm_error_t rpc_err =
 		rm_rpc_fifo_reply(client_id, msg_id, seq_num, resp, resp_size);
 	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
-		printf("get_hyp_resources: err(%d)\n", rpc_err);
+		(void)printf("get_hyp_resources: err(%d)\n", rpc_err);
 		exit(1);
 	}
 
@@ -109,6 +110,7 @@ vm_get_resources_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		// FIXME: implement in v2
 		break;
 	default:
+		// not a get-resources message
 		break;
 	}
 

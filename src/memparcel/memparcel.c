@@ -5,6 +5,7 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -99,7 +100,7 @@ struct memparcel {
 static memparcel_t *mp_list_head;
 static mem_handle_t mp_handles;
 
-#define SIZE_2M (2UL * 1024 * 1024)
+#define SIZE_2M (2U * 1024U * 1024U)
 
 #define MAX_MEMPARCEL_PER_VM 64U
 
@@ -327,7 +328,7 @@ allocate_handle(void)
 		handle = mp_handles;
 		mp_handles++;
 		mp = lookup_memparcel(handle);
-	} while (mp != NULL);
+	} while ((mp != NULL) || (handle == MEMPARCEL_INVALID_HANDLE));
 
 	return handle;
 }
@@ -447,8 +448,10 @@ add_sgl_to_mp(vm_t *vm, memparcel_t *mp, vm_meminfo_t *owner_info,
 		vm_memory_result_t lookup_ret =
 			vm_memory_lookup(vm, memuse, vaddr, vsize);
 		if (lookup_ret.err != OK) {
-			printf("memparcel: Failed lookup of VM memory %d  %lX  %lX\n",
-			       lookup_ret.err, vaddr, vsize);
+			(void)printf(
+				"memparcel: Failed lookup of VM memory %" PRId32
+				"  %lX  %zx\n",
+				(int32_t)lookup_ret.err, vaddr, vsize);
 			err = RM_ERROR_MEM_INVALID;
 			goto out;
 		}
@@ -458,8 +461,9 @@ add_sgl_to_mp(vm_t *vm, memparcel_t *mp, vm_meminfo_t *owner_info,
 		assert(addr_valid(paddr) && addr_valid(psize));
 
 #if MEMPARCEL_VERBOSE_DEBUG
-		printf("sgl[%d]: vaddr: %lx vsize: %lx paddr: %lx psize: %lx\n",
-		       sgl_idx, vaddr, vsize, paddr, psize);
+		(void)printf(
+			"sgl[%d]: vaddr: %lx vsize: %zx paddr: %lx psize: %zx\n",
+			sgl_idx, vaddr, vsize, paddr, psize);
 #endif
 
 		if (trans_type == TRANS_TYPE_SHARE) {
@@ -470,8 +474,10 @@ add_sgl_to_mp(vm_t *vm, memparcel_t *mp, vm_meminfo_t *owner_info,
 						    mem_type, vaddr, paddr,
 						    psize);
 			if (hyp_err != OK) {
-				printf("memparcel: Map in owner failed %d\n",
-				       hyp_err);
+				(void)printf(
+					"memparcel: Map in owner failed %" PRId32
+					"\n",
+					(int32_t)hyp_err);
 				err = RM_ERROR_MAP_FAILED;
 				goto out;
 			}
@@ -483,8 +489,10 @@ add_sgl_to_mp(vm_t *vm, memparcel_t *mp, vm_meminfo_t *owner_info,
 		hyp_err = vm_memory_donate_extent(vm, mem_type, acl_info,
 						  me_cap, paddr, psize, true);
 		if (hyp_err != OK) {
-			printf("memparcel: donate to mp extent failed %d\n",
-			       hyp_err);
+			(void)printf(
+				"memparcel: donate to mp extent failed %" PRId32
+				"\n",
+				(int32_t)hyp_err);
 			err = RM_ERROR_MEM_INVALID;
 			goto out;
 		}
@@ -493,7 +501,7 @@ add_sgl_to_mp(vm_t *vm, memparcel_t *mp, vm_meminfo_t *owner_info,
 
 		err = region_list_push_back(mp->region_list, region);
 		if (err != RM_OK) {
-			printf("memparcel: failed to push back region\n");
+			(void)printf("memparcel: failed to push back region\n");
 			// Revert the earlier donation.
 			hyp_err = vm_memory_donate_extent(vm, mem_type,
 							  acl_info, me_cap,
@@ -577,7 +585,7 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 	}
 
 	if (vm->mp_count == MAX_MEMPARCEL_PER_VM) {
-		printf("Reached memparcel limit for VM %d\n", owner_vmid);
+		(void)printf("Reached memparcel limit for VM %d\n", owner_vmid);
 		err = RM_ERROR_DENIED;
 		goto out;
 	}
@@ -656,8 +664,9 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 	mp->acl_info	     = NULL;
 
 #if MEMPARCEL_VERBOSE_DEBUG
-	printf("memparcel: create 0x%x, label 0x%x\n", (unsigned int)mp->handle,
-	       (unsigned int)(label_valid ? mp->label : -1U));
+	(void)printf("memparcel: create 0x%x, label 0x%x\n",
+		     (uint32_t)mp->handle,
+		     (uint32_t)(label_valid ? mp->label : (uint32_t)-1));
 #endif
 
 	uint8_t	 max_rights    = (mem_type == MEM_TYPE_IO) ? MEM_RIGHTS_RW
@@ -667,8 +676,9 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 	for (uint32_t i = 0U; i < acl_entries; i++) {
 		for (uint32_t j = 0U; j < i; j++) {
 			if (acl[i].vmid == acl[j].vmid) {
-				printf("memparcel: acl[%i] duplicate vmid",
-				       (int)i);
+				(void)printf(
+					"memparcel: acl[%i] duplicate vmid",
+					(uint32_t)i);
 				err = RM_ERROR_ARGUMENT_INVALID;
 				goto out;
 			}
@@ -676,16 +686,17 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 
 		if (!vmid_valid(acl[i].vmid) ||
 		    !mem_rights_valid(acl[i].rights)) {
-			printf("memparcel: acl[%d]: invalid vmid or rights\n",
-			       (int)i);
+			(void)printf(
+				"memparcel: acl[%d]: invalid vmid or rights\n",
+				(uint32_t)i);
 			err = RM_ERROR_ARGUMENT_INVALID;
 			goto out;
 		}
 
 		if ((mem_type == MEM_TYPE_IO) &&
 		    ((acl[i].rights & MEM_RIGHTS_X) != 0U)) {
-			printf("memparcel: acl[%d]: invalid IO rights\n",
-			       (int)i);
+			(void)printf("memparcel: acl[%d]: invalid IO rights\n",
+				     (uint32_t)i);
 			err = RM_ERROR_ARGUMENT_INVALID;
 			goto out;
 		}
@@ -711,7 +722,7 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 	// The owner VM should only be included in the ACL for MEM_SHARE
 	if (((trans_type == TRANS_TYPE_SHARE) && (owner_info == NULL)) ||
 	    ((trans_type != TRANS_TYPE_SHARE) && (owner_info != NULL))) {
-		printf("memparcel: invalid share request\n");
+		(void)printf("memparcel: invalid share request\n");
 		err = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -719,8 +730,9 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 	vm_acl_info_result_t acl_ret = vm_memory_get_acl_info(
 		vm, mem_type, trans_type, acl, acl_entries, vm_init);
 	if (acl_ret.err != OK) {
-		printf("memparcel: Failed to get VM ACL info %d\n",
-		       acl_ret.err);
+		(void)printf("memparcel: Failed to get VM ACL info %" PRId32
+			     "\n",
+			     (int32_t)acl_ret.err);
 		err = RM_ERROR_DENIED;
 		goto out;
 	}
@@ -731,15 +743,17 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 	for (uint16_t i = 0U; i < attr_entries; i++) {
 		for (uint16_t j = 0U; j < i; j++) {
 			if (attr_list[i].vmid == attr_list[j].vmid) {
-				printf("memparcel: attr_list[%i] duplicate vmid",
-				       (int)i);
+				(void)printf(
+					"memparcel: attr_list[%i] duplicate vmid",
+					(uint32_t)i);
 				err = RM_ERROR_ARGUMENT_INVALID;
 				goto out;
 			}
 		}
 
 		if (!mem_attr_valid(attr_list[i].attr)) {
-			printf("memparcel: invalid attr[%d]", (int)i);
+			(void)printf("memparcel: invalid attr[%d]",
+				     (uint32_t)i);
 			err = RM_ERROR_ARGUMENT_INVALID;
 			goto out;
 		}
@@ -782,9 +796,10 @@ memparcel_construct(vmid_t owner_vmid, uint16_t acl_entries,
 	err = RM_OK;
 out:
 	if ((err != RM_OK) && (mp != NULL)) {
-		printf("memparcel_construct 0x%x label 0x%x ret %d\n",
-		       (uint32_t)mp->handle,
-		       (label_valid ? mp->label : (uint32_t)-1), err);
+		(void)printf("memparcel_construct 0x%x label 0x%x ret %d\n",
+			     (uint32_t)mp->handle,
+			     (uint32_t)(label_valid ? mp->label : (uint32_t)-1),
+			     err);
 	}
 
 	memparcel_construct_ret_t ret;
@@ -819,7 +834,7 @@ memparcel_create(vmid_t vmid, uint32_t msg_id, uint16_t seq_num, uint8_t *buf,
 	uint32_t   handle = MEMPARCEL_INVALID_HANDLE;
 	uint32_t   label;
 
-	char *type_str;
+	const char *type_str;
 	if (msg_id == MEM_LEND) {
 		trans_type = TRANS_TYPE_LEND;
 		type_str   = "LEND";
@@ -878,7 +893,7 @@ out:
 
 		rm_reply(vmid, msg_id, seq_num, &resp, sizeof(resp));
 	} else {
-		printf("MEM_%s VM %d ret %d\n", type_str, vmid, err);
+		(void)printf("MEM_%s VM %d ret %d\n", type_str, vmid, err);
 		rm_standard_reply(vmid, msg_id, seq_num, err);
 	}
 }
@@ -958,7 +973,8 @@ memparcel_append(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	err = memparcel_do_append(vmid, handle, flags, sgl_entries, sgl);
 
 out:
-	printf("MEM_APPEND VM %d H %d ret %d\n", vmid, (int)handle, err);
+	(void)printf("MEM_APPEND VM %d H %d ret %d\n", vmid, (uint32_t)handle,
+		     err);
 
 	rm_standard_reply(vmid, MEM_APPEND, seq_num, err);
 }
@@ -1038,7 +1054,8 @@ memparcel_handle_accept(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 				  resp_sgl, resp_flags);
 
 out:
-	printf("MEM_ACCEPT VM %d H %d ret %d\n", vmid, (int)handle, err);
+	(void)printf("MEM_ACCEPT VM %d H %d ret %d\n", vmid, (uint32_t)handle,
+		     err);
 
 	if ((err == RM_OK) && (resp != NULL)) {
 		assert(resp_entries <= MAX_LIST_ENTRIES);
@@ -1052,7 +1069,8 @@ out:
 					resp_size);
 		if (err != RM_OK) {
 			free(resp);
-			printf("memparcel_accept: error sending reply %d", err);
+			(void)printf("memparcel_accept: error sending reply %d",
+				     err);
 			exit(1);
 		}
 	} else {
@@ -1121,7 +1139,9 @@ alloc_as_range(vm_t *vm, uint8_t mem_type, vmaddr_t ipa, paddr_t phys,
 {
 	vm_memuse_t memuse    = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_DEVICE
 							  : VM_MEMUSE_NORMAL;
-	size_t	    alignment = (size >= SIZE_2M) ? SIZE_2M : PAGE_SIZE;
+	size_t	    alignment = ((ipa == INVALID_ADDRESS) && (size >= SIZE_2M))
+					? SIZE_2M
+					: PAGE_SIZE;
 
 	return vm_address_range_alloc(vm, memuse, ipa, phys, size, alignment);
 }
@@ -1421,8 +1441,10 @@ memparcel_do_accept(vmid_t vmid, uint16_t acl_entries, uint16_t sgl_entries,
 			alloc_as_range(vm, mp->mem_type, alloc_ipa,
 				       INVALID_ADDRESS, mp->total_size);
 		if (ar_ret.err != OK) {
-			printf("memparcel: Failed to alloc contig range %d\n",
-			       ar_ret.err);
+			(void)printf(
+				"memparcel: Failed to alloc contig range %" PRId32
+				"\n",
+				(int32_t)ar_ret.err);
 			err = RM_ERROR_NORESOURCE;
 			goto err_alloc;
 		}
@@ -1473,8 +1495,10 @@ memparcel_do_accept(vmid_t vmid, uint16_t acl_entries, uint16_t sgl_entries,
 			vm_address_range_result_t ar_ret = alloc_as_range(
 				vm, mp->mem_type, alloc_ipa, phys, size);
 			if (ar_ret.err != OK) {
-				printf("memparcel: Failed to alloc as range %d\n",
-				       ar_ret.err);
+				(void)printf(
+					"memparcel: Failed to alloc as range %" PRId32
+					"\n",
+					(int32_t)ar_ret.err);
 				err = RM_ERROR_NORESOURCE;
 				goto err_alloc;
 			}
@@ -1522,8 +1546,10 @@ do_mapping:
 							  mp->me_cap, phys,
 							  size, false);
 			if (hyp_err != OK) {
-				printf("memparcel: Donate to new owner failed %d\n",
-				       hyp_err);
+				(void)printf(
+					"memparcel: Donate to new owner failed %" PRId32
+					"\n",
+					(int32_t)hyp_err);
 				err = RM_ERROR_MEM_INVALID;
 				goto err_donate;
 			}
@@ -1541,7 +1567,9 @@ do_mapping:
 		hyp_err = map_memory_region(vm, vm_info, map_me_cap,
 					    mp->mem_type, ipa, phys, size);
 		if (hyp_err != OK) {
-			printf("memparcel: Map region failed %d\n", hyp_err);
+			(void)printf("memparcel: Map region failed %" PRId32
+				     "\n",
+				     (int32_t)hyp_err);
 			err = RM_ERROR_MAP_FAILED;
 			goto err_map;
 		}
@@ -1663,7 +1691,8 @@ memparcel_do_release(vmid_t vmid, mem_handle_t handle, uint8_t flags)
 	}
 
 	if (mp->locked) {
-		printf("MEM_RELEASE: memparcel %d is locked\n", (int)handle);
+		(void)printf("MEM_RELEASE: memparcel %d is locked\n",
+			     (uint32_t)handle);
 		err = RM_ERROR_DENIED;
 		goto out;
 	}
@@ -1728,7 +1757,9 @@ memparcel_do_release(vmid_t vmid, mem_handle_t handle, uint8_t flags)
 		hyp_err = unmap_memory_region(vm, mp->me_cap, mp->mem_type, ipa,
 					      phys, size);
 		if (hyp_err != OK) {
-			printf("memparcel: unmap region failed %d\n", hyp_err);
+			(void)printf("memparcel: unmap region failed %" PRId32
+				     "\n",
+				     (int32_t)hyp_err);
 			err = RM_ERROR_MAP_FAILED;
 			break;
 		}
@@ -1779,7 +1810,8 @@ finish_release:
 	remove_from_accepted_list(vm, mp);
 
 out:
-	printf("MEM_RELEASE VM %d H %d ret %d\n", vmid, (int)handle, err);
+	(void)printf("MEM_RELEASE VM %d H %d ret %d\n", vmid, (uint32_t)handle,
+		     err);
 	return err;
 }
 
@@ -1876,7 +1908,8 @@ memparcel_reclaim(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	err = memparcel_do_reclaim(vmid, handle, flags);
 
 out:
-	printf("MEM_RECLAIM VM %d H %d ret %d\n", vmid, (int)handle, err);
+	(void)printf("MEM_RECLAIM VM %d H %d ret %d\n", vmid, (uint32_t)handle,
+		     err);
 	rm_standard_reply(vmid, MEM_RECLAIM, seq_num, err);
 }
 
@@ -2125,9 +2158,10 @@ memparcel_notify(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	}
 
 	if (mp->mem_info_tag_set && (mp->mem_info_tag != req->mem_info_tag)) {
-		printf("memparcel_notify: mem-info-tag (%x) and request tag "
-		       "(%x) mismatch, flags(%x)\n",
-		       mp->mem_info_tag, req->mem_info_tag, flags);
+		(void)printf(
+			"memparcel_notify: mem-info-tag (%x) and request tag "
+			"(%x) mismatch, flags(%x)\n",
+			mp->mem_info_tag, req->mem_info_tag, flags);
 		err = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -2145,7 +2179,8 @@ memparcel_notify(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	}
 
 out:
-	printf("MEM_NOTIFY VM %d H %d ret %d\n", vmid, (int)handle, err);
+	(void)printf("MEM_NOTIFY VM %d H %d ret %d\n", vmid, (uint32_t)handle,
+		     err);
 	rm_standard_reply(vmid, MEM_NOTIFY, seq_num, err);
 }
 
@@ -2264,7 +2299,7 @@ memparcel_lookup_sgl(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 
 out:
 	LOG("MEM_QCOM_LOOKUP_SGL: from:%d handle:%d ret=%d\n", vmid,
-	    (int)handle, err);
+	    (int32_t)handle, err);
 	if (err == RM_OK) {
 		memparcel_handle_resp_t resp = {
 			.handle = handle,
@@ -2360,7 +2395,10 @@ memparcel_map_rm(uint32_t handle, size_t offset, size_t size)
 
 	count_t len = region_list_get_len(mp->region_list);
 	error_t err = OK;
-	for (index_t i = 0U; (next_size != 0U) && (i < len); i++) {
+	for (index_t i = 0U; i < len; i++) {
+		if (next_size == 0U) {
+			break;
+		}
 		mem_region_t region = region_list_at(mp->region_list, i);
 
 		paddr_t region_phys = mem_region_get_phys(region);
@@ -2423,7 +2461,10 @@ memparcel_unmap_rm(uint32_t handle)
 	size_t next_size   = mp->rm_map_size;
 
 	count_t len = region_list_get_len(mp->region_list);
-	for (index_t i = 0U; (next_size != 0U) && (i < len); i++) {
+	for (index_t i = 0U; i < len; i++) {
+		if (next_size == 0U) {
+			break;
+		}
 		mem_region_t region = region_list_at(mp->region_list, i);
 
 		paddr_t region_phys = mem_region_get_phys(region);
@@ -2460,6 +2501,93 @@ memparcel_unmap_rm(uint32_t handle)
 
 out:
 	return err;
+}
+
+static error_t
+memparcel_do_clean(mem_handle_t handle, size_t offset, size_t size,
+		   bool sanitize, bool flush)
+{
+	error_t err = OK;
+
+	assert(!util_add_overflows(offset, size));
+	assert(!sanitize || !flush);
+
+	memparcel_t *mp = lookup_memparcel(handle);
+	if (mp == NULL) {
+		err = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	if (mp->mem_type != MEM_TYPE_NORMAL) {
+		err = ERROR_DENIED;
+		goto out;
+	}
+
+	if ((offset + size) > mp->total_size) {
+		err = ERROR_ARGUMENT_SIZE;
+		goto out;
+	}
+
+	size_t next_offset = offset;
+	size_t next_size   = size;
+
+	bool	rem = true;
+	count_t len = region_list_get_len(mp->region_list);
+	for (index_t i = 0U; rem && (i < len); i++) {
+		mem_region_t region = region_list_at(mp->region_list, i);
+
+		paddr_t region_phys = mem_region_get_phys(region);
+		size_t	region_size = mem_region_get_size(region);
+
+		if (next_offset >= region_size) {
+			next_offset -= region_size;
+			continue;
+		}
+
+		paddr_t clean_phys = region_phys + next_offset;
+		size_t	clean_size =
+			util_min(region_size - next_offset, next_size);
+
+		if (sanitize) {
+			err = memextent_zero_range(mp->me_cap, clean_phys,
+						   clean_size);
+		} else if (flush) {
+			err = memextent_cache_flush_range(
+				mp->me_cap, clean_phys, clean_size);
+		} else {
+			err = memextent_cache_clean_range(
+				mp->me_cap, clean_phys, clean_size);
+		}
+
+		assert(err == OK);
+
+		next_offset = 0U;
+		next_size -= clean_size;
+		rem = (next_size != 0U);
+	}
+
+	assert(next_size == 0U);
+
+out:
+	return err;
+}
+
+error_t
+memparcel_sanitize(mem_handle_t handle, size_t offset, size_t size)
+{
+	return memparcel_do_clean(handle, offset, size, true, false);
+}
+
+error_t
+memparcel_cache_clean(mem_handle_t handle, size_t offset, size_t size)
+{
+	return memparcel_do_clean(handle, offset, size, false, false);
+}
+
+error_t
+memparcel_cache_flush(mem_handle_t handle, size_t offset, size_t size)
+{
+	return memparcel_do_clean(handle, offset, size, false, true);
 }
 
 mem_handle_t
@@ -2557,7 +2685,8 @@ memparcel_get_mpd_sanitise_refcount(const memparcel_t *mp, index_t region_idx)
 	assert(mp != NULL);
 	assert(region_idx < region_list_get_len(mp->region_list));
 
-	mem_region_t *region = region_list_at_ptr(mp->region_list, region_idx);
+	const mem_region_t *region =
+		region_list_at_ptr(mp->region_list, region_idx);
 	return mem_region_get_mpd_sanitise_refcount(region);
 }
 
@@ -2777,6 +2906,26 @@ memparcel_is_exclusive(const memparcel_t *mp, vmid_t vmid)
 	return (mp->num_vms == 1U) && (mp->vm_list[0U].vmid == vmid);
 }
 
+bool
+memparcel_is_private(const memparcel_t *mp, vmid_t vmid)
+{
+#if defined(CONFIG_DEBUG) && defined(PLATFORM_VM_DEBUG_ACCESS_ALLOWED) &&      \
+	PLATFORM_VM_DEBUG_ACCESS_ALLOWED
+	// The VM's private memory may be shared with other VMs for debug
+	// purposes, so avoid the exclusivity check.
+	vm_meminfo_t *vm_info = lookup_vm_info(mp, vmid);
+	return (mp->mem_type == MEM_TYPE_NORMAL) && (mp->label == 0U) &&
+	       (vm_info != NULL) && (vm_info->rights == MEM_RIGHTS_RWX) &&
+	       (vm_info->attr == MEM_ATTR_NORMAL) &&
+	       (!platform_get_security_state() || (mp->num_vms == 1U));
+#else
+	return (mp->mem_type == MEM_TYPE_NORMAL) && (mp->label == 0U) &&
+	       memparcel_is_exclusive(mp, vmid) &&
+	       (mp->vm_list[0].rights == MEM_RIGHTS_RWX) &&
+	       (mp->vm_list[0].attr == MEM_ATTR_NORMAL);
+#endif
+}
+
 uint8_result_t
 memparcel_get_vm_rights(const memparcel_t *mp, vmid_t vmid)
 {
@@ -2847,8 +2996,11 @@ vm_reset_handle_release_memparcels(vmid_t vmid)
 	memparcel_t **mp = vector_pop_back(memparcel_t *, mp_vector);
 
 	if ((mp != NULL) && ((*mp) != NULL)) {
-		memparcel_do_release(vmid, memparcel_get_handle(*mp), 0);
-		rm_error_t err = memparcel_notify_owner(*mp, vmid, false);
+		rm_error_t err = memparcel_do_release(
+			vmid, memparcel_get_handle(*mp), 0);
+		if (err == RM_OK) {
+			err = memparcel_notify_owner(*mp, vmid, false);
+		}
 		assert(err == RM_OK);
 	}
 

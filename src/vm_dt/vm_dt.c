@@ -78,9 +78,9 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 	assert(hlos != NULL);
 	assert(hlos->vm_config != NULL);
 
+	// Find the watchdog node
 	vdevice_node_t		*node = NULL;
 #if defined(CAP_RIGHTS_WATCHDOG_ALL)
-	// Find the watchdog node
 	struct vdevice_watchdog *wdt  = NULL;
 	loop_list(node, &hlos->vm_config->vdevice_nodes, vdevice_)
 	{
@@ -119,8 +119,8 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 
 	// Start the resource-manager node
 	char node_name[128];
-	snprintf(node_name, 128, "qcom,resource-manager-rpc@%016lx",
-		 msgq_pair->tx_vm_cap);
+	(void)snprintf(node_name, 128, "qcom,resource-manager-rpc@%016lx",
+		       msgq_pair->tx_vm_cap);
 
 	dto_node_begin(dto, node_name);
 	const char *rpc_compat[8];
@@ -212,7 +212,8 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 		// Patch the existing watchdog node
 		char	 wdt_node_name[23];
 		uint32_t wdt_addr = (uint32_t)rm_get_watchdog_address();
-		snprintf(wdt_node_name, 23, "/soc/qcom,wdt@%08x", wdt_addr);
+		(void)snprintf(wdt_node_name, 23, "/soc/qcom,wdt@%08x",
+			       wdt_addr);
 		dto_modify_begin_by_path(dto, wdt_node_name);
 		if (!wdt->virtual_regs) {
 			// Disable the existing watchdog

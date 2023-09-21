@@ -378,7 +378,8 @@ gunyah_hyp_memextent_donate(memextent_donate_options_t options, cap_id_t from,
 
 error_t
 gunyah_hyp_addrspace_attach_vdevice(cap_id_t addrspace, cap_id_t vdevice,
-				    index_t index, vmaddr_t vbase, size_t size);
+				    index_t index, vmaddr_t vbase, size_t size,
+				    addrspace_attach_vdevice_flags_t flags);
 
 error_t
 gunyah_hyp_vcpu_register_write(cap_id_t vcpu, vcpu_register_set_t register_set,

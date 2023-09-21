@@ -22,7 +22,7 @@ vmaddr_t
 mem_region_get_owner_ipa(mem_region_t region);
 
 uint32_t
-mem_region_get_mpd_sanitise_refcount(mem_region_t *region);
+mem_region_get_mpd_sanitise_refcount(const mem_region_t *region);
 
 void
 mem_region_increment_mpd_sanitise_refcount(mem_region_t *region);
@@ -40,7 +40,7 @@ ipa_region_init(vmaddr_t ipa);
 vmaddr_t
 ipa_region_get_ipa(ipa_region_t region);
 
-typedef struct region_list region_list_t;
+typedef struct region_list_s region_list_t;
 
 region_list_t *
 region_list_init(void);

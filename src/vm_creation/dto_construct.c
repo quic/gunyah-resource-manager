@@ -56,14 +56,14 @@ dto_create_doorbell(struct vdevice_node *node, dto_t *dto, uint32_t *phandle)
 
 	if (cfg->source) {
 		// below code should be OK
-		char *c[] = { "qcom,gunyah-doorbell-source",
-			      "qcom,gunyah-capability" };
+		const char *c[] = { "qcom,gunyah-doorbell-source",
+				    "qcom,gunyah-capability" };
 
 		e = vm_creation_add_compatibles(node, c, util_array_size(c),
 						dto);
 	} else {
-		char *c[] = { "qcom,gunyah-doorbell",
-			      "qcom,gunyah-capability" };
+		const char *c[] = { "qcom,gunyah-doorbell",
+				    "qcom,gunyah-capability" };
 
 		e = vm_creation_add_compatibles(node, c, util_array_size(c),
 						dto);
@@ -137,7 +137,8 @@ dto_create_msg_queue(struct vdevice_node *node, dto_t *dto)
 		goto err_begin;
 	}
 
-	char *c[] = { "qcom,gunyah-message-queue", "qcom,gunyah-capability" };
+	const char *c[] = { "qcom,gunyah-message-queue",
+			    "qcom,gunyah-capability" };
 
 	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
@@ -202,8 +203,8 @@ dto_guid_to_string(uint8_t *guid, size_t guid_len, char *output,
 {
 	error_t ret = OK;
 
-	if (guid_len < 16) {
-		printf("Error: invalid guid len %zu\n", guid_len);
+	if (guid_len < 16U) {
+		(void)printf("Error: invalid guid len %zu\n", guid_len);
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -216,7 +217,7 @@ dto_guid_to_string(uint8_t *guid, size_t guid_len, char *output,
 			     guid[10], guid[11], guid[12], guid[13], guid[14],
 			     guid[15]);
 	if ((p_ret < 0) || ((size_t)p_ret >= output_len)) {
-		printf("Error: failed to convert guid to string\n");
+		(void)printf("Error: failed to convert guid to string\n");
 		ret = ERROR_DENIED;
 		goto out;
 	}
@@ -245,7 +246,8 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 		goto err_begin;
 	}
 
-	char *c[] = { "qcom,gunyah-message-queue", "qcom,gunyah-capability" };
+	const char *c[] = { "qcom,gunyah-message-queue",
+			    "qcom,gunyah-capability" };
 
 	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
@@ -426,7 +428,7 @@ dto_create_shm(struct vdevice_node *node, dto_t *dto, vmid_t self)
 
 	const count_t compatible_count = 1;
 
-	char *compatible = NULL;
+	const char *compatible = NULL;
 	if (cfg->is_plain_shm) {
 		compatible = "qcom,shared-memory";
 	} else {
@@ -511,7 +513,7 @@ dto_create_watchdog(struct vdevice_node *node, dto_t *dto)
 		goto err_begin;
 	}
 
-	char *c[] = { "qcom,gh-watchdog" };
+	const char *c[] = { "qcom,gh-watchdog" };
 	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
 		goto err_compatibles;
@@ -553,13 +555,13 @@ dto_create_virtio_mmio(struct vdevice_node *node, dto_t *dto, vmid_t self)
 		goto err_begin;
 	}
 
-	char *c[] = { "virtio,mmio" };
+	const char *c[] = { "virtio,mmio" };
 	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
 		goto err_compatibles;
 	}
 
-	uint64_t reg[2] = { cfg->frontend_ipa, cfg->frontend_size };
+	uint64_t reg[2] = { cfg->frontend_ipa, cfg->me_size };
 	e		= dto_property_add_u64array(dto, "reg", reg, 2);
 	if (e != OK) {
 		goto err;
@@ -620,7 +622,8 @@ err_begin:
 }
 
 error_t
-vm_creation_add_compatibles(struct vdevice_node *node, char *compatibles[],
+vm_creation_add_compatibles(const struct vdevice_node *node,
+			    const char *const	       compatibles[],
 			    count_t compatible_cnt, dto_t *dto)
 {
 	error_t ret = OK;
@@ -672,7 +675,8 @@ vm_creation_node_name_capid(const char *generate, cap_id_t cap_id)
 
 	char *ret = (char *)malloc(sz);
 	if (ret == NULL) {
-		printf("Error: failed to allocate path for %s\n", generate);
+		(void)printf("Error: failed to allocate path for %s\n",
+			     generate);
 		err = ERROR_NOMEM;
 		goto out;
 	}

@@ -85,7 +85,7 @@ dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
 	ret.r = data;
 
 	ctx_t ctxs[MAX_DEPTH];
-	memset(ctxs, 0, sizeof(ctxs));
+	(void)memset(ctxs, 0, sizeof(ctxs));
 
 	// start from vm_config, loop all subnodes
 	int cur_depth = 0;
@@ -109,7 +109,8 @@ dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
 			if (path_ret != 0) {
 				strlcpy(path, "<unknown>", sizeof(path));
 			}
-			printf("Fatal error in DTB parsing at node %s\n", path);
+			(void)printf("Fatal error in DTB parsing at node %s\n",
+				     path);
 			ret.err = ERROR_FAILURE;
 			done	= true;
 		} else if (listener_ret == RET_STOP) {
@@ -173,11 +174,12 @@ ranges_are_direct(const void *fdt, int node_ofs, const ctx_t *ctx)
 		    (ranges_count * range_cells * sizeof(uint32_t))) {
 			char path[MAX_PATH_LEN];
 			if (fdt_get_path(fdt, node_ofs, path, sizeof(path)) !=
-			    OK) {
+			    0) {
 				strlcpy(path, "<unknown path>", sizeof(path));
 			}
-			printf("Warning: ignoring extra data in ranges property of node %s\n",
-			       path);
+			(void)printf(
+				"Warning: ignoring extra data in ranges property of node %s\n",
+				path);
 		}
 
 		for (index_t i = 0U; i < ranges_count; i++) {
@@ -219,7 +221,7 @@ dtb_parser_update_ctx(const void *fdt, int node_ofs, const ctx_t *parent,
 			    OK) {
 				strlcpy(path, "<unknown path>", sizeof(path));
 			}
-			printf("Warning: node %s using default #*-cells!\n",
+			(void)printf("Warning: node %s using default #*-cells!\n",
 			       path);
 		}
 #endif
@@ -271,20 +273,21 @@ dtb_parser_get_ctx(const void *fdt, int node_ofs)
 	stack[0].ofs = node_ofs;
 	index_t i    = 0U;
 	for (i = 0U; i < util_array_size(stack) - 1U; i++) {
-		if (stack[i].ofs == 0U) {
+		if (stack[i].ofs == 0) {
 			break;
 		}
 		stack[i + 1U].ofs = fdt_parent_offset(fdt, stack[i].ofs);
 		if (stack[i + 1U].ofs < 0) {
-			printf("Warning: can't find parent of node @ %d (%d)\n",
-			       stack[i].ofs, stack[i + 1U].ofs);
+			(void)printf(
+				"Warning: can't find parent of node @ %d (%d)\n",
+				stack[i].ofs, stack[i + 1U].ofs);
 			goto out;
 		}
 	}
 
 	if (stack[i].ofs != 0) {
-		printf("Warning: node @ %d has depth > %zd\n", node_ofs,
-		       util_array_size(stack));
+		(void)printf("Warning: node @ %d has depth > %zd\n", node_ofs,
+			     util_array_size(stack));
 	}
 
 	ctx_t *parent = NULL;
@@ -322,7 +325,7 @@ pop_ctx(ctx_t ctxs[], int prev_depth, int cur_depth)
 
 	int d = prev_depth;
 	while (d > cur_depth) {
-		memset(&ctxs[d], 0, sizeof(ctxs[d]));
+		(void)memset(&ctxs[d], 0, sizeof(ctxs[d]));
 		d--;
 	}
 }
@@ -454,7 +457,7 @@ fdt_getprop_u32(const void *fdt, int node_ofs, const char *propname,
 	const fdt32_t *prop = fdt_getprop(fdt, node_ofs, propname, &len);
 	if (prop == NULL) {
 		ret = ERROR_ARGUMENT_INVALID;
-	} else if (len != sizeof(fdt32_t)) {
+	} else if ((size_t)len != sizeof(fdt32_t)) {
 		ret = ERROR_FAILURE;
 	} else {
 		ret = OK;
@@ -475,7 +478,7 @@ fdt_getprop_s32(const void *fdt, int node_ofs, const char *propname,
 	const fdt32_t *prop = fdt_getprop(fdt, node_ofs, propname, &len);
 	if (prop == NULL) {
 		ret = ERROR_ARGUMENT_INVALID;
-	} else if (len != sizeof(fdt32_t)) {
+	} else if ((size_t)len != sizeof(fdt32_t)) {
 		ret = ERROR_FAILURE;
 	} else {
 		ret = OK;
@@ -496,7 +499,7 @@ fdt_getprop_u64(const void *fdt, int node_ofs, const char *propname,
 	const fdt64_t *prop = fdt_getprop(fdt, node_ofs, propname, &len);
 	if (prop == NULL) {
 		ret = ERROR_ARGUMENT_INVALID;
-	} else if (len != sizeof(fdt64_t)) {
+	} else if ((size_t)len != sizeof(fdt64_t)) {
 		ret = ERROR_FAILURE;
 	} else {
 		ret = OK;
@@ -520,12 +523,14 @@ fdt_getprop_u32_array(const void *fdt, int node_ofs, const char *propname,
 	if (data == NULL) {
 		ret = ERROR_ARGUMENT_INVALID;
 	} else if ((size_t)len > array_size) {
-		printf("Error: array property \"%s\" length %zd exceeds expected size %zd\n",
-		       propname, (size_t)len, array_size);
+		(void)printf(
+			"Error: array property \"%s\" length %zd exceeds expected size %zd\n",
+			propname, (size_t)len, array_size);
 		ret = ERROR_ARGUMENT_SIZE;
 	} else if ((size_t)len % sizeof(fdt32_t) != 0U) {
-		printf("Error: array property \"%s\" has misaligned size %zd\n",
-		       propname, (size_t)len);
+		(void)printf(
+			"Error: array property \"%s\" has misaligned size %zd\n",
+			propname, (size_t)len);
 		ret = ERROR_FAILURE;
 	} else {
 		index_t i;

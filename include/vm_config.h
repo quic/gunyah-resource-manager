@@ -9,14 +9,8 @@ typedef uint32_t label_t;
 struct vdevice_node;
 typedef struct vdevice_node vdevice_node_t;
 
-struct vm_config;
-typedef struct vm_config vm_config_t;
-
 struct vm_console;
 typedef struct vm_console vm_console_t;
-
-struct vm_irq_manager;
-typedef struct vm_irq_manager vm_irq_manager_t;
 
 struct rm_rpc_data;
 typedef struct rm_rpc_data rm_rpc_data_t;
@@ -38,7 +32,7 @@ typedef uint32_t resource_handle_t;
 typedef struct vector_s vector_t;
 
 #define VDEVICE_MAX_COMPATIBLE_LEN   256U
-#define VDEVICE_MAX_PUSH_COMPATIBLES 6
+#define VDEVICE_MAX_PUSH_COMPATIBLES 6U
 
 rm_error_t
 vm_config_init(rm_env_data_t *env_data);
@@ -60,7 +54,7 @@ vm_config_parse_dt(vm_config_t *vmcfg, void *fdt);
 
 error_t
 vm_config_add_vcpu(vm_config_t *vmcfg, cap_id_t rm_cap, uint32_t affinity_index,
-		   bool boot_vcpu, char *patch);
+		   bool boot_vcpu, const char *patch);
 
 vector_t *
 vm_config_get_vcpus(const vm_config_t *vmcfg);
@@ -106,12 +100,6 @@ struct vm_console *
 vm_config_get_console(vmid_t self);
 
 void
-vm_config_set_irq_manager(vm_config_t *vmcfg, vm_irq_manager_t *irq_manager);
-
-struct vm_irq_manager *
-vm_config_get_irq_manager(vmid_t self);
-
-void
 vm_config_flush_rm_rpc(vmid_t self);
 
 dtb_parser_ops_t *
@@ -128,6 +116,9 @@ vm_config_create_vdevices(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 
 void
 vm_config_destroy_vm_objects(vm_t *vm);
+
+bool
+vm_reset_handle_init(const vm_t *vm);
 
 bool
 vm_reset_handle_destroy_vdevices(const vm_t *vm);

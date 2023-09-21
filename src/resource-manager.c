@@ -5,6 +5,7 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +39,7 @@
 #include <vm_memory.h>
 #include <vm_mgnt.h>
 #include <vm_mgnt_message.h>
+#include <vm_passthrough_config.h>
 #include <vm_resources.h>
 
 #include "rmversion.h"
@@ -46,31 +48,13 @@ extern gunyah_hyp_hypervisor_identify_result_t hyp_id;
 
 static rm_env_data_t *priv_env_data;
 
-typedef struct {
-	cap_id_t irq_cap;
-	virq_t	 irq;
-	uint8_t	 irq_padding[4];
-
-	// vmid_t	belongs_to;
-} static_restricted_irq_t;
-
-// FIXME: refactor these static resources to build configuration?
-static count_t		       num_restricted_irqs;
-static static_restricted_irq_t restricted_irqs[MAX_RESERVE_NUM_IRQ];
-
-static void
-remove_restricted_irqs(void);
-
-static hwirq_caps_t
-rm_get_vic_hwirqs(void);
-
 static void
 msg_callback(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, uint8_t msg_type,
 	     void *buf, size_t len)
 {
 	bool handled;
 
-	if (msg_type != RM_RPC_MSG_TYPE_REQUEST) {
+	if (msg_type != (uint8_t)RM_RPC_MSG_TYPE_REQUEST) {
 		goto out;
 	}
 
@@ -91,8 +75,8 @@ msg_callback(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, uint8_t msg_type,
 						   len);
 	}
 	if (!handled) {
-		handled = irq_manager_msg_handler(vm_id, msg_id, seq_num, buf,
-						  len);
+		handled = irq_manager_lending_msg_handler(vm_id, msg_id,
+							  seq_num, buf, len);
 	}
 	if (!handled) {
 		handled = vm_creation_msg_handler(vm_id, msg_id, seq_num, buf,
@@ -107,8 +91,8 @@ msg_callback(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, uint8_t msg_type,
 	}
 
 	if (!handled) {
-		printf("Unhandled request from VM %d, ID: %x\n", (int)vm_id,
-		       msg_id);
+		(void)printf("Unhandled request from VM %d, ID: %x\n",
+			     (uint32_t)vm_id, msg_id);
 		rm_standard_reply(vm_id, msg_id, seq_num,
 				  RM_ERROR_UNIMPLEMENTED);
 	}
@@ -124,8 +108,8 @@ notif_callback(vmid_t vm_id, uint32_t notification_id, void *buf, size_t len)
 
 	handled = platform_notif_callback(vm_id, notification_id, buf, len);
 	if (!handled) {
-		printf("Unhandled notification from VM %d, ID: %x\n",
-		       (int)vm_id, notification_id);
+		(void)printf("Unhandled notification from VM %d, ID: %x\n",
+			     (uint32_t)vm_id, notification_id);
 	}
 
 	rm_rpc_free(buf);
@@ -137,35 +121,13 @@ rm_tx_callback(rm_error_t tx_err, vmid_t vm_id, void *buf, size_t len)
 	(void)len;
 
 	if (tx_err != RM_OK) {
-		printf("TX failed for VM %d, error: %x\n", (int)vm_id, tx_err);
+		(void)printf("TX failed for VM %d, error: %x\n",
+			     (uint32_t)vm_id, tx_err);
 	}
 
 	rm_rpc_fifo_tx_callback(vm_id);
 
 	free(buf);
-}
-
-static void
-initialize_restricted_irqs(rm_env_data_t *env_data)
-{
-	uint32_t num_reserved_dev_irqs = 0U;
-	uint32_t num_irq_count	       = 0U;
-
-	num_reserved_dev_irqs = env_data->num_reserved_dev_irqs;
-	for (index_t i = 0; i < num_reserved_dev_irqs; i++) {
-		if (i < MAX_RESERVE_NUM_IRQ) {
-			restricted_irqs[i].irq = env_data->reserved_dev_irq[i];
-			// FIXME: need to support other secondary VMs.
-			// belongs_to should possibly be replaced with QTI
-			// signed access check.
-			// restricted_irqs[i].belongs_to = VMID_TUI_VM;
-			restricted_irqs[i].irq_cap = CSPACE_CAP_INVALID;
-			num_irq_count		   = i;
-		} else {
-			printf("Warning: number of Reserved IRQ is more than allowed.");
-		}
-	}
-	num_restricted_irqs = num_irq_count;
 }
 
 void
@@ -186,6 +148,8 @@ main(int argc, char *argv[])
 	size_t		   log_buf_size = (size_t)argv[3];
 	rm_env_data_hdr_t *env_hdr	= (rm_env_data_hdr_t *)env_addr;
 
+	hyp_id = gunyah_hyp_hypervisor_identify();
+
 	priv_env_data = (rm_env_data_t *)calloc(1, sizeof(*priv_env_data));
 	assert(priv_env_data != NULL);
 
@@ -197,9 +161,6 @@ main(int argc, char *argv[])
 	rm_err = register_exit();
 	assert(rm_err == RM_OK);
 
-	initialize_restricted_irqs(priv_env_data);
-	remove_restricted_irqs();
-
 	platform_uart_map(priv_env_data);
 
 	log_buf_size = LOG_AREA_SIZE;
@@ -210,15 +171,13 @@ main(int argc, char *argv[])
 	rm_err = register_uart();
 	assert(rm_err == RM_OK);
 
-	hyp_id = gunyah_hyp_hypervisor_identify();
-
-	printf("Resource Manager version: %s (%s)\n", RM_GIT_VERSION,
-	       RM_BUILD_DATE);
+	(void)printf("Resource Manager version: %s (%s)\n", RM_GIT_VERSION,
+		     RM_BUILD_DATE);
 #if defined(CONFIG_DEBUG)
-	printf("Gunyah API ver: %i, variant: %x\n",
-	       hyp_api_info_get_api_version(&hyp_id.hyp_api_info),
-	       hyp_api_info_get_variant(&hyp_id.hyp_api_info));
-	printf("Log buffer: %#lx\n", log_buf);
+	(void)printf("Gunyah API ver: %i, variant: %x\n",
+		     hyp_api_info_get_api_version(&hyp_id.hyp_api_info),
+		     hyp_api_info_get_variant(&hyp_id.hyp_api_info));
+	(void)printf("Log buffer: %#lx\n", log_buf);
 #endif
 
 	rm_err = vm_mgnt_init();
@@ -230,8 +189,12 @@ main(int argc, char *argv[])
 	rm_err = rm_rpc_fifo_init();
 	assert(rm_err == RM_OK);
 
-	rm_err = irq_manager_init();
-	assert(rm_err == RM_OK);
+	vm_passthrough_config_validate(priv_env_data);
+
+	err = irq_manager_init(priv_env_data);
+	assert(err == OK);
+
+	vm_passthrough_config_deinit(priv_env_data);
 
 	err = vm_memory_init();
 	assert(err == OK);
@@ -245,15 +208,18 @@ main(int argc, char *argv[])
 	// Create memory management bookkeeping for RM itself
 	err = rm_vm_create(priv_env_data);
 	if (err != OK) {
-		printf("rm_vm_create ret=%d\n", err);
+		(void)printf("rm_vm_create ret=%" PRId32 "\n", (int32_t)err);
 		ret = -ENODEV;
 		goto out;
 	}
 
+	err = platform_pre_hlos_vm_init(priv_env_data);
+	assert(err == OK);
+
 	// Create HLOS
-	err = hlos_vm_create(rm_get_vic_hwirqs(), priv_env_data);
+	err = hlos_vm_create(priv_env_data);
 	if (err != OK) {
-		printf("hlos_vm_create ret=%d\n", err);
+		(void)printf("hlos_vm_create ret=%" PRId32 "\n", (int32_t)err);
 		ret = -ENODEV;
 		goto out;
 	}
@@ -263,7 +229,11 @@ main(int argc, char *argv[])
 		assert(rm_err == RM_OK);
 	}
 
-	platform_primary_vm_init(priv_env_data, log_buf, log_buf_size);
+	error_t e =
+		platform_primary_vm_init(priv_env_data, log_buf, log_buf_size);
+	if (e != OK) {
+		goto out;
+	}
 
 	rm_err = rm_rpc_register_msg_handler(msg_callback);
 	assert(rm_err == RM_OK);
@@ -272,16 +242,22 @@ main(int argc, char *argv[])
 	rm_err = rm_rpc_register_tx_complete_handler(rm_tx_callback);
 	assert(rm_err == RM_OK);
 
+	// Free irq env
+	free(priv_env_data->irq_env);
+	priv_env_data->irq_env = NULL;
+
 #if defined(POST_BOOT_UART_DISABLE) && POST_BOOT_UART_DISABLE
-	printf("Init completed, disabling UART\n");
+	(void)printf("Init completed, disabling UART\n");
 	rm_err = deregister_uart();
 	if (rm_err != RM_OK) {
-		printf("UART disable failed: %d\n", (int)rm_err);
+		(void)printf("UART disable failed: %d\n", (uint32_t)rm_err);
 		ret = -EIO;
 	}
 #else
-	printf("Init completed.\n");
+	(void)printf("Init completed.\n");
 #endif
+	err = platform_init_complete();
+	assert(err == OK);
 
 	// Start the HLOS VM
 	err = hlos_vm_start();
@@ -289,7 +265,8 @@ main(int argc, char *argv[])
 #if defined(POST_BOOT_UART_DISABLE) && POST_BOOT_UART_DISABLE
 		(void)register_uart();
 #endif
-		printf("Failed to start HLOS: %d\n", (int)err);
+		(void)printf("Failed to start HLOS: %" PRId32 "\n",
+			     (int32_t)err);
 		ret = -ENODEV;
 		goto out;
 	}
@@ -297,7 +274,9 @@ main(int argc, char *argv[])
 	rm_rpc_wait(-1);
 
 out:
-	printf("RM exit ret=%d\n", ret);
+	irq_manager_deinit();
+
+	(void)printf("RM exit ret=%d\n", ret);
 	return ret;
 }
 
@@ -357,22 +336,6 @@ rm_get_rm_vic(void)
 	return priv_env_data->vic;
 }
 
-static hwirq_caps_t
-rm_get_vic_hwirqs(void)
-{
-	assert(priv_env_data != NULL);
-
-	hwirq_caps_t ret = {
-		.vic_hwirq_count = util_array_size(priv_env_data->vic_hwirq),
-		.vic_hwirqs	 = priv_env_data->vic_hwirq,
-		.vic_msi_source_count =
-			util_array_size(priv_env_data->vic_msi_source),
-		.vic_msi_sources = priv_env_data->vic_msi_source,
-	};
-
-	return ret;
-}
-
 vmaddr_t
 rm_get_hlos_entry(void)
 {
@@ -394,43 +357,10 @@ rm_get_watchdog_address(void)
 	return priv_env_data->wdt_address;
 }
 
-static void
-remove_restricted_irqs(void)
-{
-	hwirq_caps_t info = rm_get_vic_hwirqs();
-
-	for (index_t i = 0; i < num_restricted_irqs; ++i) {
-		virq_t cur_irq = restricted_irqs[i].irq;
-
-		assert(cur_irq < info.vic_hwirq_count);
-
-		// Save the HW irq cap
-		restricted_irqs[i].irq_cap = info.vic_hwirqs[cur_irq];
-		info.vic_hwirqs[cur_irq]   = CSPACE_CAP_INVALID;
-	}
-}
-
-cap_id_t
-rm_get_restricted_hwirq(virq_t irq, vmid_t vmid)
-{
-	cap_id_t ret = CSPACE_CAP_INVALID;
-	(void)vmid;
-
-	for (index_t i = 0; i < num_restricted_irqs; ++i) {
-		if (restricted_irqs[i].irq == irq) {
-			// && (restricted_irqs[i].belongs_to == vmid)) {
-			ret = restricted_irqs[i].irq_cap;
-			break;
-		}
-	}
-
-	return ret;
-}
-
 count_t
 rm_get_platform_max_cores(void)
 {
-	return sizeof(priv_env_data->usable_cores) * 8U -
+	return ((count_t)sizeof(priv_env_data->usable_cores) * 8U) -
 	       compiler_clz(priv_env_data->usable_cores);
 }
 
@@ -443,11 +373,8 @@ rm_get_platform_root_vcpu_index(void)
 bool
 rm_is_core_usable(cpu_index_t i)
 {
-	if (i > rm_get_platform_max_cores()) {
-		return false;
-	} else {
-		return ((1UL << i) & priv_env_data->usable_cores) != 0;
-	}
+	return (i <= rm_get_platform_max_cores()) &&
+	       ((util_bit(i) & priv_env_data->usable_cores) != 0U);
 }
 
 vmaddr_t
@@ -460,6 +387,13 @@ paddr_t
 rm_ipa_to_pa(uintptr_t ipa)
 {
 	return (paddr_t)(ipa - priv_env_data->ipa_offset);
+}
+
+const vm_device_assignments_t *
+rm_get_vm_device_assignments(void)
+{
+	assert(priv_env_data->device_assignments != NULL);
+	return priv_env_data->device_assignments;
 }
 
 rm_error_t

@@ -35,13 +35,13 @@ register_exit(void)
 	struct register_exit_req req_register_exit = {
 		.exit_func = platform_exit_handler,
 	};
-	int ret = ioctl(fd, IOCTL_REGISTER_EXIT,
-			(unsigned long)&req_register_exit);
+	int ret = ioctl(fd, (int)IOCTL_REGISTER_EXIT,
+			(uint64_t)&req_register_exit);
 	if (ret != 0) {
 		error = RM_ERROR_DENIED;
 	}
 
-	close(fd);
+	(void)close(fd);
 
 err:
 	return error;
@@ -60,12 +60,12 @@ deregister_exit(void)
 		goto err;
 	}
 
-	int ret = ioctl(fd, IOCTL_DEREGISTER_EXIT, 0);
+	int ret = ioctl(fd, (int)IOCTL_DEREGISTER_EXIT, 0);
 	if (ret != 0) {
 		error = RM_ERROR_DENIED;
 	}
 
-	close(fd);
+	(void)close(fd);
 
 err:
 	return error;

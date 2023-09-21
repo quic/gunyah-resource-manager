@@ -10,9 +10,11 @@
 #include <stdint.h>
 #include <stdnoreturn.h>
 
-typedef struct boot_env_phys_range_s boot_env_phys_range_t;
-typedef struct rm_env_data_hdr_s     rm_env_data_hdr_t;
-typedef struct rt_env_data_s	     rt_env_data_t;
+typedef union addrspace_attach_vdevice_flags_u addrspace_attach_vdevice_flags_t;
+typedef struct boot_env_phys_range_s	       boot_env_phys_range_t;
+typedef struct rm_env_data_hdr_s	       rm_env_data_hdr_t;
+typedef struct root_env_mmio_range_descriptor_s root_env_mmio_range_descriptor_t;
+typedef struct rt_env_data_s rt_env_data_t;
 
 typedef uint32_t count_t;
 typedef uint32_t index_t;
@@ -97,6 +99,100 @@ typedef enum pgtable_vm_memtype_e {
 
 typedef uint64_t register_t;
 
+// Bitfield: vgic_gicr_attach_flags <uint64_t>
+typedef struct vgic_gicr_attach_flags_b {
+	// 0         bool last_valid
+	// 1         bool last
+	uint64_t bf[1];
+} vgic_gicr_attach_flags_t;
+
+#define vgic_gicr_attach_flags_default()                                       \
+	(vgic_gicr_attach_flags_t)                                             \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define vgic_gicr_attach_flags_cast(val_0)                                     \
+	(vgic_gicr_attach_flags_t)                                             \
+	{                                                                      \
+		.bf = { val_0 }                                                \
+	}
+
+uint64_t
+vgic_gicr_attach_flags_raw(vgic_gicr_attach_flags_t bit_field);
+
+_Atomic uint64_t *
+vgic_gicr_attach_flags_atomic_ptr_raw(_Atomic vgic_gicr_attach_flags_t *ptr);
+
+void
+vgic_gicr_attach_flags_init(vgic_gicr_attach_flags_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_clean(vgic_gicr_attach_flags_t bit_field);
+
+bool
+vgic_gicr_attach_flags_is_equal(vgic_gicr_attach_flags_t b1,
+				vgic_gicr_attach_flags_t b2);
+
+bool
+vgic_gicr_attach_flags_is_empty(vgic_gicr_attach_flags_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+vgic_gicr_attach_flags_is_clean(vgic_gicr_attach_flags_t bit_field);
+
+// Union of boolean fields of two vgic_gicr_attach_flags_t values
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_union(vgic_gicr_attach_flags_t b1,
+			     vgic_gicr_attach_flags_t b2);
+
+// Intersection of boolean fields of two vgic_gicr_attach_flags_t values
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_intersection(vgic_gicr_attach_flags_t b1,
+				    vgic_gicr_attach_flags_t b2);
+
+// Invert all boolean fields in a vgic_gicr_attach_flags_t value
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_inverse(vgic_gicr_attach_flags_t b);
+
+// Set difference of boolean fields of two vgic_gicr_attach_flags_t values
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_difference(vgic_gicr_attach_flags_t b1,
+				  vgic_gicr_attach_flags_t b2);
+
+// Atomically replace a vgic_gicr_attach_flags_t value with the union of its
+// boolean fields with a given vgic_gicr_attach_flags_t value, and return the
+// previous value.
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_atomic_union(_Atomic vgic_gicr_attach_flags_t *b1,
+				    vgic_gicr_attach_flags_t	      b2,
+				    memory_order		      order);
+
+// Atomically replace a vgic_gicr_attach_flags_t value with the intersection of
+// its boolean fields with a given vgic_gicr_attach_flags_t value, and return
+// the previous value.
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_atomic_intersection(_Atomic vgic_gicr_attach_flags_t *b1,
+					   vgic_gicr_attach_flags_t	     b2,
+					   memory_order order);
+
+// Atomically replace a vgic_gicr_attach_flags_t value with the set difference
+// of its boolean fields and a given vgic_gicr_attach_flags_t value, and return
+// the previous value.
+vgic_gicr_attach_flags_t
+vgic_gicr_attach_flags_atomic_difference(_Atomic vgic_gicr_attach_flags_t *b1,
+					 vgic_gicr_attach_flags_t	   b2,
+					 memory_order order);
+
+union addrspace_attach_vdevice_flags_u {
+	uint64_t		 raw;
+	vgic_gicr_attach_flags_t vgic_gicr;
+};
+
 // Bitfield: addrspace_map_flags <uint32_t>
 typedef struct addrspace_map_flags_b {
 	// 0         bool partial
@@ -108,7 +204,7 @@ typedef struct addrspace_map_flags_b {
 #define addrspace_map_flags_default()                                          \
 	(addrspace_map_flags_t)                                                \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define addrspace_map_flags_cast(val_0)                                        \
@@ -172,7 +268,7 @@ typedef struct cap_rights_addrspace_b {
 #define cap_rights_addrspace_default()                                         \
 	(cap_rights_addrspace_t)                                               \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_addrspace_cast(val_0)                                       \
@@ -265,7 +361,7 @@ typedef struct cap_rights_cspace_b {
 #define cap_rights_cspace_default()                                            \
 	(cap_rights_cspace_t)                                                  \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_cspace_cast(val_0)                                          \
@@ -349,7 +445,7 @@ typedef struct cap_rights_doorbell_b {
 #define cap_rights_doorbell_default()                                          \
 	(cap_rights_doorbell_t)                                                \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_doorbell_cast(val_0)                                        \
@@ -435,7 +531,7 @@ typedef struct cap_rights_generic_b {
 #define cap_rights_generic_default()                                           \
 	(cap_rights_generic_t)                                                 \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_generic_cast(val_0)                                         \
@@ -520,7 +616,7 @@ typedef struct cap_rights_hwirq_b {
 #define cap_rights_hwirq_default()                                             \
 	(cap_rights_hwirq_t)                                                   \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_hwirq_cast(val_0)                                           \
@@ -605,7 +701,7 @@ typedef struct cap_rights_memextent_b {
 #define cap_rights_memextent_default()                                         \
 	(cap_rights_memextent_t)                                               \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_memextent_cast(val_0)                                       \
@@ -697,7 +793,7 @@ typedef struct cap_rights_msgqueue_b {
 #define cap_rights_msgqueue_default()                                          \
 	(cap_rights_msgqueue_t)                                                \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_msgqueue_cast(val_0)                                        \
@@ -785,7 +881,7 @@ typedef struct cap_rights_partition_b {
 #define cap_rights_partition_default()                                         \
 	(cap_rights_partition_t)                                               \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_partition_cast(val_0)                                       \
@@ -883,7 +979,7 @@ typedef struct cap_rights_thread_b {
 #define cap_rights_thread_default()                                            \
 	(cap_rights_thread_t)                                                  \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_thread_cast(val_0)                                          \
@@ -967,7 +1063,7 @@ typedef struct cap_rights_vic_b {
 #define cap_rights_vic_default()                                               \
 	(cap_rights_vic_t)                                                     \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_vic_cast(val_0)                                             \
@@ -1050,7 +1146,7 @@ typedef struct cap_rights_vpm_group_b {
 #define cap_rights_vpm_group_default()                                         \
 	(cap_rights_vpm_group_t)                                               \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define cap_rights_vpm_group_cast(val_0)                                       \
@@ -1189,7 +1285,7 @@ typedef struct hyp_api_flags0_b {
 	// 9         const bool virtio_mmio
 	// 10        const bool prng
 	// 63:32,27:17,15:11 const uint64_t res0_0
-	// 16        const bool reserved
+	// 16        const bool reserved_16
 	// 31:28     const scheduler_variant_t scheduler
 	uint64_t bf[1];
 } hyp_api_flags0_t;
@@ -1197,7 +1293,7 @@ typedef struct hyp_api_flags0_b {
 #define hyp_api_flags0_default()                                               \
 	(hyp_api_flags0_t)                                                     \
 	{                                                                      \
-		.bf = { 0x100004ff }                                           \
+		.bf = { 0x100004ffU }                                          \
 	}
 
 #define hyp_api_flags0_cast(val_0)                                             \
@@ -1241,7 +1337,7 @@ typedef struct hyp_api_flags1_b {
 #define hyp_api_flags1_default()                                               \
 	(hyp_api_flags1_t)                                                     \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define hyp_api_flags1_cast(val_0)                                             \
@@ -1285,7 +1381,7 @@ typedef struct hyp_api_flags2_b {
 #define hyp_api_flags2_default()                                               \
 	(hyp_api_flags2_t)                                                     \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define hyp_api_flags2_cast(val_0)                                             \
@@ -1341,7 +1437,7 @@ typedef struct hyp_api_info_b {
 #define hyp_api_info_default()                                                 \
 	(hyp_api_info_t)                                                       \
 	{                                                                      \
-		.bf = { 0x5100000000008001 }                                   \
+		.bf = { 0x5100000000008001U }                                  \
 	}
 
 #define hyp_api_info_cast(val_0)                                               \
@@ -1405,7 +1501,7 @@ typedef struct memextent_access_attrs_b {
 #define memextent_access_attrs_default()                                       \
 	(memextent_access_attrs_t)                                             \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define memextent_access_attrs_cast(val_0)                                     \
@@ -1454,7 +1550,7 @@ typedef struct memextent_attrs_b {
 #define memextent_attrs_default()                                              \
 	(memextent_attrs_t)                                                    \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define memextent_attrs_cast(val_0)                                            \
@@ -1501,7 +1597,7 @@ typedef struct memextent_mapping_attrs_b {
 #define memextent_mapping_attrs_default()                                      \
 	(memextent_mapping_attrs_t)                                            \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define memextent_mapping_attrs_cast(val_0)                                    \
@@ -1557,7 +1653,7 @@ typedef struct memextent_donate_options_b {
 #define memextent_donate_options_default()                                     \
 	(memextent_donate_options_t)                                           \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define memextent_donate_options_cast(val_0)                                   \
@@ -1594,9 +1690,11 @@ bool
 memextent_donate_options_is_clean(memextent_donate_options_t bit_field);
 
 typedef enum memextent_modify_op_e {
-	MEMEXTENT_MODIFY_OP_UNMAP_ALL  = 0,
-	MEMEXTENT_MODIFY_OP_ZERO_RANGE = 1,
-	MEMEXTENT_MODIFY_OP_SYNC_ALL   = 255
+	MEMEXTENT_MODIFY_OP_UNMAP_ALL	      = 0,
+	MEMEXTENT_MODIFY_OP_ZERO_RANGE	      = 1,
+	MEMEXTENT_MODIFY_OP_CACHE_CLEAN_RANGE = 2,
+	MEMEXTENT_MODIFY_OP_CACHE_FLUSH_RANGE = 3,
+	MEMEXTENT_MODIFY_OP_SYNC_ALL	      = 255
 } memextent_modify_op_t;
 
 #define MEMEXTENT_MODIFY_OP__MAX MEMEXTENT_MODIFY_OP_SYNC_ALL
@@ -1613,7 +1711,7 @@ typedef struct memextent_modify_flags_b {
 #define memextent_modify_flags_default()                                       \
 	(memextent_modify_flags_t)                                             \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define memextent_modify_flags_cast(val_0)                                     \
@@ -1649,6 +1747,8 @@ memextent_modify_flags_is_empty(memextent_modify_flags_t bit_field);
 bool
 memextent_modify_flags_is_clean(memextent_modify_flags_t bit_field);
 
+typedef uint64_t milliseconds_t;
+
 // Bitfield: msgqueue_create_info <uint64_t>
 typedef struct msgqueue_create_info_b {
 	// 15:0      uint16_t queue_depth
@@ -1659,7 +1759,7 @@ typedef struct msgqueue_create_info_b {
 #define msgqueue_create_info_default()                                         \
 	(msgqueue_create_info_t)                                               \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define msgqueue_create_info_cast(val_0)                                       \
@@ -1704,7 +1804,7 @@ typedef struct msgqueue_send_flags_b {
 #define msgqueue_send_flags_default()                                          \
 	(msgqueue_send_flags_t)                                                \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define msgqueue_send_flags_cast(val_0)                                        \
@@ -1789,6 +1889,62 @@ struct rm_env_data_hdr_s {
 	uint32_t data_payload_size;
 };
 
+// Bitfield: root_env_mmio_range_properties <uint64_t>
+typedef struct root_env_mmio_range_properties_b {
+	// 31:0      uint32_t num_pages
+	// 34:32     pgtable_access_t access
+	// 47:40     uint8_t res_s2pt_attr
+	// 63        bool non_exclusive
+	uint64_t bf[1];
+} root_env_mmio_range_properties_t;
+
+#define root_env_mmio_range_properties_default()                               \
+	(root_env_mmio_range_properties_t)                                     \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define root_env_mmio_range_properties_cast(val_0)                             \
+	(root_env_mmio_range_properties_t)                                     \
+	{                                                                      \
+		.bf = { val_0 }                                                \
+	}
+
+uint64_t
+root_env_mmio_range_properties_raw(root_env_mmio_range_properties_t bit_field);
+
+_Atomic uint64_t *
+root_env_mmio_range_properties_atomic_ptr_raw(
+	_Atomic root_env_mmio_range_properties_t *ptr);
+
+void
+root_env_mmio_range_properties_init(root_env_mmio_range_properties_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+root_env_mmio_range_properties_t
+root_env_mmio_range_properties_clean(root_env_mmio_range_properties_t bit_field);
+
+bool
+root_env_mmio_range_properties_is_equal(root_env_mmio_range_properties_t b1,
+					root_env_mmio_range_properties_t b2);
+
+bool
+root_env_mmio_range_properties_is_empty(
+	root_env_mmio_range_properties_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+root_env_mmio_range_properties_is_clean(
+	root_env_mmio_range_properties_t bit_field);
+
+struct root_env_mmio_range_descriptor_s {
+	paddr_t				 address;
+	root_env_mmio_range_properties_t attrs;
+};
+
 struct rt_env_data_s {
 	uint32_t signature;
 	uint16_t version;
@@ -1824,7 +1980,7 @@ typedef struct scheduler_yield_control_b {
 #define scheduler_yield_control_default()                                      \
 	(scheduler_yield_control_t)                                            \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define scheduler_yield_control_cast(val_0)                                    \
@@ -1900,7 +2056,7 @@ typedef struct smccc_function_id_b {
 #define smccc_function_id_default()                                            \
 	(smccc_function_id_t)                                                  \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define smccc_function_id_cast(val_0)                                          \
@@ -1974,7 +2130,7 @@ typedef struct smccc_vendor_hyp_function_id_b {
 #define smccc_vendor_hyp_function_id_default()                                 \
 	(smccc_vendor_hyp_function_id_t)                                       \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define smccc_vendor_hyp_function_id_cast(val_0)                               \
@@ -2020,6 +2176,7 @@ typedef struct vcpu_option_flags_b {
 	// 2         bool amu_counting_disabled
 	// 3         bool sve_allowed
 	// 4         bool debug_allowed
+	// 5         bool trace_allowed
 	// 8         bool critical
 	// 63        bool hlos_vm
 	uint64_t bf[1];
@@ -2028,7 +2185,7 @@ typedef struct vcpu_option_flags_b {
 #define vcpu_option_flags_default()                                            \
 	(vcpu_option_flags_t)                                                  \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define vcpu_option_flags_cast(val_0)                                          \
@@ -2118,10 +2275,9 @@ typedef enum trace_class_e {
 	TRACE_CLASS_ERROR	     = 0,
 	TRACE_CLASS_DEBUG	     = 1,
 	TRACE_CLASS_USER	     = 2,
-	TRACE_CLASS_TRACE_BUFFER     = 3,
 	TRACE_CLASS_TRACE_LOG_BUFFER = 4,
 	TRACE_CLASS_LOG_BUFFER	     = 5,
-	TRACE_CLASS_LOG_TRACE_BUFFER = 6,
+	TRACE_CLASS_INFO	     = 6,
 	TRACE_CLASS_MEMDB	     = 7,
 	TRACE_CLASS_PSCI	     = 16,
 	TRACE_CLASS_VGIC	     = 17,
@@ -2142,7 +2298,7 @@ typedef struct vcpu_poweroff_flags_b {
 #define vcpu_poweroff_flags_default()                                          \
 	(vcpu_poweroff_flags_t)                                                \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define vcpu_poweroff_flags_cast(val_0)                                        \
@@ -2229,7 +2385,7 @@ typedef struct vcpu_poweron_flags_b {
 #define vcpu_poweron_flags_default()                                           \
 	(vcpu_poweron_flags_t)                                                 \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define vcpu_poweron_flags_cast(val_0)                                         \
@@ -2322,7 +2478,7 @@ typedef struct vcpu_run_poweroff_flags_b {
 #define vcpu_run_poweroff_flags_default()                                      \
 	(vcpu_run_poweroff_flags_t)                                            \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define vcpu_run_poweroff_flags_cast(val_0)                                    \
@@ -2420,7 +2576,7 @@ typedef struct vic_option_flags_b {
 #define vic_option_flags_default()                                             \
 	(vic_option_flags_t)                                                   \
 	{                                                                      \
-		.bf = { 0x3 }                                                  \
+		.bf = { 0x3U }                                                 \
 	}
 
 #define vic_option_flags_cast(val_0)                                           \
@@ -2464,7 +2620,7 @@ typedef struct vpm_group_option_flags_b {
 #define vpm_group_option_flags_default()                                       \
 	(vpm_group_option_flags_t)                                             \
 	{                                                                      \
-		.bf = { 0x0 }                                                  \
+		.bf = { 0x0U }                                                 \
 	}
 
 #define vpm_group_option_flags_cast(val_0)                                     \
@@ -2554,6 +2710,28 @@ typedef enum vpm_state_e {
 #define VPM_STATE__MIN VPM_STATE_NO_STATE
 
 #include <guest_hypresult.h>
+
+void
+vgic_gicr_attach_flags_set_last_valid(vgic_gicr_attach_flags_t *bit_field,
+				      bool			val);
+
+bool
+vgic_gicr_attach_flags_get_last_valid(const vgic_gicr_attach_flags_t *bit_field);
+
+void
+vgic_gicr_attach_flags_copy_last_valid(
+	vgic_gicr_attach_flags_t       *bit_field_dst,
+	const vgic_gicr_attach_flags_t *bit_field_src);
+
+void
+vgic_gicr_attach_flags_set_last(vgic_gicr_attach_flags_t *bit_field, bool val);
+
+bool
+vgic_gicr_attach_flags_get_last(const vgic_gicr_attach_flags_t *bit_field);
+
+void
+vgic_gicr_attach_flags_copy_last(vgic_gicr_attach_flags_t	*bit_field_dst,
+				 const vgic_gicr_attach_flags_t *bit_field_src);
 
 void
 addrspace_map_flags_set_partial(addrspace_map_flags_t *bit_field, bool val);
@@ -3122,7 +3300,7 @@ bool
 hyp_api_flags0_get_virtio_mmio(const hyp_api_flags0_t *bit_field);
 
 bool
-hyp_api_flags0_get_reserved(const hyp_api_flags0_t *bit_field);
+hyp_api_flags0_get_reserved_16(const hyp_api_flags0_t *bit_field);
 
 scheduler_variant_t
 hyp_api_flags0_get_scheduler(const hyp_api_flags0_t *bit_field);
@@ -3378,6 +3556,58 @@ msgqueue_send_flags_copy_push(msgqueue_send_flags_t	  *bit_field_dst,
 			      const msgqueue_send_flags_t *bit_field_src);
 
 void
+root_env_mmio_range_properties_set_num_pages(
+	root_env_mmio_range_properties_t *bit_field, uint32_t val);
+
+uint32_t
+root_env_mmio_range_properties_get_num_pages(
+	const root_env_mmio_range_properties_t *bit_field);
+
+void
+root_env_mmio_range_properties_copy_num_pages(
+	root_env_mmio_range_properties_t       *bit_field_dst,
+	const root_env_mmio_range_properties_t *bit_field_src);
+
+void
+root_env_mmio_range_properties_set_access(
+	root_env_mmio_range_properties_t *bit_field, pgtable_access_t val);
+
+pgtable_access_t
+root_env_mmio_range_properties_get_access(
+	const root_env_mmio_range_properties_t *bit_field);
+
+void
+root_env_mmio_range_properties_copy_access(
+	root_env_mmio_range_properties_t       *bit_field_dst,
+	const root_env_mmio_range_properties_t *bit_field_src);
+
+void
+root_env_mmio_range_properties_set_res_s2pt_attr(
+	root_env_mmio_range_properties_t *bit_field, uint8_t val);
+
+uint8_t
+root_env_mmio_range_properties_get_res_s2pt_attr(
+	const root_env_mmio_range_properties_t *bit_field);
+
+void
+root_env_mmio_range_properties_copy_res_s2pt_attr(
+	root_env_mmio_range_properties_t       *bit_field_dst,
+	const root_env_mmio_range_properties_t *bit_field_src);
+
+void
+root_env_mmio_range_properties_set_non_exclusive(
+	root_env_mmio_range_properties_t *bit_field, bool val);
+
+bool
+root_env_mmio_range_properties_get_non_exclusive(
+	const root_env_mmio_range_properties_t *bit_field);
+
+void
+root_env_mmio_range_properties_copy_non_exclusive(
+	root_env_mmio_range_properties_t       *bit_field_dst,
+	const root_env_mmio_range_properties_t *bit_field_src);
+
+void
 scheduler_yield_control_set_hint(scheduler_yield_control_t *bit_field,
 				 scheduler_yield_hint_t	    val);
 
@@ -3541,16 +3771,6 @@ vcpu_option_flags_copy_sve_allowed(vcpu_option_flags_t	     *bit_field_dst,
 				   const vcpu_option_flags_t *bit_field_src);
 
 void
-vcpu_option_flags_set_hlos_vm(vcpu_option_flags_t *bit_field, bool val);
-
-bool
-vcpu_option_flags_get_hlos_vm(const vcpu_option_flags_t *bit_field);
-
-void
-vcpu_option_flags_copy_hlos_vm(vcpu_option_flags_t	 *bit_field_dst,
-			       const vcpu_option_flags_t *bit_field_src);
-
-void
 vcpu_option_flags_set_debug_allowed(vcpu_option_flags_t *bit_field, bool val);
 
 bool
@@ -3559,6 +3779,26 @@ vcpu_option_flags_get_debug_allowed(const vcpu_option_flags_t *bit_field);
 void
 vcpu_option_flags_copy_debug_allowed(vcpu_option_flags_t       *bit_field_dst,
 				     const vcpu_option_flags_t *bit_field_src);
+
+void
+vcpu_option_flags_set_trace_allowed(vcpu_option_flags_t *bit_field, bool val);
+
+bool
+vcpu_option_flags_get_trace_allowed(const vcpu_option_flags_t *bit_field);
+
+void
+vcpu_option_flags_copy_trace_allowed(vcpu_option_flags_t       *bit_field_dst,
+				     const vcpu_option_flags_t *bit_field_src);
+
+void
+vcpu_option_flags_set_hlos_vm(vcpu_option_flags_t *bit_field, bool val);
+
+bool
+vcpu_option_flags_get_hlos_vm(const vcpu_option_flags_t *bit_field);
+
+void
+vcpu_option_flags_copy_hlos_vm(vcpu_option_flags_t	 *bit_field_dst,
+			       const vcpu_option_flags_t *bit_field_src);
 
 void
 vcpu_poweroff_flags_set_last_vcpu(vcpu_poweroff_flags_t *bit_field, bool val);

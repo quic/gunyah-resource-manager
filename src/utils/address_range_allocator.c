@@ -209,7 +209,6 @@ address_range_allocator_alloc(address_range_allocator_t *allocator,
 	      ((base_address + size) >
 	       (allocator->base_address + allocator->size)))) ||
 	    (size < PAGE_SIZE) || !util_is_baligned(size, PAGE_SIZE)) {
-		LOG_LOC("bad arg");
 		ret.err = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -231,11 +230,13 @@ address_range_allocator_alloc(address_range_allocator_t *allocator,
 		ret.size	 = remove_ret.size;
 		ret.tag		 = get_ret.allocator.tag;
 	} else {
-		LOG_LOC("alloc");
 		ret.err = remove_ret.err;
 	}
 
 out:
+	if (ret.err != OK) {
+		LOG_ERR(ret.err);
+	}
 	return ret;
 }
 
@@ -252,7 +253,6 @@ address_range_allocator_free(address_range_allocator_t *allocator,
 	    (base_address < allocator->base_address) ||
 	    ((base_address + size) >
 	     (allocator->base_address + allocator->size))) {
-		LOG_LOC("bad arg");
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -266,6 +266,9 @@ address_range_allocator_free(address_range_allocator_t *allocator,
 				INVALID_DATA);
 
 out:
+	if (ret != OK) {
+		LOG_ERR(ret);
+	}
 	return ret;
 }
 
@@ -299,9 +302,9 @@ address_range_allocator_tag_region(address_range_allocator_t *allocator,
 {
 	address_range_allocator_ret_t ret = { 0 };
 
-	if ((tag == ADDRESS_RANGE_NO_TAG) || (size < PAGE_SIZE) ||
-	    !util_is_baligned(size, PAGE_SIZE) || (alignment < PAGE_SIZE) ||
-	    !util_is_p2(alignment)) {
+	if ((tag == ADDRESS_RANGE_NO_TAG) || (size < (size_t)PAGE_SIZE) ||
+	    !util_is_baligned(size, PAGE_SIZE) ||
+	    (alignment < (size_t)PAGE_SIZE) || !util_is_p2(alignment)) {
 		LOG_LOC("bad arg");
 		ret.err = ERROR_ARGUMENT_INVALID;
 		goto out;
@@ -313,15 +316,11 @@ address_range_allocator_tag_region(address_range_allocator_t *allocator,
 	     (constrain_base < allocator->base_address) ||
 	     ((constrain_base + constrain_size) >
 	      (allocator->base_address + allocator->size)) ||
-	     (constrain_size < PAGE_SIZE) ||
+	     (constrain_size < (size_t)PAGE_SIZE) ||
 	     !util_is_baligned(constrain_size, PAGE_SIZE))) {
 		LOG_LOC("constrain");
 		ret.err = ERROR_ARGUMENT_INVALID;
 		goto out;
-	}
-
-	if (alignment == ADDRESS_RANGE_NO_TAG) {
-		alignment = PAGE_SIZE;
 	}
 
 	if (constrain_base == INVALID_ADDRESS) {
@@ -470,8 +469,8 @@ address_range_allocator_untag(address_range_allocator_t *allocator,
 	ret = range_list_update(allocator->ralloc, base_address, size,
 				select_ret.selected_range, INVALID_DATA);
 	if (ret != OK) {
-		range_list_insert(sub_allocator->ralloc, base_address, size,
-				  INVALID_DATA);
+		assert(range_list_insert(sub_allocator->ralloc, base_address,
+					 size, INVALID_DATA) == OK);
 		LOG_ERR(ret);
 		goto out;
 	}
@@ -489,16 +488,16 @@ out:
 void
 address_range_allocator_dump(address_range_allocator_t *allocator)
 {
-	printf("Dump allocator: list range [0x%lx, 0x%lx):\n",
-	       allocator->base_address,
-	       allocator->base_address + allocator->size);
+	(void)printf("Dump allocator: list range [0x%lx, 0x%lx):\n",
+		     allocator->base_address,
+		     allocator->base_address + allocator->size);
 
 	range_list_dump(allocator->ralloc, "");
 
 	index_t		 idx	       = 0U;
 	sub_allocator_t *cur_allocator = NULL;
 
-	printf("Sub allocators:\n");
+	(void)printf("Sub allocators:\n");
 	foreach_vector(sub_allocator_t *, allocator->sub_allocators, idx,
 		       cur_allocator)
 	{
@@ -506,9 +505,10 @@ address_range_allocator_dump(address_range_allocator_t *allocator)
 			range_list_t *a	   = cur_allocator->ralloc;
 			uint64_t      base = range_list_get_base_address(a);
 			uint64_t      size = range_list_get_size(a);
-			printf("\ttagged: list range [0x%lx, 0x%lx) tag(%lx) data(%p):\n",
-			       base, base + size, (uint64_t)cur_allocator->tag,
-			       (void *)cur_allocator);
+			(void)printf(
+				"\ttagged: list range [0x%lx, 0x%lx) tag(%lx) data(%p):\n",
+				base, base + size, (uint64_t)cur_allocator->tag,
+				(void *)cur_allocator);
 			range_list_dump(a, "\t");
 		}
 	}

@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+typedef struct rm_irq_env_data_s {
+	cap_id_t vic_hwirq[1020];
+	cap_id_t vic_msi_source[16];
+} rm_irq_env_data_t;
+
 // This structure is used only locally in RM as shared temporary data
 RM_PADDED(struct rm_env_data_s {
 	platform_env_data_t *platform_env;
@@ -33,16 +38,15 @@ RM_PADDED(struct rm_env_data_s {
 	paddr_t		      hlos_ramfs_base;
 	cap_id_t	      smc_wqs[2];
 	cap_id_t	      vic;
-	cap_id_t	      vic_hwirq[1020];
-	cap_id_t	      vic_msi_source[16];
 
-	cap_id_t gic_xlate_me[16];
+	rm_irq_env_data_t *irq_env;
 
-	cap_id_t    uart_me_capid;
-	cpu_index_t boot_core;
-	bool	    sve_supported;
-	bool	    watchdog_supported;
-	bool	    hlos_handles_ras;
+	cap_id_t		 uart_me_capid;
+	cpu_index_t		 boot_core;
+	bool			 sve_supported;
+	bool			 watchdog_supported;
+	bool			 hlos_handles_ras;
+	vm_device_assignments_t *device_assignments;
 })
 
 typedef struct rm_env_data_s rm_env_data_t;

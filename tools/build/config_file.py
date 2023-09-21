@@ -202,7 +202,7 @@ class Configuration:
                         for w in words[2:]:
                             self._add_source(cur_dir, w, None, self.local_env)
                 elif words[0] == "program":
-                    assert(self.binary_name is None)
+                    assert self.binary_name is None
                     self.binary_name = words[1]
                     # FIXME: the add_variant API is not work as expected, need
                     # double check if this program is helpful
@@ -216,12 +216,12 @@ class Configuration:
                 elif words[0] == "end_program":
                     # only allowed one target, if need support multiple target,
                     # just need to implement a stack
-                    assert(self.binary_name is not None)
+                    assert self.binary_name is not None
                     self._set_program()
                 elif words[0] == "static_lib":
                     self.binary_name = "lib" + words[0] + ".a"
                 elif words[0] == "end_static_lib":
-                    assert(self.binary_name is not None)
+                    assert self.binary_name is not None
                     self._set_static_lib()
                 elif words[0] == "cflags":
                     self.graph.append_env("CFLAGS", ' '.join(words[1:]))
@@ -240,11 +240,14 @@ class Configuration:
 
     def _setup_toolchain(self):
         try:
-            llvm_root = self.graph.get_env('LLVM')
+            llvm_root = self.graph.get_env('QCOM_LLVM')
         except KeyError:
-            logger.error(
-                "Set $LLVM to the root of LLVM toolchain")
-            sys.exit(1)
+            try:
+                llvm_root = self.graph.get_env('LLVM')
+            except KeyError:
+                logger.error(
+                    "Set $QCOM_LLVM or $LLVM to the root of LLVM toolchain")
+                sys.exit(1)
 
         try:
             local_sysroot = self.graph.get_env('LOCAL_SYSROOT')
@@ -351,7 +354,7 @@ class Configuration:
         deps = None
         if self.linker_script is not None:
             deps = [self.linker_script]
-        assert(len(self.objects) != 0)
+        assert len(self.objects) != 0
         self.graph.add_target([bin_file], 'ld', sorted(self.objects),
                               depends=deps)
         self.graph.add_default_target(bin_file)
@@ -359,7 +362,7 @@ class Configuration:
     def _set_static_lib(self):
         bin_file = os.path.join(self.graph.build_dir, self.binary_name)
         deps = None
-        assert(len(self.objects) != 0)
+        assert len(self.objects) != 0
         self.graph.add_target([bin_file], 'ar', sorted(self.objects),
                               depends=deps)
         self.graph.add_default_target(bin_file)

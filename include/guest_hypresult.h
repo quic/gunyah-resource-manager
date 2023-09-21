@@ -209,6 +209,27 @@ addrspace_vmmio_configure_op_ptr_result_error(error_t err);
 addrspace_vmmio_configure_op_ptr_result_t
 addrspace_vmmio_configure_op_ptr_result_ok(addrspace_vmmio_configure_op_t *ret);
 
+typedef struct addrspace_attach_vdevice_flags_result {
+	addrspace_attach_vdevice_flags_t r;
+	error_t alignas(register_t) e;
+} addrspace_attach_vdevice_flags_result_t;
+
+addrspace_attach_vdevice_flags_result_t
+addrspace_attach_vdevice_flags_result_error(error_t err);
+addrspace_attach_vdevice_flags_result_t
+addrspace_attach_vdevice_flags_result_ok(addrspace_attach_vdevice_flags_t ret);
+
+typedef struct addrspace_attach_vdevice_flags_ptr_result {
+	addrspace_attach_vdevice_flags_t *r;
+	error_t alignas(register_t) e;
+} addrspace_attach_vdevice_flags_ptr_result_t;
+
+addrspace_attach_vdevice_flags_ptr_result_t
+addrspace_attach_vdevice_flags_ptr_result_error(error_t err);
+addrspace_attach_vdevice_flags_ptr_result_t
+addrspace_attach_vdevice_flags_ptr_result_ok(
+	addrspace_attach_vdevice_flags_t *ret);
+
 typedef struct hyp_variant_result {
 	hyp_variant_t r;
 	error_t alignas(register_t) e;
@@ -528,6 +549,48 @@ pgtable_access_ptr_result_t
 pgtable_access_ptr_result_error(error_t err);
 pgtable_access_ptr_result_t
 pgtable_access_ptr_result_ok(pgtable_access_t *ret);
+
+typedef struct root_env_mmio_range_properties_result {
+	root_env_mmio_range_properties_t r;
+	error_t alignas(register_t) e;
+} root_env_mmio_range_properties_result_t;
+
+root_env_mmio_range_properties_result_t
+root_env_mmio_range_properties_result_error(error_t err);
+root_env_mmio_range_properties_result_t
+root_env_mmio_range_properties_result_ok(root_env_mmio_range_properties_t ret);
+
+typedef struct root_env_mmio_range_properties_ptr_result {
+	root_env_mmio_range_properties_t *r;
+	error_t alignas(register_t) e;
+} root_env_mmio_range_properties_ptr_result_t;
+
+root_env_mmio_range_properties_ptr_result_t
+root_env_mmio_range_properties_ptr_result_error(error_t err);
+root_env_mmio_range_properties_ptr_result_t
+root_env_mmio_range_properties_ptr_result_ok(
+	root_env_mmio_range_properties_t *ret);
+
+typedef struct root_env_mmio_range_descriptor_result {
+	root_env_mmio_range_descriptor_t r;
+	error_t alignas(register_t) e;
+} root_env_mmio_range_descriptor_result_t;
+
+root_env_mmio_range_descriptor_result_t
+root_env_mmio_range_descriptor_result_error(error_t err);
+root_env_mmio_range_descriptor_result_t
+root_env_mmio_range_descriptor_result_ok(root_env_mmio_range_descriptor_t ret);
+
+typedef struct root_env_mmio_range_descriptor_ptr_result {
+	root_env_mmio_range_descriptor_t *r;
+	error_t alignas(register_t) e;
+} root_env_mmio_range_descriptor_ptr_result_t;
+
+root_env_mmio_range_descriptor_ptr_result_t
+root_env_mmio_range_descriptor_ptr_result_error(error_t err);
+root_env_mmio_range_descriptor_ptr_result_t
+root_env_mmio_range_descriptor_ptr_result_ok(
+	root_env_mmio_range_descriptor_t *ret);
 
 typedef struct priority_result {
 	priority_t r;
@@ -850,6 +913,26 @@ microseconds_ptr_result_error(error_t err);
 microseconds_ptr_result_t
 microseconds_ptr_result_ok(microseconds_t *ret);
 
+typedef struct milliseconds_result {
+	milliseconds_t r;
+	error_t alignas(register_t) e;
+} milliseconds_result_t;
+
+milliseconds_result_t
+milliseconds_result_error(error_t err);
+milliseconds_result_t
+milliseconds_result_ok(milliseconds_t ret);
+
+typedef struct milliseconds_ptr_result {
+	milliseconds_t *r;
+	error_t alignas(register_t) e;
+} milliseconds_ptr_result_t;
+
+milliseconds_ptr_result_t
+milliseconds_ptr_result_error(error_t err);
+milliseconds_ptr_result_t
+milliseconds_ptr_result_ok(milliseconds_t *ret);
+
 typedef struct trace_class_result {
 	trace_class_t r;
 	error_t alignas(register_t) e;
@@ -929,6 +1012,26 @@ vcpu_register_set_ptr_result_t
 vcpu_register_set_ptr_result_error(error_t err);
 vcpu_register_set_ptr_result_t
 vcpu_register_set_ptr_result_ok(vcpu_register_set_t *ret);
+
+typedef struct vcpu_option_flags_result {
+	vcpu_option_flags_t r;
+	error_t alignas(register_t) e;
+} vcpu_option_flags_result_t;
+
+vcpu_option_flags_result_t
+vcpu_option_flags_result_error(error_t err);
+vcpu_option_flags_result_t
+vcpu_option_flags_result_ok(vcpu_option_flags_t ret);
+
+typedef struct vcpu_option_flags_ptr_result {
+	vcpu_option_flags_t *r;
+	error_t alignas(register_t) e;
+} vcpu_option_flags_ptr_result_t;
+
+vcpu_option_flags_ptr_result_t
+vcpu_option_flags_ptr_result_error(error_t err);
+vcpu_option_flags_ptr_result_t
+vcpu_option_flags_ptr_result_ok(vcpu_option_flags_t *ret);
 
 typedef struct vcpu_poweron_flags_result {
 	vcpu_poweron_flags_t r;
@@ -1170,25 +1273,25 @@ rm_env_data_hdr_ptr_result_error(error_t err);
 rm_env_data_hdr_ptr_result_t
 rm_env_data_hdr_ptr_result_ok(rm_env_data_hdr_t *ret);
 
-typedef struct vcpu_option_flags_result {
-	vcpu_option_flags_t r;
+typedef struct vgic_gicr_attach_flags_result {
+	vgic_gicr_attach_flags_t r;
 	error_t alignas(register_t) e;
-} vcpu_option_flags_result_t;
+} vgic_gicr_attach_flags_result_t;
 
-vcpu_option_flags_result_t
-vcpu_option_flags_result_error(error_t err);
-vcpu_option_flags_result_t
-vcpu_option_flags_result_ok(vcpu_option_flags_t ret);
+vgic_gicr_attach_flags_result_t
+vgic_gicr_attach_flags_result_error(error_t err);
+vgic_gicr_attach_flags_result_t
+vgic_gicr_attach_flags_result_ok(vgic_gicr_attach_flags_t ret);
 
-typedef struct vcpu_option_flags_ptr_result {
-	vcpu_option_flags_t *r;
+typedef struct vgic_gicr_attach_flags_ptr_result {
+	vgic_gicr_attach_flags_t *r;
 	error_t alignas(register_t) e;
-} vcpu_option_flags_ptr_result_t;
+} vgic_gicr_attach_flags_ptr_result_t;
 
-vcpu_option_flags_ptr_result_t
-vcpu_option_flags_ptr_result_error(error_t err);
-vcpu_option_flags_ptr_result_t
-vcpu_option_flags_ptr_result_ok(vcpu_option_flags_t *ret);
+vgic_gicr_attach_flags_ptr_result_t
+vgic_gicr_attach_flags_ptr_result_error(error_t err);
+vgic_gicr_attach_flags_ptr_result_t
+vgic_gicr_attach_flags_ptr_result_ok(vgic_gicr_attach_flags_t *ret);
 
 typedef struct cap_id_result {
 	cap_id_t r;

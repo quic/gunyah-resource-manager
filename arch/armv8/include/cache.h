@@ -15,3 +15,8 @@ cache_clean_by_va(void *va, size_t size);
 // pointer. This is typically used before accessing data provided by another VM.
 void
 cache_flush_by_va(void *va, size_t size);
+
+// Invalidate all of the instruction cache so it is coherent with any previous
+// data cache clean or flush.
+void
+cache_invalidate_inst_all(void);

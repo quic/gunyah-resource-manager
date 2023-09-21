@@ -9,15 +9,8 @@
 error_t
 rm_vm_create(const rm_env_data_t *env_data);
 
-typedef struct {
-	cap_id_t *vic_hwirqs;
-	cap_id_t *vic_msi_sources;
-	count_t	  vic_hwirq_count;
-	count_t	  vic_msi_source_count;
-} hwirq_caps_t;
-
 error_t
-hlos_vm_create(hwirq_caps_t hwirq_caps, const rm_env_data_t *env_data);
+hlos_vm_create(const rm_env_data_t *env_data);
 
 error_t
 hlos_vm_start(void);

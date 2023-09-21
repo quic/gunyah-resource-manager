@@ -271,7 +271,8 @@ warn_if_not_phys(const void *fdt, int node_ofs, const ctx_t *ctx)
 {
 	if (!ctx->addr_is_phys) {
 		char path[128];
-		if (fdt_get_path(fdt, node_ofs, path, sizeof(path)) != OK) {
+		if (fdt_get_path(fdt, node_ofs, path, (int32_t)sizeof(path)) !=
+		    0) {
 			strlcpy(path, "<unknown path>", sizeof(path));
 		}
 		(void)printf("Warning: addresses in %s are not 1:1 physical!\n",
@@ -324,10 +325,14 @@ parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 			vd->crash_fatal = true;
 			// Crash-fatal implies no-shutdown.
 			vd->no_shutdown = true;
+			// Crash-fatal implies reset is not allowed.
+			vd->no_reset = true;
 		} else if (strcmp(vm_attr, "context-dump") == 0) {
 			vd->context_dump = true;
 		} else if (strcmp(vm_attr, "no-shutdown") == 0) {
 			vd->no_shutdown = true;
+		} else if (strcmp(vm_attr, "no-reset") == 0) {
+			vd->no_reset = true;
 		} else {
 			(void)printf("Warning: Unknown VM attribute \"%s\"\n",
 				     vm_attr);
@@ -405,7 +410,7 @@ parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 		vd->has_guid = true;
 	} else {
-		memset(vd->vm_guid, 0, sizeof(vd->vm_guid));
+		(void)memset(vd->vm_guid, 0, sizeof(vd->vm_guid));
 		vd->has_guid = false;
 	}
 
@@ -464,7 +469,7 @@ parse_iomem_ranges(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	}
 
 	count_t num_words   = (count_t)len / sizeof(iomems[0]);
-	count_t range_words = (ctx->addr_cells * 2) + ctx->size_cells + 1;
+	count_t range_words = (ctx->addr_cells * 2U) + ctx->size_cells + 1U;
 
 	if ((num_words == 0U) || ((num_words % range_words) != 0U)) {
 		(void)printf(
@@ -496,7 +501,7 @@ parse_iomem_ranges(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		}
 
 		uint16_t access_code = (uint16_t)fdt_read_num(&iomems[i], 1);
-		if (access_code >= IOMEM_RANGE_ACCESS_MAX) {
+		if (access_code >= (uint16_t)IOMEM_RANGE_ACCESS_MAX) {
 			(void)printf("iomemory-ranges invalid access\n");
 			ret = ERROR_ARGUMENT_INVALID;
 			goto out;
@@ -521,6 +526,12 @@ parse_vm_memory(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	listener_return_t ret = RET_CLAIMED;
 
 	warn_if_not_phys(fdt, node_ofs, ctx);
+
+	if (fdt_getprop_bool(fdt, node_ofs, "is-direct")) {
+		vd->mem_map_direct = true;
+		// Default value of the maximum size is the whole address space.
+		vd->mem_size_max = ~(size_t)0U;
+	}
 
 	if (fdt_getprop_num(fdt, node_ofs, "base-address", ctx->addr_cells,
 			    &vd->mem_base_ipa) == OK) {
@@ -615,7 +626,7 @@ parse_rm_rpc(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	rm_rpc_data_t cfg;
 
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	cfg.is_console_dev = fdt_getprop_bool(fdt, node_ofs, "console-dev");
 
@@ -642,7 +653,7 @@ parse_rm_rpc(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		ret = RET_ERROR;
 		goto out_free;
 	}
-	cfg.general.push_compatible[cnt + 0] = cp;
+	cfg.general.push_compatible[cnt + 0U] = cp;
 
 	cp = strdup("qcom,resource-manager");
 	if (cp == NULL) {
@@ -735,7 +746,7 @@ parse_general_vdevice_props(general_data_t *cfg, const void *fdt, int node_ofs,
 
 	int num_push_compatibles =
 		fdt_stringlist_count(fdt, node_ofs, "push-compatible");
-	if (num_push_compatibles > VDEVICE_MAX_PUSH_COMPATIBLES) {
+	if (num_push_compatibles > (int32_t)VDEVICE_MAX_PUSH_COMPATIBLES) {
 		ret = ERROR_DENIED;
 		destroy_general_vdevice_props(cfg);
 		goto out;
@@ -760,19 +771,31 @@ parse_doorbell_source(vm_config_parser_data_t *vd, const void *fdt,
 	listener_return_t ret = RET_CLAIMED;
 
 	doorbell_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	cfg.is_source = true;
 
 	// should not define irq for source doorbell
 	cfg.defined_irq = false;
 
-	if (!fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
-		ret = RET_ERROR;
-		goto err_not_peer_default;
+	if (fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
+		cfg.peer    = VMID_PEER_DEFAULT;
+		cfg.peer_id = NULL;
+	} else {
+		const char *peer =
+			fdt_stringlist_get(fdt, node_ofs, "peer", 0, NULL);
+		if (peer != NULL) {
+			cfg.peer_id = strdup(peer);
+			if (cfg.peer_id == NULL) {
+				(void)printf("Error: failed to save peer id\n");
+				ret = RET_ERROR;
+				goto err_not_peer;
+			}
+		} else {
+			ret = RET_ERROR;
+			goto err_not_peer;
+		}
 	}
-
-	cfg.peer = VMID_PEER_DEFAULT;
 
 	cfg.source_can_clear =
 		fdt_getprop_bool(fdt, node_ofs, "source-can-clear");
@@ -793,7 +816,11 @@ parse_doorbell_source(vm_config_parser_data_t *vd, const void *fdt,
 	}
 
 err_parse_general:
-err_not_peer_default:
+err_not_peer:
+	if (ret != RET_CLAIMED) {
+		free(cfg.peer_id);
+	}
+
 	return ret;
 }
 
@@ -804,18 +831,30 @@ parse_doorbell(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	listener_return_t ret = RET_CLAIMED;
 
 	doorbell_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	cfg.is_source = false;
 
 	cfg.defined_irq = read_interrupts_config(fdt, node_ofs, &cfg.irq, 1);
 
-	if (!fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
-		ret = RET_ERROR;
-		goto err_not_peer_default;
+	if (fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
+		cfg.peer    = VMID_PEER_DEFAULT;
+		cfg.peer_id = NULL;
+	} else {
+		const char *peer =
+			fdt_stringlist_get(fdt, node_ofs, "peer", 0, NULL);
+		if (peer != NULL) {
+			cfg.peer_id = strdup(peer);
+			if (cfg.peer_id == NULL) {
+				(void)printf("Error: failed to save peer id\n");
+				ret = RET_ERROR;
+				goto err_not_peer;
+			}
+		} else {
+			ret = RET_ERROR;
+			goto err_not_peer;
+		}
 	}
-
-	cfg.peer = VMID_PEER_DEFAULT;
 
 	cfg.source_can_clear =
 		fdt_getprop_bool(fdt, node_ofs, "source-can-clear");
@@ -836,7 +875,11 @@ parse_doorbell(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	}
 
 err_parse_general:
-err_not_peer_default:
+err_not_peer:
+	if (ret != RET_CLAIMED) {
+		free(cfg.peer_id);
+	}
+
 	return ret;
 }
 
@@ -847,7 +890,7 @@ parse_message_queue(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	listener_return_t ret = RET_CLAIMED;
 
 	msg_queue_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	// only need 1 irq
 	cfg.defined_irq = read_interrupts_config(fdt, node_ofs, cfg.irqs, 1);
@@ -902,7 +945,7 @@ parse_message_queue_pair(vm_config_parser_data_t *vd, const void *fdt,
 	listener_return_t ret = RET_CLAIMED;
 
 	msg_queue_pair_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	if (fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
 		cfg.peer    = VMID_PEER_DEFAULT;
@@ -963,81 +1006,86 @@ parse_memory_node(const void *fdt, int node_ofs, const ctx_t *ctx,
 {
 	listener_return_t ret = RET_CLAIMED;
 
-	// handle sub memory node
+	// Get memory sub node
 	bool found_mem	  = false;
 	int  sub_node_ofs = 0;
+	int  cur_node_ofs = 0;
 	int  len	  = 0;
 
-	// parse memory node
-	fdt_for_each_subnode (sub_node_ofs, fdt, node_ofs) {
-		const char *node_name = fdt_get_name(fdt, sub_node_ofs, &len);
-		(void)node_name;
-		// the node must be memory
-		if (strcmp(node_name, "memory") != 0U) {
+	fdt_for_each_subnode (cur_node_ofs, fdt, node_ofs) {
+		const char *node_name = fdt_get_name(fdt, cur_node_ofs, &len);
+		if (strcmp(node_name, "memory") != 0) {
 			(void)printf(
 				"parse vdevice node: expected \"memory\" node\n");
 			ret = RET_ERROR;
 			goto err_unexpected;
 		}
 
-		ctx_t mem_ctx;
-		dtb_parser_update_ctx(fdt, sub_node_ofs, ctx, &mem_ctx);
-
-		warn_if_not_phys(fdt, sub_node_ofs, &mem_ctx);
-
-		// Only allows one shm memory right now
 		if (found_mem) {
 			(void)printf(
 				"parse vdevice node: multiple \"memory\" nodes\n");
 			ret = RET_ERROR;
 			goto err_unexpected;
 		}
-		found_mem = true;
 
-		// mem_label
-		if (parse_device_label(fdt, sub_node_ofs, label) != OK) {
-			ret = RET_ERROR;
-			goto err_no_label;
-		}
-
-		bool have_base = true;
-		if (fdt_getprop_num(fdt, sub_node_ofs, "base",
-				    mem_ctx.addr_cells, mem_base_ipa) != OK) {
-			have_base     = false;
-			*mem_base_ipa = 0U;
-		}
-		if (!util_is_baligned(*mem_base_ipa, PAGE_SIZE)) {
-			(void)printf("parse vdevice node: base not aligned\n");
-			ret = RET_ERROR;
-			goto err_unexpected;
-		}
-
-		if (is_optional != NULL) {
-			*is_optional =
-				fdt_getprop_bool(fdt, sub_node_ofs, "optional");
-		}
-
-		// check if need allocate
-		*need_allocate = false;
-
-		if (fdt_getprop_bool(fdt, sub_node_ofs, "allocate-base")) {
-			if (have_base) {
-				(void)printf(
-					"parse vdevice node: base and allocate-base both present\n");
-				ret = RET_ERROR;
-				goto err_unexpected;
-			}
-			*need_allocate = true;
-			*mem_base_ipa  = 0UL;
-		} else if (!have_base) {
-			(void)printf(
-				"parse vdevice node: neither base or allocate-base present\n");
-			ret = RET_ERROR;
-			goto err_unexpected;
-		} else {
-			// no allocation needed
-		}
+		sub_node_ofs = cur_node_ofs;
+		found_mem    = true;
 	}
+
+	if (!found_mem) {
+		(void)printf("parse vdevice node: missing \"memory\" node\n");
+		ret = RET_ERROR;
+		goto err_unexpected;
+	}
+
+	ctx_t mem_ctx;
+	dtb_parser_update_ctx(fdt, sub_node_ofs, ctx, &mem_ctx);
+
+	warn_if_not_phys(fdt, sub_node_ofs, &mem_ctx);
+
+	// mem_label
+	if (parse_device_label(fdt, sub_node_ofs, label) != OK) {
+		ret = RET_ERROR;
+		goto err_no_label;
+	}
+
+	bool have_base = true;
+	if (fdt_getprop_num(fdt, sub_node_ofs, "base", mem_ctx.addr_cells,
+			    mem_base_ipa) != OK) {
+		have_base     = false;
+		*mem_base_ipa = 0U;
+	}
+	if (!util_is_baligned(*mem_base_ipa, PAGE_SIZE)) {
+		(void)printf("parse vdevice node: base not aligned\n");
+		ret = RET_ERROR;
+		goto err_unexpected;
+	}
+
+	if (is_optional != NULL) {
+		*is_optional = fdt_getprop_bool(fdt, sub_node_ofs, "optional");
+	}
+
+	// check if need allocate
+	*need_allocate = false;
+
+	if (fdt_getprop_bool(fdt, sub_node_ofs, "allocate-base")) {
+		if (have_base) {
+			(void)printf(
+				"parse vdevice node: base and allocate-base both present\n");
+			ret = RET_ERROR;
+			goto err_unexpected;
+		}
+		*need_allocate = true;
+		*mem_base_ipa  = 0UL;
+	} else if (!have_base) {
+		(void)printf(
+			"parse vdevice node: neither base or allocate-base present\n");
+		ret = RET_ERROR;
+		goto err_unexpected;
+	} else {
+		// no allocation needed
+	}
+
 err_unexpected:
 err_no_label:
 	return ret;
@@ -1050,7 +1098,7 @@ parse_virtio_mmio(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	listener_return_t ret = RET_CLAIMED;
 
 	virtio_mmio_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	cfg.dma_coherent = fdt_getprop_bool(fdt, node_ofs, "dma-coherent");
 
@@ -1105,7 +1153,7 @@ parse_shm_doorbell(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	listener_return_t ret = RET_CLAIMED;
 
 	shm_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	const char *vdevice_type =
 		fdt_stringlist_get(fdt, node_ofs, "vdevice-type", 0, NULL);
@@ -1334,15 +1382,20 @@ parse_vcpus(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 			goto out;
 		}
 
-		vcpu_data_t cfg;
-		(void)memset(&cfg, 0, sizeof(cfg));
+		vcpu_data_t cfg = {
+			.patch	   = strdup(path),
+			.boot_vcpu = is_boot_cpu,
+		};
 
-		cfg.patch     = strdup(path);
-		cfg.boot_vcpu = is_boot_cpu;
+		if (cfg.patch == NULL) {
+			ret = RET_ERROR;
+			goto out;
+		}
 
 		error_t push_err;
 		vector_push_back_imm(vcpu_data_t, vd->vcpus, cfg, push_err);
 		if (push_err != OK) {
+			free(cfg.patch);
 			ret = RET_ERROR;
 			goto out;
 		}
@@ -1390,7 +1443,7 @@ parse_vsmmuv2(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	(void)ctx;
 
 	smmu_v2_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	if (fdt_getprop_u32(fdt, node_ofs, "smmu-handle", &cfg.smmu_handle) !=
 	    OK) {
@@ -1399,9 +1452,16 @@ parse_vsmmuv2(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		goto out;
 	}
 
-	cfg.patch = fdt_stringlist_get(fdt, node_ofs, "patch", 0, NULL);
-	if (cfg.patch == NULL) {
+	const char *patch = fdt_stringlist_get(fdt, node_ofs, "patch", 0, NULL);
+	if (patch == NULL) {
 		(void)printf("Missing patch in vsmmu config\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	cfg.patch = strdup(patch);
+	if (cfg.patch == NULL) {
+		(void)printf("Failed strdup patch in vsmmu config\n");
 		ret = RET_ERROR;
 		goto out;
 	}
@@ -1411,7 +1471,7 @@ parse_vsmmuv2(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		ret = RET_ERROR;
 		goto out;
 	}
-	if (cfg.num_cbs > 255) {
+	if (cfg.num_cbs > 255U) {
 		(void)printf("Invalid context banks count\n");
 		ret = RET_ERROR;
 		goto out;
@@ -1422,7 +1482,7 @@ parse_vsmmuv2(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		ret = RET_ERROR;
 		goto out;
 	}
-	if (cfg.num_smrs > 255) {
+	if (cfg.num_smrs > 255U) {
 		(void)printf("Invalid SMR count\n");
 		ret = RET_ERROR;
 		goto out;
@@ -1436,6 +1496,10 @@ parse_vsmmuv2(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	}
 
 out:
+	if ((ret != RET_CLAIMED) && (cfg.patch != NULL)) {
+		free(cfg.patch);
+	}
+
 	return ret;
 }
 
@@ -1511,12 +1575,57 @@ vm_config_parser_get_params(const vm_t *vm)
 	};
 }
 
+static void
+alloc_parser_data_rollback(vm_config_parser_data_t *vd)
+{
+	if (vd->rtc != NULL) {
+		vector_deinit(vd->rtc);
+	}
+	if (vd->vcpus != NULL) {
+		vector_deinit(vd->vcpus);
+	}
+	if (vd->smmus != NULL) {
+		vector_deinit(vd->smmus);
+	}
+	if (vd->iomems != NULL) {
+		vector_deinit(vd->iomems);
+	}
+	if (vd->irq_ranges != NULL) {
+		vector_deinit(vd->irq_ranges);
+	}
+	if (vd->iomem_ranges != NULL) {
+		vector_deinit(vd->iomem_ranges);
+	}
+	if (vd->virtio_mmios != NULL) {
+		vector_deinit(vd->virtio_mmios);
+	}
+	if (vd->shms != NULL) {
+		vector_deinit(vd->shms);
+	}
+	if (vd->msg_queues != NULL) {
+		vector_deinit(vd->msg_queues);
+	}
+	if (vd->msg_queue_pairs != NULL) {
+		vector_deinit(vd->msg_queue_pairs);
+	}
+	if (vd->doorbells != NULL) {
+		vector_deinit(vd->doorbells);
+	}
+	if (vd->rm_rpcs != NULL) {
+		vector_deinit(vd->rm_rpcs);
+	}
+	if (vd->minidump != NULL) {
+		vector_deinit(vd->minidump);
+	}
+	free(vd);
+}
+
 static vm_config_parser_data_t *
 alloc_parser_data(const vm_config_parser_params_t *params)
 {
 	vm_config_parser_data_t *ret = calloc(1, sizeof(*ret));
 	if (ret == NULL) {
-		goto err_out;
+		goto out;
 	}
 
 	ret->auth_type = params->auth_type;
@@ -1600,46 +1709,8 @@ alloc_parser_data(const vm_config_parser_params_t *params)
 	goto out;
 
 err_out:
-	if (ret) {
-		if (ret->rtc != NULL) {
-			vector_deinit(ret->rtc);
-		}
-		if (ret->vcpus != NULL) {
-			vector_deinit(ret->vcpus);
-		}
-		if (ret->smmus != NULL) {
-			vector_deinit(ret->smmus);
-		}
-		if (ret->iomems != NULL) {
-			vector_deinit(ret->iomems);
-		}
-		if (ret->irq_ranges != NULL) {
-			vector_deinit(ret->irq_ranges);
-		}
-		if (ret->iomem_ranges != NULL) {
-			vector_deinit(ret->iomem_ranges);
-		}
-		if (ret->virtio_mmios != NULL) {
-			vector_deinit(ret->virtio_mmios);
-		}
-		if (ret->shms != NULL) {
-			vector_deinit(ret->shms);
-		}
-		if (ret->msg_queues != NULL) {
-			vector_deinit(ret->msg_queues);
-		}
-		if (ret->msg_queue_pairs != NULL) {
-			vector_deinit(ret->msg_queue_pairs);
-		}
-		if (ret->doorbells != NULL) {
-			vector_deinit(ret->doorbells);
-		}
-		if (ret->rm_rpcs != NULL) {
-			vector_deinit(ret->rm_rpcs);
-		}
-		free(ret);
-		ret = NULL;
-	}
+	alloc_parser_data_rollback(ret);
+	ret = NULL;
 out:
 	return ret;
 }
@@ -1719,10 +1790,24 @@ free_parser_data(vm_config_parser_data_t *vd)
 	}
 
 	if (vd->smmus != NULL) {
+		size_t cnt = vector_size(vd->smmus);
+		for (index_t i = 0U; i < cnt; i++) {
+			smmu_v2_data_t *d =
+				vector_at_ptr(smmu_v2_data_t, vd->smmus, i);
+			free(d->patch);
+		}
+
 		vector_deinit(vd->smmus);
 	}
 
 	if (vd->vcpus != NULL) {
+		size_t cnt = vector_size(vd->vcpus);
+		for (index_t i = 0U; i < cnt; i++) {
+			vcpu_data_t *d =
+				vector_at_ptr(vcpu_data_t, vd->vcpus, i);
+			free(d->patch);
+		}
+
 		vector_deinit(vd->vcpus);
 	}
 
@@ -1775,7 +1860,7 @@ read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
 		goto out;
 	}
 
-	if ((uint32_t)len != (3 * sizeof(irq_data[0]) * count)) {
+	if ((uint32_t)len != (3U * sizeof(irq_data[0]) * count)) {
 		ret = false;
 		goto out;
 	}
@@ -1784,7 +1869,7 @@ read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
 	count_t cnt = count;
 
 	interrupt_data_t *cur_irq = irqs;
-	while (cnt > 0) {
+	while (cnt > 0U) {
 		virq_t offset = 0, limit = 0;
 
 		ret = true;
@@ -1874,7 +1959,7 @@ parse_irq_ranges(vm_config_parser_data_t *vd, const void *fdt, int node_ofs)
 	size_t total_size = (size_t)len / sizeof(irqs[0]);
 
 	index_t i = 0;
-	while ((i + 2) <= total_size) {
+	while (((size_t)i + 2U) <= total_size) {
 		irq_range_data_t r;
 
 		r.hw_irq = (virq_t)fdt_read_num(&irqs[i], 1);
@@ -1894,6 +1979,77 @@ out:
 }
 
 static listener_return_t
+parse_iomem_opt(const void *fdt, int node_ofs, iomem_data_t *cfg)
+{
+	listener_return_t ret = RET_CLAIMED;
+
+	int len = 0;
+
+	// optional parse acl
+	error_t err = fdt_getprop_u32_array(fdt, node_ofs, "qcom,rm_acl",
+					    cfg->rm_acl, sizeof(cfg->rm_acl),
+					    NULL);
+	if (err == OK) {
+		cfg->validate_acl = true;
+	} else if (err == ERROR_ARGUMENT_INVALID) {
+		cfg->validate_acl = false;
+	} else {
+		(void)printf("Error: failed to parse qcom,rm_acl for "
+			     "iomem %d\n",
+			     cfg->general.label);
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	// optional parse attributes
+	err = fdt_getprop_u32_array(fdt, node_ofs, "qcom,rm_attributes",
+				    cfg->rm_attrs, sizeof(cfg->rm_attrs), NULL);
+	if (err == OK) {
+		cfg->validate_attrs = true;
+	} else if (err == ERROR_ARGUMENT_INVALID) {
+		cfg->validate_attrs = false;
+	} else {
+		(void)printf("Error: failed to parse qcom,rm_attributes for "
+			     "iomem %d\n",
+			     cfg->general.label);
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	// optional sglist for validation
+	const fdt32_t *sgl_entry = (const fdt32_t *)fdt_getprop(
+		fdt, node_ofs, "qcom,rm_sglist", &len);
+	if (sgl_entry != NULL) {
+		if (((size_t)len % sizeof(cfg->rm_sglist[0])) != 0U) {
+			(void)printf("Error: invalid qcom,rm_sglist value\n");
+			ret = RET_ERROR;
+			goto out;
+		}
+
+		size_t entries = (size_t)len / sizeof(cfg->rm_sglist[0]);
+
+		cfg->rm_sglist = calloc(entries, sizeof(cfg->rm_sglist[0]));
+		if (cfg->rm_sglist == NULL) {
+			ret = RET_ERROR;
+			goto out;
+		}
+		cfg->rm_sglist_len = entries;
+
+		for (index_t i = 0; i < entries; i++) {
+			cfg->rm_sglist[i].ipa = fdt_read_num(sgl_entry, 2U);
+			cfg->rm_sglist[i].size =
+				fdt_read_num(sgl_entry + 2, 2U);
+
+			// next sgl entry
+			sgl_entry += 4;
+		}
+	}
+
+out:
+	return ret;
+}
+
+static listener_return_t
 parse_iomem(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	    const ctx_t *ctx)
 {
@@ -1902,7 +2058,7 @@ parse_iomem(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	int len = 0;
 
 	iomem_data_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
+	(void)memset(&cfg, 0, sizeof(cfg));
 
 	error_t parse_general_ret =
 		parse_general_vdevice_props(&cfg.general, fdt, node_ofs, ctx);
@@ -1928,110 +2084,63 @@ parse_iomem(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	cfg.peer = VMID_HLOS;
 
-	int sub_node_ofs = 0;
+	int  sub_node_ofs = 0;
+	int  cur_node_ofs = 0;
+	bool found_mem	  = false;
 
-	// parse memory node
-	fdt_for_each_subnode (sub_node_ofs, fdt, node_ofs) {
-		const char *node_name = fdt_get_name(fdt, sub_node_ofs, &len);
-		(void)node_name;
-		// the node must be memory
+	// Get memory sub node
+	fdt_for_each_subnode (cur_node_ofs, fdt, node_ofs) {
+		const char *node_name = fdt_get_name(fdt, cur_node_ofs, &len);
 		if (strncmp(node_name, "memory", (size_t)len) != 0) {
 			continue;
 		}
 
-		ctx_t mem_ctx;
-		dtb_parser_update_ctx(fdt, sub_node_ofs, ctx, &mem_ctx);
-
-		// mem_label
-		if (parse_device_label(fdt, sub_node_ofs, &cfg.general.label) ==
-		    OK) {
-			cfg.label = cfg.general.label;
-		} else {
-			ret = RET_ERROR;
-			goto out;
-		}
-
-		// mem-info-tag
-		if (fdt_getprop_u32(fdt, sub_node_ofs, "qcom,mem-info-tag",
-				    &cfg.mem_info_tag) == OK) {
-			cfg.mem_info_tag_set = true;
-		} else {
-			cfg.mem_info_tag     = 0;
-			cfg.mem_info_tag_set = false;
-		}
-
-		// optional parse acl
-		error_t err = fdt_getprop_u32_array(fdt, node_ofs,
-						    "qcom,rm_acl", cfg.rm_acl,
-						    sizeof(cfg.rm_acl), NULL);
-		if (err == OK) {
-			cfg.validate_acl = true;
-		} else if (err == ERROR_ARGUMENT_INVALID) {
-			cfg.validate_acl = false;
-		} else {
-			(void)printf("Error: failed to parse qcom,rm_acl for "
-				     "iomem %d\n",
-				     cfg.general.label);
-			ret = RET_ERROR;
-			goto out;
-		}
-
-		// optional parse attributes
-		err = fdt_getprop_u32_array(fdt, node_ofs, "qcom,rm_attributes",
-					    cfg.rm_attrs, sizeof(cfg.rm_attrs),
-					    NULL);
-		if (err == OK) {
-			cfg.validate_attrs = true;
-		} else if (err == ERROR_ARGUMENT_INVALID) {
-			cfg.validate_attrs = false;
-		} else {
+		if (found_mem) {
 			(void)printf(
-				"Error: failed to parse qcom,rm_attributes for "
-				"iomem %d\n",
-				cfg.general.label);
+				"parse vdevice node: multiple \"memory\" nodes\n");
 			ret = RET_ERROR;
 			goto out;
 		}
 
-		// optional sglist for validation
-		const fdt32_t *sgl_entry = (const fdt32_t *)fdt_getprop(
-			fdt, node_ofs, "qcom,rm_sglist", &len);
-		if (sgl_entry != NULL) {
-			if ((size_t)len % sizeof(cfg.rm_sglist[0]) != 0) {
-				(void)printf(
-					"Error: invalid qcom,rm_sglist value\n");
-				ret = RET_ERROR;
-				goto out;
-			}
-
-			count_t entries =
-				(count_t)len / sizeof(cfg.rm_sglist[0]);
-
-			cfg.rm_sglist =
-				calloc(entries, sizeof(cfg.rm_sglist[0]));
-			if (cfg.rm_sglist == NULL) {
-				ret = RET_ERROR;
-				goto out;
-			}
-			cfg.rm_sglist_len = entries;
-
-			for (index_t i = 0; i < entries; i++) {
-				cfg.rm_sglist[i].ipa =
-					fdt_read_num(sgl_entry, 2U);
-
-				cfg.rm_sglist[i].size =
-					fdt_read_num(sgl_entry + 2, 2U);
-
-				// next sgl entry
-				sgl_entry += 4;
-			}
-		}
-
-		// check if need allocate
-		// FIXME: how to handle if need_allocate is false
-		cfg.need_allocate =
-			fdt_getprop_bool(fdt, sub_node_ofs, "allocate-base");
+		sub_node_ofs = cur_node_ofs;
+		found_mem    = true;
 	}
+
+	if (!found_mem) {
+		(void)printf("parse vdevice node: Missing \"memory\" node\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	ctx_t mem_ctx;
+	dtb_parser_update_ctx(fdt, sub_node_ofs, ctx, &mem_ctx);
+
+	// mem_label
+	if (parse_device_label(fdt, sub_node_ofs, &cfg.general.label) == OK) {
+		cfg.label = cfg.general.label;
+	} else {
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	// mem-info-tag
+	if (fdt_getprop_u32(fdt, sub_node_ofs, "qcom,mem-info-tag",
+			    &cfg.mem_info_tag) == OK) {
+		cfg.mem_info_tag_set = true;
+	} else {
+		cfg.mem_info_tag     = 0;
+		cfg.mem_info_tag_set = false;
+	}
+
+	ret = parse_iomem_opt(fdt, node_ofs, &cfg);
+	if (ret != RET_CLAIMED) {
+		goto out;
+	}
+
+	// check if need allocate
+	// FIXME: how to handle if need_allocate is false
+	cfg.need_allocate =
+		fdt_getprop_bool(fdt, sub_node_ofs, "allocate-base");
 
 	error_t push_err;
 	vector_push_back_imm(iomem_data_t, vd->iomems, cfg, push_err);

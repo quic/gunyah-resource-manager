@@ -13,6 +13,9 @@ env_vars = {
     'LOCAL_SYSROOT': os.environ['LOCAL_SYSROOT'],
 }
 
+if 'QCOM_LLVM' in os.environ:
+    env_vars['QCOM_LLVM'] = os.environ['QCOM_LLVM']
+
 if 'LLVM' in os.environ:
     env_vars['LLVM'] = os.environ['LLVM']
 

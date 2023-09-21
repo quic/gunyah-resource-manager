@@ -81,6 +81,9 @@ typedef uint32_t		       address_range_tag_t;
 struct vm_mem_range;
 typedef struct vm_mem_range vm_mem_range_t;
 
+struct irq_manager_vm;
+typedef struct irq_manager_vm irq_manager_vm_t;
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 
@@ -105,6 +108,8 @@ struct vm_s {
 	app_status_t app_status;
 
 	vm_config_t *vm_config;
+
+	irq_manager_vm_t *irq_manager;
 
 	address_range_allocator_t *as_allocator;
 	paddr_t			   as_size;
@@ -168,6 +173,7 @@ struct vm_s {
 	bool sensitive;
 	bool crash_fatal;
 	bool no_shutdown;
+	bool no_reset;
 	bool qtee_registered;
 
 	vm_reset_stage_t reset_stage;
@@ -228,3 +234,6 @@ vm_mgnt_deregister_event(event_t *event, virq_t virq);
 
 void
 vm_mgnt_clear_crash_msg(vmid_t client_id);
+
+rm_error_t
+vm_mgnt_new_vm(vmid_t vmid, vmid_t owner);

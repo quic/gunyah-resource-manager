@@ -22,7 +22,7 @@
 #define L2_TABLE_BITS 6U
 #define L2_TABLE_SIZE util_bit(L2_TABLE_BITS)
 
-struct region_list {
+struct region_list_s {
 	mem_region_t **regions;
 	count_t	       total_len;
 	uint8_t	       l1_bits;
@@ -74,7 +74,7 @@ ipa_region_get_ipa(ipa_region_t region)
 }
 
 uint32_t
-mem_region_get_mpd_sanitise_refcount(mem_region_t *region)
+mem_region_get_mpd_sanitise_refcount(const mem_region_t *region)
 {
 	assert(region != NULL);
 	return region->mpd_sanitise_refcount;

@@ -14,7 +14,8 @@
 #define NOTIFY_VM_IRQ_ACCEPTED 0x56100013
 
 typedef uint16_t cpu_idx_t;
-typedef uint32_t virq_handle_t;
+typedef uint32_t virq_handle_t; // remove
+typedef uint32_t irq_handle_t;
 typedef uint32_t label_t;
 typedef uint32_t virq_notify_flag_t;
 typedef uint32_t msg_id_t;
@@ -30,7 +31,7 @@ typedef struct {
 
 typedef struct {
 	virq_t virq_num;
-} rm_irq_accept_rep_t;
+} rm_irq_accept_reply_t;
 
 typedef struct {
 	vmid_t	borrower;
@@ -41,7 +42,7 @@ typedef struct {
 
 typedef struct {
 	virq_handle_t handle;
-} rm_irq_lend_rep_t;
+} rm_irq_lend_reply_t;
 
 typedef struct {
 	virq_handle_t handle;
@@ -57,17 +58,16 @@ typedef struct {
 } rm_irq_notify_vmid_t;
 
 typedef struct {
-	virq_handle_t	     handle;
-	virq_notify_flag_t   flags;
+	virq_handle_t	   handle;
+	virq_notify_flag_t flags;
+} rm_irq_notify_req_t;
+
+typedef struct {
+	rm_irq_notify_req_t  req;
 	uint16_t	     notify_vmid_entries;
 	char		     _pad[2];
 	rm_irq_notify_vmid_t notify_vmids[];
 } rm_irq_notify_lent_req_t;
-
-typedef struct {
-	virq_handle_t	   handle;
-	virq_notify_flag_t flags;
-} rm_irq_notify_req_t;
 
 typedef struct {
 	size_t virq_entry_cnt;

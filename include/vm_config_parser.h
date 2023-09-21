@@ -47,6 +47,8 @@ RM_PADDED(typedef struct doorbell_data {
 
 	bool is_source;
 	bool source_can_clear;
+
+	char *peer_id;
 } doorbell_data_t)
 
 typedef struct msg_queue_data {
@@ -179,10 +181,10 @@ typedef struct {
 } irq_range_data_t;
 
 RM_PADDED(typedef struct smmu_v2_data {
-	const char *patch;
-	uint32_t    smmu_handle;
-	uint32_t    num_cbs;
-	uint32_t    num_smrs;
+	char	*patch;
+	uint32_t smmu_handle;
+	uint32_t num_cbs;
+	uint32_t num_smrs;
 } smmu_v2_data_t)
 
 typedef struct rtc_data {
@@ -215,6 +217,7 @@ RM_PADDED(struct dtb_parser_data_s {
 	bool crash_fatal;
 	bool context_dump;
 	bool no_shutdown;
+	bool no_reset;
 
 	char	*kernel_entry_segment;
 	uint64_t kernel_entry_offset;
@@ -231,6 +234,7 @@ RM_PADDED(struct dtb_parser_data_s {
 	paddr_t	 mem_base_ipa;
 	size_t	 mem_size_min;
 	size_t	 mem_size_max;
+	bool	 mem_map_direct;
 	bool	 mem_base_constraints_set;
 	uint32_t mem_base_constraints[2];
 

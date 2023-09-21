@@ -44,6 +44,9 @@ error_t
 platform_init(rm_env_data_t *env_data, vmaddr_t log_buf, size_t log_buf_size);
 
 error_t
+platform_init_complete(void);
+
+error_t
 platform_vm_create(vm_t *vm, bool hlos);
 
 error_t
@@ -108,3 +111,6 @@ platform_vrtc_create_and_configure(cap_id_t p_cap, cap_id_t cs_cap,
 
 bool
 platform_has_watchdog_hlos_virtual_regs(void);
+
+error_t
+platform_pre_hlos_vm_init(const rm_env_data_t *env_data);

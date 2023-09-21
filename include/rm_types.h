@@ -8,6 +8,9 @@
 #define VMID_DYNAMIC_END  0xBFU
 #define VMID_RM		  0xFFU
 
+// Special VMIDs
+#define VMID_LAST	  0xFFU	  // Last usable VMID
+#define VMID_ANY	  0xFFFEU // For resources without specific owner
 #define VMID_PEER_DEFAULT 0xFFFFU
 
 #define INVALID_ADDRESS (~0UL)
@@ -40,6 +43,12 @@ typedef struct vm_s vm_t;
 
 struct vm_config;
 typedef struct vm_config vm_config_t;
+
+struct vm_device_descriptor_s;
+typedef struct vm_device_descriptor_s vm_device_descriptor_t;
+
+struct vm_device_assignments_s;
+typedef struct vm_device_assignments_s vm_device_assignments_t;
 
 struct vdevice_node;
 

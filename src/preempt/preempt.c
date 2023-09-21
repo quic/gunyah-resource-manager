@@ -14,7 +14,7 @@
 #include <preempt.h>
 
 // FIXME:
-static unsigned int preempt_disable_count;
+static uint32_t preempt_disable_count;
 
 void
 preempt_disable(void)

@@ -33,6 +33,7 @@
 #include <irq_manager.h>
 #include <log.h>
 #include <platform_dt_parser.h>
+#include <platform_qemu.h>
 #include <platform_vm_config.h>
 #include <vgic.h>
 #include <vm_config.h>
@@ -44,10 +45,20 @@
 #include <platform_vm_config_parser.h>
 #include <vm_config_parser.h>
 
+static paddr_t hlos_vgic_gicd_base;
+static size_t  hlos_vgic_gicr_stride;
+static paddr_t hlos_vgic_gicr_base;
+static count_t hlos_vgic_gicr_count;
+
 error_t
 vgic_init(const rm_env_data_t *env_data)
 {
-	(void)env_data;
+	hlos_vgic_gicd_base = env_data->platform_env->gicd_base;
+
+	assert(env_data->platform_env->gicr_ranges_count == 1U);
+	hlos_vgic_gicr_base   = env_data->platform_env->gicr_ranges[0].base;
+	hlos_vgic_gicr_count  = env_data->platform_env->gicr_ranges[0].count;
+	hlos_vgic_gicr_stride = env_data->platform_env->gicr_stride;
 
 	return OK;
 }
@@ -57,24 +68,22 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 {
 	error_t err;
 
+	vm_t	     *vm       = vmcfg->vm;
+	const count_t gicr_cnt = (count_t)vector_size(vm->vm_config->vcpus);
 	if (data == NULL) {
 		// This is the primary VM.
 
-		// For HLOS, the hypervisor has been told to use the physical
-		// GIC addresses, and we will never patch the DT. We don't need
-		// these to be valid.
-		vmcfg->platform.vgic_gicd_base	 = INVALID_ADDRESS;
-		vmcfg->platform.vgic_gicr_base	 = INVALID_ADDRESS;
-		vmcfg->platform.vgic_gicr_stride = 0U;
-		vmcfg->platform.vgic_phandle	 = ~0U;
-		vmcfg->platform.vgic_patch_dt	 = false;
+		// We need to attach at the platform address range taken from
+		// the boot environment.
+		assert(gicr_cnt <= hlos_vgic_gicr_count);
+		vmcfg->platform.vgic_gicd_base	 = hlos_vgic_gicd_base;
+		vmcfg->platform.vgic_gicr_base	 = hlos_vgic_gicr_base;
+		vmcfg->platform.vgic_gicr_stride = hlos_vgic_gicr_stride;
 
-		// We don't need to allocate or attach any address ranges.
-		err = OK;
-		goto out;
-	}
-
-	if (data->platform.vgic_gicr_stride == 0U) {
+		// Patching the DT is not possible.
+		vmcfg->platform.vgic_phandle  = ~0U;
+		vmcfg->platform.vgic_patch_dt = false;
+	} else if (data->platform.vgic_gicr_stride == 0U) {
 		// If the stride wasn't initialised in the parser data,
 		// we need to allocate addresses and generate a DT node
 		// from scratch.
@@ -99,7 +108,6 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 	}
 
 	// Allocate and attach the GIC vdevice address ranges
-	vm_t *vm = vmcfg->vm;
 
 	// GICD: 64K, attachment index 0
 	if ((vm->vm_config->platform.vgic_gicd_base != INVALID_ADDRESS) &&
@@ -132,7 +140,8 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 
 	err = gunyah_hyp_addrspace_attach_vdevice(
 		vm->vm_config->addrspace, vm->vm_config->vic, 0U,
-		vm->vm_config->platform.vgic_gicd_base, vgic_gicd_size);
+		vm->vm_config->platform.vgic_gicd_base, vgic_gicd_size,
+		(addrspace_attach_vdevice_flags_t){ 0U });
 	if (err != OK) {
 		LOG_LOC("attach GICD");
 		goto out;
@@ -140,7 +149,6 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 
 	// GICRs: one contiguous region, 128K each (possibly with 256K stride),
 	// attachment indices n + 1
-	const count_t gicr_cnt = (count_t)vector_size(vm->vm_config->vcpus);
 	if ((vm->vm_config->platform.vgic_gicr_stride < vgic_gicr_size) ||
 	    util_mult_integer_overflows(
 		    vm->vm_config->platform.vgic_gicr_stride, gicr_cnt)) {
@@ -177,16 +185,36 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 		vm->vm_config->platform.vgic_gicr_base = alloc_ret.base_address;
 	}
 
-	for (index_t i = 0; i < gicr_cnt; i++) {
+	cpu_index_t cpu_id = 0;
+	for (index_t gicr_slot = 0; gicr_slot < gicr_cnt; gicr_slot++) {
+		while (!rm_is_core_usable(cpu_id)) {
+			cpu_id++;
+			if (cpu_id > rm_get_platform_max_cores()) {
+				err = ERROR_NORESOURCES;
+				LOG_LOC("GICR core ID range");
+				goto out;
+			}
+		}
+
+		vgic_gicr_attach_flags_t flags =
+			vgic_gicr_attach_flags_default();
+		vgic_gicr_attach_flags_set_last(&flags,
+						gicr_slot == (gicr_cnt - 1U));
+		vgic_gicr_attach_flags_set_last_valid(&flags, true);
 		err = gunyah_hyp_addrspace_attach_vdevice(
-			vm->vm_config->addrspace, vm->vm_config->vic, i + 1U,
+			vm->vm_config->addrspace, vm->vm_config->vic,
+			cpu_id + 1U,
 			vm->vm_config->platform.vgic_gicr_base +
-				(i * vm->vm_config->platform.vgic_gicr_stride),
-			vgic_gicr_size);
+				(gicr_slot *
+				 vm->vm_config->platform.vgic_gicr_stride),
+			vgic_gicr_size,
+			(addrspace_attach_vdevice_flags_t){ .vgic_gicr =
+								    flags });
 		if (err != OK) {
 			LOG_LOC("attach GICR");
 			goto out;
 		}
+		cpu_id++;
 	}
 
 out:

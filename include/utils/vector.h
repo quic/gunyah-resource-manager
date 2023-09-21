@@ -36,15 +36,6 @@ vector_push_back_internal(vector_t *vector, const void *val);
 void *
 vector_pop_back_internal(vector_t *vector);
 
-#define vector_insert(type, vector, idx, val, err)                             \
-	do {                                                                   \
-		type tmp = val;                                                \
-		err	 = vector_insert_internal(vector, idx, &tmp);          \
-	} while (0)
-
-error_t
-vector_insert_internal(vector_t *vector, index_t idx, const void *element);
-
 // Swap to tail first, then delete the tail. Avoid normal deletion cost, but
 // the order is not kept.
 void

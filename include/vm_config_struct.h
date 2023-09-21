@@ -74,7 +74,11 @@ struct vdevice_doorbell {
 	cap_id_t	 peer_cap;
 	interrupt_data_t peer_virq;
 
+	bool	 has_peer_vdevice;
+	bool	 has_valid_peer;
 	uint32_t label;
+
+	char *peer_id;
 };
 
 struct vdevice_virtual_pm {
@@ -92,13 +96,13 @@ struct vdevice_virtio_mmio {
 	vmid_t backend;
 
 	vmaddr_t backend_ipa;
-	size_t	 backend_size;
-
 	vmaddr_t frontend_ipa;
-	size_t	 frontend_size;
 
 	cap_id_t master_cap;
-	cap_id_t memextent_cap;
+
+	cap_id_t me_cap;
+	size_t	 me_size;
+	void	*rm_addr;
 
 	interrupt_data_t frontend_virq;
 
@@ -193,7 +197,7 @@ struct vdevice_smmu_v2 {
 	uint8_t		  num_cbs;
 	cap_id_t	 *cb_me_caps;
 	interrupt_data_t *irqs;
-	const char	 *patch;
+	char		 *patch;
 };
 
 struct vdevice_rtc {
@@ -211,8 +215,6 @@ struct vdevice_node {
 	bool export_to_dt;
 
 	bool visible; // visible to queries
-
-	bool generate_alloc; // generate string was allocated.
 
 	count_t push_compatible_num;
 	char   *push_compatible[VDEVICE_MAX_PUSH_COMPATIBLES];
@@ -241,8 +243,6 @@ struct vm_config {
 	uint64_t swid;
 
 	vector_t *vcpus;
-	bool	  vcpus_proxy_scheduled;
-
 	vector_t *iomem_ranges;
 
 	vdevice_node_t *vdevice_nodes;
@@ -251,6 +251,7 @@ struct vm_config {
 	paddr_t mem_size_min;
 	paddr_t mem_size_max;
 	bool	mem_unsanitized;
+	bool	mem_map_direct;
 
 	paddr_t fw_ipa_base;
 	paddr_t fw_size_max;
@@ -269,8 +270,6 @@ struct vm_config {
 	bool watchdog_enabled;
 
 	vm_console_t *console;
-
-	vm_irq_manager_t *irq_manager;
 
 	platform_vm_config_t platform;
 

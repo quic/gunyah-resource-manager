@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <rm_types.h>
@@ -16,6 +17,7 @@
 #include <memparcel.h>
 #include <memparcel_msg.h>
 #include <platform.h>
+#include <platform_qemu.h>
 #include <platform_vm_config.h>
 #include <platform_vm_memory.h>
 #include <qcbor/qcbor.h>
@@ -48,6 +50,14 @@ platform_expose_log_to_hlos(void)
 }
 
 error_t
+platform_pre_hlos_vm_init(const rm_env_data_t *env_data)
+{
+	(void)env_data;
+
+	return OK;
+}
+
+error_t
 platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data)
 {
 	vmaddr_t mem_base = env_data->hlos_vm_base;
@@ -63,7 +73,7 @@ platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data)
 	err = platform_vm_memory_donate_ddr(me_cap, vm->mem_base, vm->mem_size,
 					    true);
 	if (err != OK) {
-		printf("HLOS memory donate failed\n");
+		(void)printf("HLOS memory donate failed\n");
 		goto out;
 	}
 
@@ -72,7 +82,7 @@ platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data)
 				    PGTABLE_ACCESS_RWX,
 				    PGTABLE_VM_MEMTYPE_NORMAL_WB);
 	if (err != OK) {
-		printf("HLOS memory map failed\n");
+		(void)printf("HLOS memory map failed\n");
 		goto out;
 	}
 
@@ -83,7 +93,7 @@ platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data)
 			    mem_base, PGTABLE_ACCESS_RW,
 			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
 	if (err != OK) {
-		printf("Device addr Mapping failed");
+		(void)printf("Device addr Mapping failed");
 		goto out;
 	}
 
@@ -94,7 +104,7 @@ platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data)
 			    mem_base, PGTABLE_ACCESS_RW,
 			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
 	if (err != OK) {
-		printf("Device addr Mapping failed");
+		(void)printf("Device addr Mapping failed");
 		goto out;
 	}
 
@@ -166,6 +176,12 @@ out:
 }
 
 error_t
+platform_init_complete(void)
+{
+	return OK;
+}
+
+error_t
 platform_vm_create(vm_t *vm, bool hlos)
 {
 	(void)vm;
@@ -196,7 +212,7 @@ platform_primary_vm_init(rm_env_data_t *env_data, uintptr_t arg1,
 
 	vm_t *hlos_vm = vm_lookup(VMID_HLOS);
 	if (hlos_vm == NULL) {
-		printf("Error: failed to lookup hlos vm\n");
+		(void)printf("Error: failed to lookup hlos vm\n");
 		ret = ERROR_FAILURE;
 		goto out;
 	}
@@ -208,11 +224,11 @@ platform_primary_vm_init(rm_env_data_t *env_data, uintptr_t arg1,
 	hlos_vm->ramfs_offset =
 		env_data->hlos_ramfs_base - env_data->hlos_vm_base;
 
-	printf("HLOS Mem Base : %lx\n", hlos_vm->mem_base);
-	printf("HLOS Mem Size : %lx\n", hlos_vm->mem_size);
-	printf("HLOS IPA base : %lx\n", hlos_vm->ipa_base);
-	printf("HLOS DT Ofst  : %lx\n", hlos_vm->dt_offset);
-	printf("RAM FS offset : %lx\n", hlos_vm->ramfs_offset);
+	(void)printf("HLOS Mem Base : %lx\n", hlos_vm->mem_base);
+	(void)printf("HLOS Mem Size : %lx\n", hlos_vm->mem_size);
+	(void)printf("HLOS IPA base : %lx\n", hlos_vm->ipa_base);
+	(void)printf("HLOS DT Ofst  : %lx\n", hlos_vm->dt_offset);
+	(void)printf("RAM FS offset : %lx\n", hlos_vm->ramfs_offset);
 
 	// FIXME: for now assuming we can write up to this size into the
 	// original DTB region
@@ -310,19 +326,114 @@ platform_has_vsmmu_v2_support(void)
 error_t
 platform_env_init(platform_env_data_t **platform_env)
 {
-	*platform_env = NULL;
+	*platform_env = calloc(1, sizeof(**platform_env));
 
-	return OK;
+	return (*platform_env == NULL) ? ERROR_NOMEM : OK;
 }
+
+static inline bool
+check_qcbor_gic_range_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
+			    qcbor_dec_ctxt_t	      *qcbor_decode_ctxt,
+			    count_t		       max_array_cnt,
+			    boot_env_gic_phys_range_t *items,
+			    count_t		      *items_foundp)
+{
+	bool ret = false;
+
+	if (strncmp(qcbor_item_ptr->label.string.ptr, fname,
+		    qcbor_item_ptr->label.string.len) != 0) {
+		goto out;
+	}
+
+	if (qcbor_item_ptr->uDataType != QCBOR_TYPE_ARRAY) {
+		goto out;
+	}
+
+	ret = true;
+
+	count_t data_cnt, start_nesting;
+
+	data_cnt      = qcbor_item_ptr->val.uCount;
+	start_nesting = qcbor_item_ptr->uNestingLevel;
+
+	for (count_t idx = 0U; (idx < data_cnt) && (idx < max_array_cnt);
+	     idx++) {
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    0) {
+			goto out;
+		}
+
+		if ((qcbor_item_ptr->uDataType != QCBOR_TYPE_ARRAY) ||
+		    (qcbor_item_ptr->val.uCount != 2U)) {
+			goto out_skip;
+		}
+
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    0) {
+			goto out;
+		}
+
+		if ((qcbor_item_ptr->uDataType != QCBOR_TYPE_UINT64) &&
+		    (qcbor_item_ptr->uDataType != QCBOR_TYPE_INT64)) {
+			goto out_skip;
+		}
+		items[idx].base = qcbor_item_ptr->val.uint64;
+
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    0) {
+			goto out;
+		}
+
+		if (qcbor_item_ptr->uDataType != QCBOR_TYPE_INT64) {
+			goto out_skip;
+		}
+		items[idx].count = (count_t)qcbor_item_ptr->val.uint64;
+	}
+
+	if (items_foundp) {
+		*items_foundp = data_cnt;
+	}
+
+out_skip:
+	while (qcbor_item_ptr->uNextNestLevel > start_nesting) {
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    0) {
+			break;
+		}
+	}
+
+out:
+	return ret;
+}
+
+#define process_qcbor_gic_range_item(n, ip, ctxp, ep, cp)                      \
+	check_qcbor_gic_range_array(#n, ip, ctxp, ARRAY_SIZE(ep->n), ep->n, cp)
 
 bool
 platform_process_qcbor_items(qcbor_item_t     *item,
 			     qcbor_dec_ctxt_t *qcbor_decode_ctxt)
 {
-	(void)item;
-	(void)qcbor_decode_ctxt;
+	bool ret = false;
 
-	return false;
+	platform_env_data_t *data = rm_get_platform_env_data();
+	assert(data != NULL);
+
+	if (process_qcbor_item(gicd_base, item, data)) {
+		ret = true;
+		goto out;
+	}
+	if (process_qcbor_item(gicr_stride, item, data)) {
+		ret = true;
+		goto out;
+	}
+	if (process_qcbor_gic_range_item(gicr_ranges, item, qcbor_decode_ctxt,
+					 data, &data->gicr_ranges_count)) {
+		ret = true;
+		goto out;
+	}
+
+out:
+	return ret;
 }
 
 bool

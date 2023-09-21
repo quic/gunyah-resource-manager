@@ -21,16 +21,19 @@
 
 #define MAX_DEPTH (4U)
 
-#if defined(VERBOSE) && VERBOSE
-// #define DEBUG(...) printf(__VA_ARGS__)
-#define DEBUG(...) (void)0
-count_t dict_alloc_size = 0U;
+#if defined(HOST_TEST)
+size_t dict_alloc_size = 0U;
 #define ALLOC_LOG(s) dict_alloc_size += (s)
 #define FREE_LOG(s)  dict_alloc_size -= (s)
 #else
-#define DEBUG(...)   (void)0
 #define ALLOC_LOG(s) (void)0
 #define FREE_LOG(s)  (void)(s)
+#endif
+
+#if defined(HOST_TEST) && defined(VERBOSE) && VERBOSE
+#define DEBUG(...) printf(__VA_ARGS__)
+#else
+#define DEBUG(...) (void)0
 #endif
 
 typedef struct dict_table_s {
@@ -395,9 +398,95 @@ out:
 	return ret;
 }
 
-void
-dict_deinit(dict_t *dict)
+error_t
+dict_iterate(dict_t *dict, dict_iter_callback_t fn, void *arg)
 {
+	assert(dict != NULL);
+	assert(fn != NULL);
+
+	error_t ret;
+
+	dict_key_t key_index = 0U;
+	dict_key_t index_max = dict->key_max - dict->key_min;
+
+	void **tables = (void **)(void *)&dict[1];
+
+	count_t depth	  = dict->depth - 1U;
+	count_t depth_top = depth;
+	index_t shift	  = depth * TABLE_SHIFT;
+
+	count_t entries = 0U;
+
+	void *stack_tables[MAX_DEPTH - 1U] = { NULL };
+
+	do {
+		index_t level_index = (key_index >> shift) &
+				      (TABLE_ENTRIES - 1U);
+		DEBUG("%d: %d: shift %d, key_index %d\n", depth, level_index,
+		      shift, key_index);
+
+		if ((tables[level_index] != NULL) && (depth > 0U)) {
+			dict_table_t *table = tables[level_index];
+
+			// Go down a level
+			depth		    = depth - 1U;
+			shift		    = shift - TABLE_SHIFT;
+			stack_tables[depth] = tables;
+
+			tables = (void **)(void *)&table->data;
+		} else {
+			dict_table_t *table = tables[level_index];
+			if (table != NULL) {
+				DEBUG("%d: entry %p\n", depth, table);
+				bool stop = fn(dict->key_min + key_index, table,
+					       arg);
+				entries++;
+				if (stop) {
+					break;
+				}
+			}
+
+			dict_key_t key_next =
+				key_index + (dict_key_t)util_bit(shift);
+
+			while (level_index == (TABLE_ENTRIES - 1U)) {
+				if (depth == depth_top) {
+					break;
+				}
+
+				depth	    = depth + 1U;
+				shift	    = shift + TABLE_SHIFT;
+				level_index = (key_index >> shift) &
+					      (TABLE_ENTRIES - 1U);
+				tables = stack_tables[depth - 1U];
+
+				table = tables[level_index];
+				assert(table != NULL);
+			}
+
+			if (key_next > index_max) {
+				break;
+			}
+			key_index = key_next;
+		}
+	} while (true);
+
+	if (entries > 0U) {
+		ret = OK;
+	} else {
+		ret = ERROR_NORESOURCES;
+	}
+	return ret;
+}
+
+void
+dict_deinit(dict_t **dict_p)
+{
+	assert(dict_p != NULL);
+
+	dict_t *dict = *dict_p;
+	assert(dict != NULL);
+
 	dict_key_t key_index = 0U;
 	dict_key_t index_max = dict->key_max - dict->key_min;
 
@@ -495,6 +584,7 @@ end_iter:
 	size_t top_size =
 		sizeof(dict_t) + (sizeof(dict_table_t *) * top_levels);
 	free(dict);
+	*dict_p = NULL;
 	FREE_LOG(top_size);
 }
 

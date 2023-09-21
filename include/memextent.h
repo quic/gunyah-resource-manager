@@ -64,6 +64,12 @@ memextent_unmap_all(cap_id_t me);
 error_t
 memextent_zero_range(cap_id_t me, size_t offset, size_t size);
 
+error_t
+memextent_cache_clean_range(cap_id_t me, size_t offset, size_t size);
+
+error_t
+memextent_cache_flush_range(cap_id_t me, size_t offset, size_t size);
+
 // Synchronize all previous extent operations.
 // This applies to all extents, regardless of the extent given.
 void

@@ -31,11 +31,11 @@ dto_construct_begin_path(dto_t *dto, const char *path)
 
 	assert(*name_start != '\0');
 
-	dto_modify_begin_by_path(dto, "/");
+	CHECK_DTO(ret, dto_modify_begin_by_path(dto, "/"));
 
 	char *name_end = NULL;
 	do {
-		name_end = strchr(name_start, separator);
+		name_end = strchr(name_start, (int32_t)separator);
 		if (name_end == NULL) {
 			break;
 		}
@@ -86,7 +86,7 @@ dto_construct_end_path(dto_t *dto, const char *path)
 	char *name_start = NULL;
 
 	do {
-		name_start = strrchr(target, separator);
+		name_start = strrchr(target, (int32_t)separator);
 		if (name_start == NULL) {
 			break;
 		}
@@ -99,7 +99,7 @@ dto_construct_end_path(dto_t *dto, const char *path)
 		}
 	} while (name_start != NULL);
 
-	dto_modify_end_by_path(dto, "/");
+	CHECK_DTO(ret, dto_modify_end_by_path(dto, "/"));
 out:
 	free(target);
 	return ret;

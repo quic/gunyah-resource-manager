@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+typedef struct gunyah_hyp_hypervisor_identify_result
+	gunyah_hyp_hypervisor_identify_result_t;
+
+extern gunyah_hyp_hypervisor_identify_result_t hyp_id;
+
 paddr_t
 rm_ipa_to_pa(uintptr_t ipa);
 
@@ -64,3 +69,6 @@ rm_get_device_me_base(void);
 
 platform_env_data_t *
 rm_get_platform_env_data(void);
+
+const vm_device_assignments_t *
+rm_get_vm_device_assignments(void);

@@ -124,6 +124,12 @@ add_local_fixup(dto_t *dto, const char *label);
 static error_t
 gen_local_fixups_node(dto_t *dto);
 
+static error_t
+dtbo_create_fixup_nodes(dto_t *dto);
+
+static error_t
+dtbo_populate_fixup_node(dto_t *dto, const local_fixup_node_t *cur_node);
+
 static void
 free_local_fixups(dto_t *dto);
 
@@ -132,7 +138,7 @@ expand(dto_t *dto)
 {
 	error_t e = OK;
 
-	size_t expanded_sz = dto->fdt_sz + DTB_EXPAND_SZ;
+	size_t expanded_sz = dto->fdt_sz + (size_t)DTB_EXPAND_SZ;
 
 	if (!dto->use_external_memory) {
 		void *expanded_fdt = aligned_alloc(DTB_ALIGNMENT, expanded_sz);
@@ -141,7 +147,7 @@ expand(dto_t *dto)
 			goto out;
 		}
 
-		memcpy(expanded_fdt, dto->fdt, dto->fdt_sz);
+		(void)memcpy(expanded_fdt, dto->fdt, dto->fdt_sz);
 
 		free(dto->fdt);
 
@@ -240,8 +246,8 @@ dto_modify_do_start_fragment(dto_t *dto)
 	// generate fragment name
 	char fragment_name[FRAGMENT_NAME_SZ];
 
-	int sz_ret = snprintf(fragment_name, FRAGMENT_NAME_SZ, "fragment@%u",
-			      dto->fragment_count);
+	int32_t sz_ret = snprintf(fragment_name, FRAGMENT_NAME_SZ,
+				  "fragment@%u", dto->fragment_count);
 
 	(void)sz_ret;
 	assert(sz_ret <= FRAGMENT_NAME_SZ);
@@ -509,7 +515,7 @@ dto_property_add_stringlist(dto_t *dto, const char *name, const char *vals[],
 	}
 
 	for (index_t i = 0; i < cnt; ++i) {
-		vals_sz[i] = strlen(vals[i]) + 1;
+		vals_sz[i] = strlen(vals[i]) + 1U;
 		total_sz += vals_sz[i];
 	}
 
@@ -521,7 +527,7 @@ dto_property_add_stringlist(dto_t *dto, const char *name, const char *vals[],
 
 	char *cur = val;
 	for (index_t i = 0; i < cnt; ++i) {
-		memcpy(cur, vals[i], vals_sz[i]);
+		(void)memcpy(cur, vals[i], vals_sz[i]);
 		cur += vals_sz[i];
 	}
 
@@ -542,12 +548,13 @@ dto_property_add_phandle(dto_t *dto, uint32_t *pphandle)
 	error_t e = OK;
 	ASSERT_RUN(fdt_generate_phandle(dto->fdt, &phandle), e);
 	if (e != OK) {
-		goto err;
+		goto out;
 	}
-	dto_property_add_u32(dto, "phandle", phandle);
+	CHECK_DTO(e, dto_property_add_u32(dto, "phandle", phandle));
 
 	*pphandle = phandle;
-err:
+
+out:
 	return e;
 }
 
@@ -688,7 +695,7 @@ dto_property_ref_external(dto_t *dto, const char *property_name,
 	error_t e = OK;
 
 	// set target property
-	ASSERT_RUN(fdt_property_u32(dto->fdt, property_name, 0xFFFFFFFF), e);
+	ASSERT_RUN(fdt_property_u32(dto->fdt, property_name, 0xFFFFFFFFU), e);
 	if (e != OK) {
 		goto out;
 	}
@@ -706,8 +713,8 @@ dto_property_ref_external(dto_t *dto, const char *property_name,
 		goto err1;
 	}
 
-	const int who_sz = 256;
-	char	 *who	 = malloc((size_t)who_sz);
+	const size_t who_sz = 256;
+	char	    *who    = malloc(who_sz);
 	if (who == NULL) {
 		e = ERROR_NOMEM;
 		goto err2;
@@ -716,13 +723,13 @@ dto_property_ref_external(dto_t *dto, const char *property_name,
 	char path[MAX_PATH];
 
 	// remove the last '/'
-	size_t len = strlen(dto->pwd) - 1;
-	memcpy(path, dto->pwd, len);
+	size_t len = strlen(dto->pwd) - 1U;
+	(void)memcpy(path, dto->pwd, len);
 	path[len] = '\0';
 
-	int fmt_ret = snprintf(who, who_sz, "%s:%s:0", path, property_name);
+	int32_t fmt_ret = snprintf(who, who_sz, "%s:%s:0", path, property_name);
 	(void)fmt_ret;
-	assert(fmt_ret < who_sz);
+	assert(fmt_ret < (int32_t)who_sz);
 	fixup->who = who;
 
 	list_append(fixup_t, &dto->fixup_list, fixup, fixup_);
@@ -828,13 +835,13 @@ enter_node(dto_t *dto, const char *node_name)
 {
 	size_t pwd_len = strlen(dto->pwd);
 	// need one more space for '/'
-	size_t node_len = strlen(node_name) + 1;
+	size_t node_len = strlen(node_name) + 1U;
 	(void)pwd_len;
 	(void)node_len;
 	assert((pwd_len + node_len) < PWD_SZ);
 
-	int fmt_ret = snprintf(dto->pwd + strlen(dto->pwd), node_len + 1, "%s/",
-			       node_name);
+	int32_t fmt_ret = snprintf(dto->pwd + strlen(dto->pwd), node_len + 1U,
+				   "%s/", node_name);
 	(void)fmt_ret;
 	assert((size_t)fmt_ret == node_len);
 }
@@ -843,7 +850,7 @@ static void
 leave_node(dto_t *dto)
 {
 	// might be done by double strrchr or strlen
-	char *first = strrchr(dto->pwd, '/');
+	char *first = strrchr(dto->pwd, (int32_t)'/');
 	assert(first != NULL);
 
 	if (dto->pwd == first) {
@@ -855,7 +862,7 @@ leave_node(dto_t *dto)
 	// remove the first '/'
 	*first = '\0';
 
-	char *second = strrchr(dto->pwd, '/');
+	char *second = strrchr(dto->pwd, (int32_t)'/');
 	assert(second != NULL);
 	*(second + 1) = '\0';
 out:
@@ -991,20 +998,36 @@ out:
 static error_t
 gen_local_fixups_node(dto_t *dto)
 {
-	index_t		    cur_level = 0;
-	local_fixup_node_t *stack[MAX_LEVEL + 1], *cur_node;
-
-	error_t e = OK;
-
+	error_t		   e			  = OK;
 	static const char *local_fixups_node_name = "__local_fixups__";
 	ASSERT_RUN(fdt_begin_node(dto->fdt, local_fixups_node_name), e);
 	if (e != OK) {
 		goto err;
 	}
 
-	// NOTE: dodgy code to remove recursive call
+	e = dtbo_create_fixup_nodes(dto);
+	if (e != OK) {
+		goto err;
+	}
+
+	ASSERT_RUN(fdt_end_node(dto->fdt), e);
+	if (e != OK) {
+		goto err;
+	}
+
+err:
+	return e;
+}
+
+static error_t
+dtbo_create_fixup_nodes(dto_t *dto)
+{
+	index_t		    cur_level = 0;
+	local_fixup_node_t *stack[MAX_LEVEL + 1], *cur_node;
+
+	error_t e = OK;
+	cur_node  = dto->local_fixup_list;
 	// loop for nodes, create node
-	cur_node = dto->local_fixup_list;
 	while (cur_node != NULL) {
 		// create fdt node for curr node
 		ASSERT_RUN(fdt_begin_node(dto->fdt, cur_node->name), e);
@@ -1013,18 +1036,10 @@ gen_local_fixups_node(dto_t *dto)
 		}
 
 		// create property for curr node
-		local_fixup_leaf_t *cur_leaf = NULL;
-		loop_list(cur_leaf, &cur_node->leaves, local_fixup_leaf_)
-		{
-			ASSERT_RUN(fdt_property_u32(dto->fdt, cur_leaf->label,
-						    0),
-				   e);
-
-			if (e != OK) {
-				goto err;
-			}
+		e = dtbo_populate_fixup_node(dto, cur_node);
+		if (e != OK) {
+			goto err;
 		}
-
 		// if has sub node, push cur node to stack, change cur node to
 		// cur_node, start loop sub nodes
 		if (!is_empty(cur_node->sub_nodes)) {
@@ -1038,7 +1053,7 @@ gen_local_fixups_node(dto_t *dto)
 
 		// pop up to node which has next node to handle
 		while (is_last(cur_node, local_fixup_node_) &&
-		       (cur_level != 0)) {
+		       (cur_level != 0U)) {
 			// close current node
 			ASSERT_RUN(fdt_end_node(dto->fdt), e);
 			if (e != OK) {
@@ -1057,10 +1072,22 @@ gen_local_fixups_node(dto_t *dto)
 
 		cur_node = cur_node->local_fixup_node_next;
 	}
+err:
+	return e;
+}
 
-	ASSERT_RUN(fdt_end_node(dto->fdt), e);
-	if (e != OK) {
-		goto err;
+static error_t
+dtbo_populate_fixup_node(dto_t *dto, const local_fixup_node_t *cur_node)
+{
+	error_t e = OK;
+
+	local_fixup_leaf_t *cur_leaf = NULL;
+	loop_list(cur_leaf, &cur_node->leaves, local_fixup_leaf_)
+	{
+		ASSERT_RUN(fdt_property_u32(dto->fdt, cur_leaf->label, 0), e);
+		if (e != OK) {
+			goto err;
+		}
 	}
 
 err:
@@ -1082,7 +1109,7 @@ free_local_fixups(dto_t *dto)
 	cur  = dto->local_fixup_list;
 	next = (cur != NULL) ? cur->local_fixup_node_next : NULL;
 	while (cur != NULL) {
-		if (cur->name) {
+		if (cur->name != NULL) {
 			free(cur->name);
 		}
 

@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 error_t
-vm_creation_add_compatibles(struct vdevice_node *node, char *compatibles[],
+vm_creation_add_compatibles(const struct vdevice_node *node,
+			    const char *const	       compatibles[],
 			    count_t compatible_cnt, dto_t *dto);
 
 char *

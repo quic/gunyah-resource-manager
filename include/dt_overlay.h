@@ -9,7 +9,7 @@
 // Due to the libfdt only support sequential write, the API are defined as a
 // sequential write style.
 
-#define DTB_NODE_NAME_MAX 128
+#define DTB_NODE_NAME_MAX 128U
 #define DTBO_MAX_SIZE	  (4U * PAGE_SIZE)
 
 // Mark unset phandles with only the high bit, because this is unlikely to
@@ -22,6 +22,14 @@
 #define DTO_PHANDLE_UNSET (uint32_t)0x80000000U
 
 typedef struct dto_s dto_t;
+
+#define CHECK_DTO(ret_val, dto_call)                                           \
+	do {                                                                   \
+		ret_val = (dto_call);                                          \
+		if (ret_val != OK) {                                           \
+			goto out;                                              \
+		}                                                              \
+	} while (0)
 
 dto_t *
 dto_init(void *external_memory, size_t memory_size);

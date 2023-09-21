@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-#define EXIT_MAGIC 0x44
+#define EXIT_MAGIC 0x44U
 
-#define IOCTL_REGISTER_EXIT   _IOW(EXIT_MAGIC, 0, struct register_exit_req)
-#define IOCTL_DEREGISTER_EXIT _IOW(EXIT_MAGIC, 1, int)
+#define IOCTL_REGISTER_EXIT   _IOW(EXIT_MAGIC, 0U, struct register_exit_req)
+#define IOCTL_DEREGISTER_EXIT _IOW(EXIT_MAGIC, 1U, int)
 
 typedef void (*exit_t)(int exit_code);
 
