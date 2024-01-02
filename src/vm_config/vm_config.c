@@ -31,6 +31,7 @@
 #include <rm-rpc.h>
 #include <time.h>
 #include <virq.h>
+#include <vm_client.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
 #include <vm_console.h>
@@ -41,7 +42,6 @@
 #include <vm_resource_msg.h>
 #include <vm_vcpu.h>
 
-// Must be last
 #include <platform_vm_config_parser.h>
 #include <vm_config_parser.h>
 
@@ -74,6 +74,7 @@ create_doorbell(void);
 static cap_id_result_t
 create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 		   count_t vqs_num, vmaddr_t *frontend_ipa,
+		   virtio_device_type_t device_type, bool valid_device_type,
 		   vmaddr_t *backend_ipa, cap_id_t *me_cap, size_t *me_size,
 		   void **rm_addr);
 #endif
@@ -154,8 +155,7 @@ vm_config_add_rm_rpc(vm_config_t *vmcfg, rm_rpc_data_t *data, cap_id_t rx,
 #if defined(CAP_RIGHTS_WATCHDOG_ALL)
 static error_t
 vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
-		       interrupt_data_t bark_virq, bool allow_management,
-		       bool virtual_regs);
+		       interrupt_data_t bark_virq, bool allow_management);
 #endif
 
 static void
@@ -275,6 +275,214 @@ static error_t
 add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d);
 #endif
 
+#if defined(CAP_RIGHTS_WATCHDOG_ALL)
+static void
+get_vdev_watchdog_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node,
+		       vector_t *descs)
+{
+	rm_hyp_resource_resp_t item = {
+		.partner_vmid = vmid,
+	};
+
+	struct vdevice_watchdog *vwdt = (struct vdevice_watchdog *)node->config;
+	assert(vwdt != NULL);
+
+	if (vwdt->manager == self) {
+		item.resource_type = RSC_WATCHDOG;
+		item.resource_capid_low =
+			(uint32_t)(vwdt->manager_cap & 0xffffffffU);
+		item.resource_capid_high = (uint32_t)(vwdt->manager_cap >> 32);
+		vector_push_back(descs, item);
+	}
+}
+#endif
+
+static void
+get_vdev_virtio_mmio_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node,
+			  vector_t *descs)
+{
+	rm_hyp_resource_resp_t item = {
+		.partner_vmid = vmid,
+	};
+
+#if defined(CAP_RIGHTS_VIRTIO_MMIO_ALL)
+	struct vdevice_virtio_mmio *vio =
+		(struct vdevice_virtio_mmio *)node->config;
+	assert(vio != NULL);
+
+	if (vio->backend == self) {
+		item.resource_type  = RSC_VIRTIO_MMIO;
+		item.resource_label = vio->label;
+		item.resource_capid_low =
+			(uint32_t)(vio->backend_cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(vio->backend_cap >> 32);
+		item.resource_virq_number = virq_get_number(vio->backend_virq);
+		item.resource_base_address_low =
+			(uint32_t)(vio->backend_ipa & 0xffffffffU);
+		item.resource_base_address_high =
+			(uint32_t)(vio->backend_ipa >> 32);
+		item.resource_size_low = (uint32_t)(vio->me_size & 0xffffffffU);
+		item.resource_size_high = (uint32_t)(vio->me_size >> 32);
+		vector_push_back(descs, item);
+	} else {
+		// Ignore
+	}
+#endif
+}
+
+static void
+get_vdev_virtual_pm_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node,
+			 vector_t *descs)
+{
+	rm_hyp_resource_resp_t item = {
+		.partner_vmid = vmid,
+	};
+
+	struct vdevice_virtual_pm *vpm =
+		(struct vdevice_virtual_pm *)node->config;
+	assert(vpm != NULL);
+
+	if (vpm->peer == self) {
+		item.resource_type  = RSC_VIRTUAL_PM;
+		item.resource_label = vpm->label;
+		item.resource_capid_low =
+			(uint32_t)(vpm->peer_cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(vpm->peer_cap >> 32);
+		item.resource_virq_number = virq_get_number(vpm->peer_virq);
+		vector_push_back(descs, item);
+	} else {
+		// Ignore
+	}
+}
+
+static void
+get_vdev_msg_queue_pair_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node,
+			     vector_t *descs)
+{
+	rm_hyp_resource_resp_t item = {
+		.partner_vmid = vmid,
+	};
+
+	struct vdevice_msg_queue_pair *mq =
+		(struct vdevice_msg_queue_pair *)node->config;
+	if (mq->peer == vmid) {
+		// Tx msgqueue from self vdevice list
+		item.resource_type  = RSC_MSG_QUEUE_SEND;
+		item.resource_label = mq->label;
+		item.resource_capid_low =
+			(uint32_t)(mq->tx_vm_cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(mq->tx_vm_cap >> 32);
+		item.resource_virq_number = virq_get_number(mq->tx_vm_virq);
+		vector_push_back(descs, item);
+
+		// Rx msgqueue from self vdevice list
+		item.resource_type  = RSC_MSG_QUEUE_RECV;
+		item.resource_label = mq->label;
+		item.resource_capid_low =
+			(uint32_t)(mq->rx_vm_cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(mq->rx_vm_cap >> 32);
+		item.resource_virq_number = virq_get_number(mq->rx_vm_virq);
+		vector_push_back(descs, item);
+	} else if ((mq->peer == self) && (!mq->has_peer_vdevice)) {
+		// returns resource info if there is no peer vdevice
+		// Currently, only use peer-default (PVM), the vdevice
+		// is only defined in SVM side.
+		// Tx msgqueue from peer vdevice list
+		item.resource_type  = RSC_MSG_QUEUE_SEND;
+		item.resource_label = mq->label;
+		item.resource_capid_low =
+			(uint32_t)(mq->tx_peer_cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(mq->tx_peer_cap >> 32);
+		item.resource_virq_number = virq_get_number(mq->tx_peer_virq);
+		vector_push_back(descs, item);
+
+		// Rx msgqueue from peer vdevice list
+		item.resource_type  = RSC_MSG_QUEUE_RECV;
+		item.resource_label = mq->label;
+		item.resource_capid_low =
+			(uint32_t)(mq->rx_peer_cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(mq->rx_peer_cap >> 32);
+		item.resource_virq_number = virq_get_number(mq->rx_peer_virq);
+		vector_push_back(descs, item);
+	} else {
+		// Ignore
+	}
+}
+
+static void
+get_vdev_msg_queue_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node,
+			vector_t *descs)
+{
+	rm_hyp_resource_resp_t item = {
+		.partner_vmid = vmid,
+	};
+
+	struct vdevice_msg_queue *mq = (struct vdevice_msg_queue *)node->config;
+	if (mq->peer == vmid) {
+		// Msgqueue from self vdevice list
+		item.resource_type	 = (mq->tx) ? RSC_MSG_QUEUE_SEND
+						    : RSC_MSG_QUEUE_RECV;
+		item.resource_label	 = mq->label;
+		item.resource_capid_low	 = (uint32_t)(mq->vm_cap & 0xffffffffU);
+		item.resource_capid_high = (uint32_t)(mq->vm_cap >> 32);
+		item.resource_virq_number = virq_get_number(mq->vm_virq);
+		vector_push_back(descs, item);
+	} else if (mq->peer == self) {
+		// Msgqueue from peer vdevice list
+		item.resource_type  = (mq->tx) ? RSC_MSG_QUEUE_RECV
+					       : RSC_MSG_QUEUE_SEND;
+		item.resource_label = mq->label;
+		item.resource_capid_low =
+			(uint32_t)(mq->peer_cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(mq->peer_cap >> 32);
+		item.resource_virq_number = virq_get_number(mq->peer_virq);
+		vector_push_back(descs, item);
+	} else {
+		// Ignore
+	}
+}
+
+static void
+get_vdev_doorbell_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node,
+		       vector_t *descs)
+{
+	rm_hyp_resource_resp_t item = {
+		.partner_vmid = vmid,
+	};
+
+	struct vdevice_doorbell *db = (struct vdevice_doorbell *)node->config;
+	if (db->peer == vmid) {
+		// Doorbell from self vdevice list
+		item.resource_type	 = (db->source) ? RSC_DOORBELL_SRC
+							: RSC_DOORBELL;
+		item.resource_label	 = db->label;
+		item.resource_capid_low	 = (uint32_t)(db->vm_cap & 0xffffffffU);
+		item.resource_capid_high = (uint32_t)(db->vm_cap >> 32);
+		// The 0 here should be changed to VIRQ_NUM_INVALID.
+		// FIXME:
+		item.resource_virq_number =
+			db->source ? 0U : virq_get_number(db->vm_virq);
+		vector_push_back(descs, item);
+	} else if ((db->peer == self) && (!db->has_peer_vdevice)) {
+		// returns resource info if there is no peer vdevice
+
+		// Doorbell from peer vdevice list
+		item.resource_type  = (db->source) ? RSC_DOORBELL
+						   : RSC_DOORBELL_SRC;
+		item.resource_label = db->label;
+		item.resource_capid_low =
+			(uint32_t)(db->peer_cap & 0xffffffffU);
+		item.resource_capid_high = (uint32_t)(db->peer_cap >> 32);
+		// The 0 here should be changed to VIRQ_NUM_INVALID.
+		// FIXME:
+		item.resource_virq_number =
+			db->source ? virq_get_number(db->peer_virq) : 0U;
+		vector_push_back(descs, item);
+	} else {
+		// Ignore
+	}
+}
+
 static rm_error_t
 get_vdev_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node, vector_t *descs)
 {
@@ -282,188 +490,19 @@ get_vdev_desc(vmid_t self, vmid_t vmid, vdevice_node_t *node, vector_t *descs)
 		goto out;
 	}
 
-	rm_hyp_resource_resp_t item = {
-		.partner_vmid = vmid,
-	};
-
 	if (node->type == VDEV_DOORBELL) {
-		struct vdevice_doorbell *db =
-			(struct vdevice_doorbell *)node->config;
-		if (db->peer == vmid) {
-			// Doorbell from self vdevice list
-			item.resource_type  = (db->source) ? RSC_DOORBELL_SRC
-							   : RSC_DOORBELL;
-			item.resource_label = db->label;
-			item.resource_capid_low =
-				(uint32_t)(db->vm_cap & 0xffffffffU);
-			item.resource_capid_high = (uint32_t)(db->vm_cap >> 32);
-			// The 0 here should be changed to VIRQ_NUM_INVALID.
-			// FIXME:
-			item.resource_virq_number =
-				db->source ? 0U : virq_get_number(db->vm_virq);
-			vector_push_back(descs, item);
-		} else if ((db->peer == self) && (!db->has_peer_vdevice)) {
-			// returns resource info if there is no peer vdevice
-
-			// Doorbell from peer vdevice list
-			item.resource_type  = (db->source) ? RSC_DOORBELL
-							   : RSC_DOORBELL_SRC;
-			item.resource_label = db->label;
-			item.resource_capid_low =
-				(uint32_t)(db->peer_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(db->peer_cap >> 32);
-			// The 0 here should be changed to VIRQ_NUM_INVALID.
-			// FIXME:
-			item.resource_virq_number =
-				db->source ? virq_get_number(db->peer_virq)
-					   : 0U;
-			vector_push_back(descs, item);
-		} else {
-			// Ignore
-		}
+		get_vdev_doorbell_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_MSG_QUEUE) {
-		struct vdevice_msg_queue *mq =
-			(struct vdevice_msg_queue *)node->config;
-		if (mq->peer == vmid) {
-			// Msgqueue from self vdevice list
-			item.resource_type  = (mq->tx) ? RSC_MSG_QUEUE_SEND
-						       : RSC_MSG_QUEUE_RECV;
-			item.resource_label = mq->label;
-			item.resource_capid_low =
-				(uint32_t)(mq->vm_cap & 0xffffffffU);
-			item.resource_capid_high = (uint32_t)(mq->vm_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(mq->vm_virq);
-			vector_push_back(descs, item);
-		} else if (mq->peer == self) {
-			// Msgqueue from peer vdevice list
-			item.resource_type  = (mq->tx) ? RSC_MSG_QUEUE_RECV
-						       : RSC_MSG_QUEUE_SEND;
-			item.resource_label = mq->label;
-			item.resource_capid_low =
-				(uint32_t)(mq->peer_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(mq->peer_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(mq->peer_virq);
-			vector_push_back(descs, item);
-		} else {
-			// Ignore
-		}
+		get_vdev_msg_queue_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_MSG_QUEUE_PAIR) {
-		struct vdevice_msg_queue_pair *mq =
-			(struct vdevice_msg_queue_pair *)node->config;
-		if (mq->peer == vmid) {
-			// Tx msgqueue from self vdevice list
-			item.resource_type  = RSC_MSG_QUEUE_SEND;
-			item.resource_label = mq->label;
-			item.resource_capid_low =
-				(uint32_t)(mq->tx_vm_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(mq->tx_vm_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(mq->tx_vm_virq);
-			vector_push_back(descs, item);
-
-			// Rx msgqueue from self vdevice list
-			item.resource_type  = RSC_MSG_QUEUE_RECV;
-			item.resource_label = mq->label;
-			item.resource_capid_low =
-				(uint32_t)(mq->rx_vm_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(mq->rx_vm_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(mq->rx_vm_virq);
-			vector_push_back(descs, item);
-		} else if ((mq->peer == self) && (!mq->has_peer_vdevice)) {
-			// returns resource info if there is no peer vdevice
-			// Currently, only use peer-default (PVM), the vdevice
-			// is only defined in SVM side.
-			// Tx msgqueue from peer vdevice list
-			item.resource_type  = RSC_MSG_QUEUE_SEND;
-			item.resource_label = mq->label;
-			item.resource_capid_low =
-				(uint32_t)(mq->tx_peer_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(mq->tx_peer_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(mq->tx_peer_virq);
-			vector_push_back(descs, item);
-
-			// Rx msgqueue from peer vdevice list
-			item.resource_type  = RSC_MSG_QUEUE_RECV;
-			item.resource_label = mq->label;
-			item.resource_capid_low =
-				(uint32_t)(mq->rx_peer_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(mq->rx_peer_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(mq->rx_peer_virq);
-			vector_push_back(descs, item);
-		} else {
-			// Ignore
-		}
+		get_vdev_msg_queue_pair_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_VIRTUAL_PM) {
-		struct vdevice_virtual_pm *vpm =
-			(struct vdevice_virtual_pm *)node->config;
-		assert(vpm != NULL);
-
-		if (vpm->peer == self) {
-			item.resource_type  = RSC_VIRTUAL_PM;
-			item.resource_label = vpm->label;
-			item.resource_capid_low =
-				(uint32_t)(vpm->peer_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(vpm->peer_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(vpm->peer_virq);
-			vector_push_back(descs, item);
-		} else {
-			// Ignore
-		}
-#if defined(CAP_RIGHTS_VIRTIO_MMIO_ALL)
+		get_vdev_virtual_pm_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_VIRTIO_MMIO) {
-		struct vdevice_virtio_mmio *vio =
-			(struct vdevice_virtio_mmio *)node->config;
-		assert(vio != NULL);
-
-		if (vio->backend == self) {
-			item.resource_type  = RSC_VIRTIO_MMIO;
-			item.resource_label = vio->label;
-			item.resource_capid_low =
-				(uint32_t)(vio->backend_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(vio->backend_cap >> 32);
-			item.resource_virq_number =
-				virq_get_number(vio->backend_virq);
-			item.resource_base_address_low =
-				(uint32_t)(vio->backend_ipa & 0xffffffffU);
-			item.resource_base_address_high =
-				(uint32_t)(vio->backend_ipa >> 32);
-			item.resource_size_low =
-				(uint32_t)(vio->me_size & 0xffffffffU);
-			item.resource_size_high =
-				(uint32_t)(vio->me_size >> 32);
-			vector_push_back(descs, item);
-		} else {
-			// Ignore
-		}
-#endif
+		get_vdev_virtio_mmio_desc(self, vmid, node, descs);
 #if defined(CAP_RIGHTS_WATCHDOG_ALL)
 	} else if (node->type == VDEV_WATCHDOG) {
-		struct vdevice_watchdog *vwdt =
-			(struct vdevice_watchdog *)node->config;
-		assert(vwdt != NULL);
-
-		if (vwdt->manager == self) {
-			item.resource_type = RSC_WATCHDOG;
-			item.resource_capid_low =
-				(uint32_t)(vwdt->manager_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(vwdt->manager_cap >> 32);
-			vector_push_back(descs, item);
-		}
+		get_vdev_watchdog_desc(self, vmid, node, descs);
 #endif
 	} else {
 		// Other vdevice types not supplied in get resources
@@ -737,6 +776,8 @@ vm_config_remove_vcpus(vm_config_t *vmcfg, bool delete_master_caps)
 				rm_get_rm_cspace(), vcpu->master_cap);
 			assert(err == OK);
 		}
+
+		free(vcpu->patch);
 		free(vcpu);
 	}
 }
@@ -1901,8 +1942,7 @@ out:
 #if defined(CAP_RIGHTS_WATCHDOG_ALL)
 static error_t
 vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
-		       interrupt_data_t bark_virq, bool allow_management,
-		       bool virtual_regs)
+		       interrupt_data_t bark_virq, bool allow_management)
 {
 	error_t ret;
 
@@ -1917,17 +1957,9 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 		goto out;
 	}
 
-	if (virtual_regs) {
-		ret = gunyah_hyp_addrspace_attach_vdevice(
-			vmcfg->addrspace, vmcfg->watchdog, 0U,
-			rm_get_watchdog_address(), PAGE_SIZE,
-			(addrspace_attach_vdevice_flags_t){ 0U });
-		if (ret != OK) {
-			(void)printf(
-				"Failed to attach watchdog virtual device: %d\n",
-				ret);
-			goto err_attach_vdevice;
-		}
+	ret = vm_config_check_watchdog_vdevice(vmcfg);
+	if (ret != OK) {
+		goto err_attach_vdevice;
 	}
 
 	// If no bind options are set, it will assume that its a bark virq
@@ -1976,7 +2008,7 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 	node->type	   = VDEV_WATCHDOG;
 	node->export_to_dt = true;
 	node->visible	   = true;
-	node->generate	   = strdup("/hypervisor/qcom,gh-watchdog");
+	node->generate = strdup("/hypervisor/qcom,gh-watchdog");
 
 	if (node->generate == NULL) {
 		ret = ERROR_NOMEM;
@@ -2018,12 +2050,12 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 		goto err_allocate_cfg;
 	}
 
-	cfg->bark_virq	  = bark_virq;
-	cfg->bite_virq	  = bite_virq;
-	cfg->virtual_regs = virtual_regs;
-	cfg->manager	  = manager;
-	cfg->manager_cap  = manager_cap;
-	node->config	  = cfg;
+	assert(cfg != NULL);
+	cfg->bark_virq	 = bark_virq;
+	cfg->bite_virq	 = bite_virq;
+	cfg->manager	 = manager;
+	cfg->manager_cap = manager_cap;
+	node->config	 = cfg;
 
 	list_append(vdevice_node_t, &vmcfg->vdevice_nodes, node, vdevice_);
 	ret = OK;
@@ -3021,6 +3053,12 @@ handle_vcpu(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	}
 	vcpu_option_flags_set_amu_counting_disabled(
 		&vcpu_options, data->amu_counting_disabled);
+	if (data->affinity == VM_CONFIG_AFFINITY_PROXY) {
+		if (hyp_api_flags0_get_vcpu_run(&hyp_id.api_flags_0)) {
+			vcpu_option_flags_set_vcpu_run_scheduled(&vcpu_options,
+								 true);
+		}
+	}
 
 	cpu_index_t idx;
 	for (idx = 0; idx < vcpu_cnt; idx++) {
@@ -3261,8 +3299,8 @@ handle_watchdog(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	// VM is proxy-scheduled (and therefore might be starved of CPU time by
 	// the owner)
 	ret = vm_config_add_watchdog(vmcfg, wdt.new_cap, bark_virq,
-				     data->affinity == VM_CONFIG_AFFINITY_PROXY,
-				     false);
+				     data->affinity ==
+					     VM_CONFIG_AFFINITY_PROXY);
 
 	if (ret != OK) {
 		revert_map_virq(vmid, virq_get_number(bark_virq));
@@ -3393,6 +3431,7 @@ out:
 static cap_id_result_t
 create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 		   count_t vqs_num, vmaddr_t *frontend_ipa,
+		   virtio_device_type_t device_type, bool valid_device_type,
 		   vmaddr_t *backend_ipa, cap_id_t *me_cap, size_t *me_size,
 		   void **rm_addr)
 {
@@ -3432,9 +3471,10 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 		ret = cap_id_result_error(vio_ret.error);
 		goto error_create_virtio;
 	}
-
+	virtio_option_flags_t flags = virtio_option_flags_default();
+	virtio_option_flags_set_valid_device_type(&flags, valid_device_type);
 	err = gunyah_hyp_virtio_mmio_configure(vio_ret.new_cap, me_ret.r,
-					       vqs_num);
+					       vqs_num, flags, device_type);
 	if (err != OK) {
 		ret = cap_id_result_error(err);
 		goto error_configure_virtio;
@@ -3448,7 +3488,7 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 
 	// Allocate IPA for frontend
 	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
-		frontend_cfg->vm, VM_MEMUSE_VIRTIO, INVALID_ADDRESS,
+		frontend_cfg->vm, VM_MEMUSE_VDEVICE, INVALID_ADDRESS,
 		INVALID_ADDRESS, virtio_size, PAGE_SIZE);
 	if (alloc_ret.err != OK) {
 		ret = cap_id_result_error(alloc_ret.err);
@@ -3457,7 +3497,7 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 	vmaddr_t frontend_alloc_ipa = alloc_ret.base;
 
 	// Allocate IPA for backend
-	alloc_ret = vm_address_range_alloc(backend_cfg->vm, VM_MEMUSE_VIRTIO,
+	alloc_ret = vm_address_range_alloc(backend_cfg->vm, VM_MEMUSE_VDEVICE,
 					   INVALID_ADDRESS, INVALID_ADDRESS,
 					   virtio_size, PAGE_SIZE);
 	if (alloc_ret.err != OK) {
@@ -3467,7 +3507,7 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 	vmaddr_t backend_alloc_ipa = alloc_ret.base;
 
 	// Map it read-only for the frontend
-	err = vm_memory_map(frontend_cfg->vm, VM_MEMUSE_VIRTIO, me_ret.r,
+	err = vm_memory_map(frontend_cfg->vm, VM_MEMUSE_VDEVICE, me_ret.r,
 			    frontend_alloc_ipa, PGTABLE_ACCESS_R,
 			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
 	if (err != OK) {
@@ -3477,7 +3517,7 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 
 	// Map it read-write for the backend, so that it can modify the
 	// configuration space
-	err = vm_memory_map(backend_cfg->vm, VM_MEMUSE_VIRTIO, me_ret.r,
+	err = vm_memory_map(backend_cfg->vm, VM_MEMUSE_VDEVICE, me_ret.r,
 			    backend_alloc_ipa, PGTABLE_ACCESS_RW,
 			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
 	if (err != OK) {
@@ -3498,15 +3538,15 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 	}
 
 error_backend_me_map:
-	err = vm_memory_unmap(frontend_cfg->vm, VM_MEMUSE_VIRTIO, me_ret.r,
+	err = vm_memory_unmap(frontend_cfg->vm, VM_MEMUSE_VDEVICE, me_ret.r,
 			      frontend_alloc_ipa);
 	assert(err == OK);
 error_frontend_me_map:
-	err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VIRTIO,
+	err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VDEVICE,
 				    backend_alloc_ipa, virtio_size);
 	assert(err == OK);
 error_backend_ipa_allocation:
-	err = vm_address_range_free(frontend_cfg->vm, VM_MEMUSE_VIRTIO,
+	err = vm_address_range_free(frontend_cfg->vm, VM_MEMUSE_VDEVICE,
 				    frontend_alloc_ipa, virtio_size);
 	assert(err == OK);
 error_frontend_ipa_allocation:
@@ -3546,10 +3586,10 @@ add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d)
 	size_t	 me_size      = 0U;
 	void	*rm_addr      = NULL;
 
-	cap_id_result_t vio = create_virtio_mmio(frontend_cfg, backend_cfg,
-						 d->vqs_num, &frontend_ipa,
-						 &backend_ipa, &me_cap,
-						 &me_size, &rm_addr);
+	cap_id_result_t vio = create_virtio_mmio(
+		frontend_cfg, backend_cfg, d->vqs_num, &frontend_ipa,
+		d->device_type, d->valid_device_type, &backend_ipa, &me_cap,
+		&me_size, &rm_addr);
 	if (vio.e != OK) {
 		ret = vio.e;
 		goto out;
@@ -3590,16 +3630,16 @@ add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d)
 error_get_backend_virq:
 	revert_map_virq(frontend, virq_get_number(frontend_virq));
 error_get_frontend_virq:
-	err = vm_memory_unmap(backend_cfg->vm, VM_MEMUSE_VIRTIO, me_cap,
+	err = vm_memory_unmap(backend_cfg->vm, VM_MEMUSE_VDEVICE, me_cap,
 			      backend_ipa);
 	assert(err == OK);
-	err = vm_memory_unmap(frontend_cfg->vm, VM_MEMUSE_VIRTIO, me_cap,
+	err = vm_memory_unmap(frontend_cfg->vm, VM_MEMUSE_VDEVICE, me_cap,
 			      frontend_ipa);
 	assert(err == OK);
-	err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VIRTIO,
+	err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VDEVICE,
 				    backend_ipa, me_size);
 	assert(err == OK);
-	err = vm_address_range_free(frontend_cfg->vm, VM_MEMUSE_VIRTIO,
+	err = vm_address_range_free(frontend_cfg->vm, VM_MEMUSE_VDEVICE,
 				    frontend_ipa, me_size);
 	assert(err == OK);
 	// XXX need to do much more than delete cap here ?
@@ -3666,7 +3706,7 @@ is_iomem_range_valid(vmid_t vmid, vmaddr_t ipa, size_t size,
 		assert(hlos_vm != NULL);
 
 		vm_memory_result_t ret =
-			vm_memory_lookup(hlos_vm, VM_MEMUSE_DEVICE, ipa, size);
+			vm_memory_lookup(hlos_vm, VM_MEMUSE_IO, ipa, size);
 		if (ret.err != OK) {
 			LOG("Warning: Static share of iomem not mapped in HLOS: %lx %lx\n",
 			    ipa, size);
@@ -3718,7 +3758,7 @@ handle_iomem_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 			iomem_range_access_to_pgtable_access[d->access];
 
 		vm_address_range_result_t as_ret = vm_address_range_alloc(
-			vmcfg->vm, VM_MEMUSE_DEVICE, ipa, phys, size,
+			vmcfg->vm, VM_MEMUSE_IO, ipa, phys, size,
 			ADDRESS_RANGE_NO_ALIGNMENT);
 		if (as_ret.err != OK) {
 			ret = as_ret.err;
@@ -3730,13 +3770,30 @@ handle_iomem_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 			goto iomem_err;
 		}
 
-		cap_id_t device_me = rm_get_device_me_cap();
-		size_t	 offset	   = phys - rm_get_device_me_base();
+		vm_t *hlos = vm_lookup(VMID_HLOS);
+		assert(hlos != NULL);
+
+		cap_id_t device_me =
+			vm_memory_get_owned_extent(hlos, MEM_TYPE_IO);
+		size_t offset = phys - vm_memory_get_extent_base(MEM_TYPE_IO);
 
 		cap_id_result_t me_ret = vm_memory_create_and_map(
-			vmcfg->vm, VM_MEMUSE_DEVICE, device_me, offset, size,
-			ipa, MEMEXTENT_MEMTYPE_DEVICE, access,
+			vmcfg->vm, VM_MEMUSE_IO, device_me, offset, size, ipa,
+			MEMEXTENT_MEMTYPE_DEVICE, access,
 			PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
+		if (me_ret.e == ERROR_MEMDB_NOT_OWNER) {
+			// This is a WA to handle the case in which some IO
+			// memory should be present in hlos aperture memory map
+			// but actually not. Then we have to run the
+			// create-and-map again using device_me.
+			device_me = rm_get_device_me_cap();
+			offset	  = phys - rm_get_device_me_base();
+
+			me_ret = vm_memory_create_and_map(
+				vmcfg->vm, VM_MEMUSE_IO, device_me, offset,
+				size, ipa, MEMEXTENT_MEMTYPE_DEVICE, access,
+				PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
+		}
 		if (me_ret.e != OK) {
 			ret = me_ret.e;
 			goto iomem_err;
@@ -3948,12 +4005,6 @@ vm_config_init_addrspace(vm_config_t *vmcfg)
 		goto out;
 	}
 
-	err = platform_vm_create(vm, false);
-	if (err != OK) {
-		LOG_ERR(err);
-		goto out;
-	}
-
 	goto out;
 
 out_destroy_addrspace:
@@ -4091,6 +4142,15 @@ error_t
 vm_config_update_parsed(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 {
 	error_t ret;
+
+#if defined(GUEST_RAM_DUMP_ENABLE) && GUEST_RAM_DUMP_ENABLE
+	// update guest ram dump status
+	vmcfg->guestdump_allowed = data->guest_ram_dump;
+#endif // GUEST_RAM_DUMP_ENABLE
+       // update SVM console status
+#if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
+	vmcfg->insecure_console = data->insecure_console;
+#endif // PLATFORM_ALLOW_INSECURE_CONSOLE
 
 	// Update and validate the normal memory range
 	vmcfg->mem_ipa_base   = data->mem_base_ipa;
@@ -4517,6 +4577,29 @@ vm_config_get_console(vmid_t self)
 	return console;
 }
 
+// This function evaluates and returns whether console for SVM is allowed or not
+// parmeters
+// self - VM ID for which the console status is requested.
+// return - 'true' If the PLATFORM_ALLOW_INSECURE_CONSOLE is enabled and
+// insecure_console value parsed from DT is true or if it is a non secured
+// device. 'false' otherwise.
+bool
+vm_config_check_console_allowed(vmid_t self)
+{
+	bool console_enabled = !platform_get_security_state();
+#if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
+	vm_t *vm = vm_lookup(self);
+	if ((vm != NULL) && (vm->vm_config != NULL) &&
+	    (vm->vm_config->insecure_console)) {
+		console_enabled = true;
+	}
+#else
+	(void)self;
+
+#endif
+	return console_enabled;
+}
+
 vm_config_t *
 vm_config_alloc(vm_t *vm, cap_id_t cspace, cap_id_t partition)
 {
@@ -4581,14 +4664,6 @@ vm_config_dealloc(vm_t *vm)
 
 	vector_deinit(vm->vm_config->accepted_memparcels);
 	vector_deinit(vm->vm_config->iomem_ranges);
-
-	size_t cnt = vector_size(vm->vm_config->vcpus);
-	for (index_t i = 0U; i < cnt; i++) {
-		vcpu_t *vcpu = vector_at(vcpu_t *, vm->vm_config->vcpus, i);
-		assert(vcpu != NULL);
-
-		free(vcpu->patch);
-	}
 	vector_deinit(vm->vm_config->vcpus);
 
 	free(vm->vm_config);
@@ -4656,9 +4731,8 @@ vm_config_hlos_vdevices_setup(vm_config_t *vmcfg, cap_id_t vic)
 #else
 		const interrupt_data_t watchdog_bark_virq = VIRQ_INVALID;
 #endif
-		ret = vm_config_add_watchdog(
-			vmcfg, CSPACE_CAP_INVALID, watchdog_bark_virq, false,
-			platform_has_watchdog_hlos_virtual_regs());
+		ret = vm_config_add_watchdog(vmcfg, CSPACE_CAP_INVALID,
+					     watchdog_bark_virq, false);
 		if (ret != OK) {
 			(void)printf(
 				"Error: failed to add hlos watchdog, err(%x)\n",
@@ -4749,11 +4823,17 @@ handle_interrupt_controller(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 
 	vmcfg->vic = v.new_cap;
 
+	err = irq_manager_vm_init(vmcfg->vm, vmcfg->vic, PLATFORM_IRQ_MAX);
+	if (err != OK) {
+		goto out_destroy_vic;
+	}
+
 out_destroy_vic:
 	if (err != OK) {
 		err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
 							v.new_cap);
 		assert(err == OK);
+		vmcfg->vic = CSPACE_CAP_INVALID;
 	}
 out:
 	return err;
@@ -4765,11 +4845,6 @@ handle_irqs(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	error_t ret;
 
 	assert(vmcfg != NULL);
-
-	ret = irq_manager_vm_init(vmcfg->vm, vmcfg->vic, PLATFORM_IRQ_MAX);
-	if (ret != OK) {
-		goto out;
-	}
 
 	size_t cnt = vector_size(data->irq_ranges);
 	if (!vmcfg->trusted_config && (cnt > 0U)) {
@@ -4784,6 +4859,8 @@ handle_irqs(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	assert(hlos != NULL);
 
 	vmid_t self = vmcfg->vm->vmid;
+	ret	    = OK;
+
 	// check all requested irqs, if it's a restricted hw_irq directly map
 	// it.
 	for (index_t i = 0; i < cnt; i++) {
@@ -4820,7 +4897,7 @@ handle_irqs(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 			LOG("static lend IRQ denied! (%d) %d -> (%d) %d\n",
 			    VMID_HLOS, hw_irq, self, virq);
 			ret = ERROR_DENIED;
-			goto err_denied;
+			break;
 #endif
 		} else {
 			LOG("invalid irq %d/%d\n", virq, hw_irq);
@@ -4829,7 +4906,6 @@ handle_irqs(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	}
 
 err_denied:
-out:
 	if (ret != OK) {
 		LOG_ERR(ret);
 	}
@@ -4918,6 +4994,8 @@ vm_config_destroy_vm_objects(vm_t *vm)
 	vm_memory_teardown(vm);
 
 	if (vmcfg->vic != CSPACE_CAP_INVALID) {
+		irq_manager_vm_reset(vm);
+
 		err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
 							vmcfg->vic);
 		assert(err == OK);
@@ -5305,19 +5383,19 @@ handle_virtio_mmio_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 	revert_map_virq(cfg->backend, virq_get_number(cfg->backend_virq));
 	revert_map_virq(vmcfg->vm->vmid, virq_get_number(cfg->frontend_virq));
 
-	err = vm_memory_unmap(vmcfg->vm, VM_MEMUSE_VIRTIO, cfg->me_cap,
+	err = vm_memory_unmap(vmcfg->vm, VM_MEMUSE_VDEVICE, cfg->me_cap,
 			      cfg->frontend_ipa);
 	assert(err == OK);
 
-	err = vm_memory_unmap(backend_vm, VM_MEMUSE_VIRTIO, cfg->me_cap,
+	err = vm_memory_unmap(backend_vm, VM_MEMUSE_VDEVICE, cfg->me_cap,
 			      cfg->backend_ipa);
 	assert(err == OK);
 
-	err = vm_address_range_free(backend_vm, VM_MEMUSE_VIRTIO,
+	err = vm_address_range_free(backend_vm, VM_MEMUSE_VDEVICE,
 				    cfg->backend_ipa, cfg->me_size);
 	assert(err == OK);
 
-	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VIRTIO,
+	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VDEVICE,
 				    cfg->frontend_ipa, cfg->me_size);
 	assert(err == OK);
 
@@ -5455,21 +5533,22 @@ out:
 static bool
 wait_for_vcpu_exit(const vm_t *vm)
 {
-	bool all_exited = true;
-
 	assert(vm != NULL);
 	assert(vm->vm_config != NULL);
 
 	vm_config_t *vmcfg = vm->vm_config;
 
-	size_t vcpu_count = vector_size(vmcfg->vcpus);
-	for (index_t i = 0U; i < vcpu_count; i++) {
+	size_t	vcpu_count	   = vector_size(vmcfg->vcpus);
+	bool	vcpu_still_running = false;
+	index_t i;
+
+	for (i = 0U; i < vcpu_count; i++) {
 		vcpu_t *vcpu = vector_at(vcpu_t *, vmcfg->vcpus, i);
 		assert(vcpu != NULL);
 
 		bool scheduled = try_run_vcpu(vmcfg, vcpu);
 		if (!vcpu->exited) {
-			all_exited = false;
+			vcpu_still_running = true;
 		}
 
 		if (scheduled && event_is_pending()) {
@@ -5478,6 +5557,8 @@ wait_for_vcpu_exit(const vm_t *vm)
 			break;
 		}
 	}
+
+	bool all_exited = (i == vcpu_count) && !vcpu_still_running;
 
 	if (!all_exited && !event_is_pending()) {
 		// Sleep for a short time and wait for the VCPUs to exit.
@@ -5488,10 +5569,37 @@ wait_for_vcpu_exit(const vm_t *vm)
 	return all_exited;
 }
 
+static void
+kill_all_vcpus(const vm_t *vm)
+{
+	vector_t *vcpus = vm_config_get_vcpus(vm->vm_config);
+
+	size_t num_vcpus = vector_size(vcpus);
+	for (index_t i = 0; i < num_vcpus; i++) {
+		vcpu_t *vcpu = vector_at(vcpu_t *, vcpus, i);
+		assert(vcpu != NULL);
+		error_t err = gunyah_hyp_vcpu_kill(vcpu->master_cap);
+		assert(err == OK);
+	}
+}
+
+void
+vm_config_handle_exit(const vm_t *vm)
+{
+	kill_all_vcpus(vm);
+
+	while (!wait_for_vcpu_exit(vm)) {
+	}
+
+	error_t ret = platform_vm_exit(vm);
+	assert(ret == OK);
+}
+
 bool
 vm_reset_handle_init(const vm_t *vm)
 {
-	return wait_for_vcpu_exit(vm);
+	(void)vm;
+	return true;
 }
 
 // Destroy one vdevice per event handler

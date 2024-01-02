@@ -25,12 +25,13 @@
 #include <platform_dt.h>
 #include <platform_dt_parser.h>
 #include <platform_vm_config.h>
-#include <platform_vm_config_parser.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>
 #include <vgic.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
+
+#include <platform_vm_config_parser.h>
 
 // Late include
 #include <vm_config_parser.h>

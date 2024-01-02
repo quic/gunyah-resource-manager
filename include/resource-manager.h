@@ -64,9 +64,6 @@ rm_get_hlos_dt_base(void);
 cap_id_t
 rm_get_uart_me(void);
 
-vmaddr_t
-rm_get_device_me_base(void);
-
 platform_env_data_t *
 rm_get_platform_env_data(void);
 

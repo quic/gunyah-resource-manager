@@ -105,7 +105,9 @@ log_expose_to_hlos(uintptr_t log_buf, size_t size)
 		MEMEXTENT_MEMTYPE_ANY, PGTABLE_ACCESS_R,
 		PGTABLE_VM_MEMTYPE_NORMAL_WB);
 	if (cap_ret.e != OK) {
-		vm_address_range_free(hlos, VM_MEMUSE_BOOTINFO, ipa, size);
+		error_t err = vm_address_range_free(hlos, VM_MEMUSE_BOOTINFO,
+						    ipa, size);
+		assert(err == OK);
 		ret = RM_ERROR_DENIED;
 		goto out;
 	}

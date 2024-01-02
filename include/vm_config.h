@@ -99,6 +99,9 @@ vm_config_set_console(vm_config_t *vmcfg, vm_console_t *console);
 struct vm_console *
 vm_config_get_console(vmid_t self);
 
+bool
+vm_config_check_console_allowed(vmid_t self);
+
 void
 vm_config_flush_rm_rpc(vmid_t self);
 
@@ -116,6 +119,9 @@ vm_config_create_vdevices(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 
 void
 vm_config_destroy_vm_objects(vm_t *vm);
+
+void
+vm_config_handle_exit(const vm_t *vm);
 
 bool
 vm_reset_handle_init(const vm_t *vm);

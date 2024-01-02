@@ -207,7 +207,7 @@ hyp_api_flags0_t
 hyp_api_flags0_clean(hyp_api_flags0_t bit_field)
 {
 	return (hyp_api_flags0_t){ .bf = {
-					   // (0x100004ffU &
+					   // (0x10000effU &
 					   // ~0xffffffffffffffffU) |
 					   (uint64_t)(0x0U) |
 						   (bit_field.bf[0] &
@@ -229,16 +229,6 @@ hyp_api_flags0_get_watchdog(const hyp_api_flags0_t *bit_field)
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
 	val |= ((bf[0] >> 8U) & (uint64_t)0x1U) << 0U;
-	return val != (uint64_t)0;
-}
-
-bool
-hyp_api_flags0_get_virtio_mmio(const hyp_api_flags0_t *bit_field)
-{
-	uint64_t	val = 0;
-	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
-
-	val |= ((bf[0] >> 9U) & (uint64_t)0x1U) << 0U;
 	return val != (uint64_t)0;
 }
 
@@ -268,9 +258,9 @@ hyp_api_flags0_get_res0_0(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 11U) & (uint64_t)0x1fU) << 0U;
-	val |= ((bf[0] >> 17U) & (uint64_t)0x7ffU) << 5U;
-	val |= ((bf[0] >> 32U) & (uint64_t)0xffffffffU) << 16U;
+	val |= ((bf[0] >> 12U) & (uint64_t)0xfU) << 0U;
+	val |= ((bf[0] >> 17U) & (uint64_t)0x7ffU) << 4U;
+	val |= ((bf[0] >> 32U) & (uint64_t)0xffffffffU) << 15U;
 	return (uint64_t)val;
 }
 
@@ -315,12 +305,32 @@ hyp_api_flags0_get_trace_ctrl(const hyp_api_flags0_t *bit_field)
 }
 
 bool
+hyp_api_flags0_get_vcpu_run(const hyp_api_flags0_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 11U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+bool
 hyp_api_flags0_get_vic(const hyp_api_flags0_t *bit_field)
 {
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
 	val |= ((bf[0] >> 3U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+bool
+hyp_api_flags0_get_virtio_mmio(const hyp_api_flags0_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 9U) & (uint64_t)0x1U) << 0U;
 	return val != (uint64_t)0;
 }
 
@@ -1422,27 +1432,27 @@ smccc_function_id_get_res0(const smccc_function_id_t *bit_field)
 }
 
 void
-smccc_function_id_set_interface_id(smccc_function_id_t *bit_field,
-				   smccc_interface_id_t val)
+smccc_function_id_set_owner_id(smccc_function_id_t *bit_field,
+			       smccc_owner_id_t	    val)
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xc0ffffffU;
 	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x3fU) << 24U;
 }
 
-smccc_interface_id_t
-smccc_function_id_get_interface_id(const smccc_function_id_t *bit_field)
+smccc_owner_id_t
+smccc_function_id_get_owner_id(const smccc_function_id_t *bit_field)
 {
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
 	val |= ((bf[0] >> 24U) & (uint32_t)0x3fU) << 0U;
-	return (smccc_interface_id_t)val;
+	return (smccc_owner_id_t)val;
 }
 
 void
-smccc_function_id_copy_interface_id(smccc_function_id_t	      *bit_field_dst,
-				    const smccc_function_id_t *bit_field_src)
+smccc_function_id_copy_owner_id(smccc_function_id_t	  *bit_field_dst,
+				const smccc_function_id_t *bit_field_src)
 {
 	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
 	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
@@ -1768,27 +1778,27 @@ vcpu_option_flags_clean(vcpu_option_flags_t bit_field)
 {
 	return (vcpu_option_flags_t){ .bf = {
 					      (bit_field.bf[0] &
-					       0x800000000000013fU),
+					       0x800000000000033fU),
 				      } };
 }
 
 bool
 vcpu_option_flags_is_equal(vcpu_option_flags_t b1, vcpu_option_flags_t b2)
 {
-	return ((b1.bf[0] & 0x800000000000013fU) ==
-		(b2.bf[0] & 0x800000000000013fU));
+	return ((b1.bf[0] & 0x800000000000033fU) ==
+		(b2.bf[0] & 0x800000000000033fU));
 }
 
 bool
 vcpu_option_flags_is_empty(vcpu_option_flags_t bit_field)
 {
-	return ((bit_field.bf[0] & 0x800000000000013fU) == 0U);
+	return ((bit_field.bf[0] & 0x800000000000033fU) == 0U);
 }
 
 bool
 vcpu_option_flags_is_clean(vcpu_option_flags_t bit_field)
 {
-	return ((bit_field.bf[0] & 0x7ffffffffffffec0U) == 0x0U);
+	return ((bit_field.bf[0] & 0x7ffffffffffffcc0U) == 0x0U);
 }
 
 vcpu_option_flags_t
@@ -2087,6 +2097,37 @@ vcpu_option_flags_copy_hlos_vm(vcpu_option_flags_t	 *bit_field_dst,
 	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
 	bf_dst[0] &= ~(uint64_t)0x8000000000000000U;
 	bf_dst[0] |= bf_src[0] & (uint64_t)0x8000000000000000U;
+}
+
+void
+vcpu_option_flags_set_vcpu_run_scheduled(vcpu_option_flags_t *bit_field,
+					 bool		      val)
+{
+	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
+	uint64_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0xfffffffffffffdffU;
+	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 9U;
+}
+
+bool
+vcpu_option_flags_get_vcpu_run_scheduled(const vcpu_option_flags_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 9U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+void
+vcpu_option_flags_copy_vcpu_run_scheduled(
+	vcpu_option_flags_t	  *bit_field_dst,
+	const vcpu_option_flags_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0x200U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0x200U;
 }
 
 void
@@ -2525,6 +2566,353 @@ vic_option_flags_copy_res0_0(vic_option_flags_t	      *bit_field_dst,
 	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
 	bf_dst[0] &= ~(uint64_t)0xfffffffffffffffcU;
 	bf_dst[0] |= bf_src[0] & (uint64_t)0xfffffffffffffffcU;
+}
+
+void
+virtio_mmio_notify_reason_init(virtio_mmio_notify_reason_t *bit_field)
+{
+	*bit_field = virtio_mmio_notify_reason_default();
+}
+
+uint64_t
+virtio_mmio_notify_reason_raw(virtio_mmio_notify_reason_t bit_field)
+{
+	return bit_field.bf[0];
+}
+
+_Atomic uint64_t *
+virtio_mmio_notify_reason_atomic_ptr_raw(
+	_Atomic virtio_mmio_notify_reason_t *ptr)
+{
+	return (_Atomic uint64_t *)&((virtio_mmio_notify_reason_t *)ptr)->bf[0];
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_clean(virtio_mmio_notify_reason_t bit_field)
+{
+	return (virtio_mmio_notify_reason_t){ .bf = {
+						      (bit_field.bf[0] & 0x1fU),
+					      } };
+}
+
+bool
+virtio_mmio_notify_reason_is_equal(virtio_mmio_notify_reason_t b1,
+				   virtio_mmio_notify_reason_t b2)
+{
+	return ((b1.bf[0] & 0x1fU) == (b2.bf[0] & 0x1fU));
+}
+
+bool
+virtio_mmio_notify_reason_is_empty(virtio_mmio_notify_reason_t bit_field)
+{
+	return ((bit_field.bf[0] & 0x1fU) == 0U);
+}
+
+bool
+virtio_mmio_notify_reason_is_clean(virtio_mmio_notify_reason_t bit_field)
+{
+	return ((bit_field.bf[0] & 0xffffffffffffffe0U) == 0x0U);
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_union(virtio_mmio_notify_reason_t b1,
+				virtio_mmio_notify_reason_t b2)
+{
+	return (virtio_mmio_notify_reason_t){ .bf = {
+						      b1.bf[0] | b2.bf[0],
+					      } };
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_intersection(virtio_mmio_notify_reason_t b1,
+				       virtio_mmio_notify_reason_t b2)
+{
+	return (virtio_mmio_notify_reason_t){ .bf = {
+						      b1.bf[0] & b2.bf[0],
+					      } };
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_inverse(virtio_mmio_notify_reason_t b)
+{
+	return (virtio_mmio_notify_reason_t){ .bf = {
+						      ~b.bf[0],
+					      } };
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_difference(virtio_mmio_notify_reason_t b1,
+				     virtio_mmio_notify_reason_t b2)
+{
+	virtio_mmio_notify_reason_t not_b2 =
+		virtio_mmio_notify_reason_inverse(b2);
+	return virtio_mmio_notify_reason_intersection(b1, not_b2);
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_atomic_union(_Atomic virtio_mmio_notify_reason_t *b1,
+				       virtio_mmio_notify_reason_t	    b2,
+				       memory_order order)
+{
+	_Atomic uint64_t *bf =
+		(_Atomic uint64_t *)&((virtio_mmio_notify_reason_t *)b1)->bf[0];
+	return (virtio_mmio_notify_reason_t){
+		.bf = { atomic_fetch_or_explicit(bf, b2.bf[0], order) }
+	};
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_atomic_intersection(
+	_Atomic virtio_mmio_notify_reason_t *b1, virtio_mmio_notify_reason_t b2,
+	memory_order order)
+{
+	_Atomic uint64_t *bf =
+		(_Atomic uint64_t *)&((virtio_mmio_notify_reason_t *)b1)->bf[0];
+	return (virtio_mmio_notify_reason_t){
+		.bf = { atomic_fetch_and_explicit(bf, b2.bf[0], order) }
+	};
+}
+
+virtio_mmio_notify_reason_t
+virtio_mmio_notify_reason_atomic_difference(
+	_Atomic virtio_mmio_notify_reason_t *b1, virtio_mmio_notify_reason_t b2,
+	memory_order order)
+{
+	virtio_mmio_notify_reason_t not_b2 =
+		virtio_mmio_notify_reason_inverse(b2);
+	return virtio_mmio_notify_reason_atomic_intersection(b1, not_b2, order);
+}
+
+void
+virtio_mmio_notify_reason_set_new_buffer(virtio_mmio_notify_reason_t *bit_field,
+					 bool			      val)
+{
+	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
+	uint64_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0xfffffffffffffffeU;
+	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+}
+
+bool
+virtio_mmio_notify_reason_get_new_buffer(
+	const virtio_mmio_notify_reason_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+void
+virtio_mmio_notify_reason_copy_new_buffer(
+	virtio_mmio_notify_reason_t	  *bit_field_dst,
+	const virtio_mmio_notify_reason_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0x1U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0x1U;
+}
+
+void
+virtio_mmio_notify_reason_set_reset_rqst(virtio_mmio_notify_reason_t *bit_field,
+					 bool			      val)
+{
+	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
+	uint64_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0xfffffffffffffffdU;
+	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+}
+
+bool
+virtio_mmio_notify_reason_get_reset_rqst(
+	const virtio_mmio_notify_reason_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+void
+virtio_mmio_notify_reason_copy_reset_rqst(
+	virtio_mmio_notify_reason_t	  *bit_field_dst,
+	const virtio_mmio_notify_reason_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0x2U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0x2U;
+}
+
+bool
+virtio_mmio_notify_reason_get_res0_irq_ack(
+	const virtio_mmio_notify_reason_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 2U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+void
+virtio_mmio_notify_reason_set_driver_ok(virtio_mmio_notify_reason_t *bit_field,
+					bool			     val)
+{
+	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
+	uint64_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0xfffffffffffffff7U;
+	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 3U;
+}
+
+bool
+virtio_mmio_notify_reason_get_driver_ok(
+	const virtio_mmio_notify_reason_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 3U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+void
+virtio_mmio_notify_reason_copy_driver_ok(
+	virtio_mmio_notify_reason_t	  *bit_field_dst,
+	const virtio_mmio_notify_reason_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0x8U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0x8U;
+}
+
+void
+virtio_mmio_notify_reason_set_failed(virtio_mmio_notify_reason_t *bit_field,
+				     bool			  val)
+{
+	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
+	uint64_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0xffffffffffffffefU;
+	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 4U;
+}
+
+bool
+virtio_mmio_notify_reason_get_failed(
+	const virtio_mmio_notify_reason_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 4U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+void
+virtio_mmio_notify_reason_copy_failed(
+	virtio_mmio_notify_reason_t	  *bit_field_dst,
+	const virtio_mmio_notify_reason_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0x10U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0x10U;
+}
+
+void
+virtio_option_flags_init(virtio_option_flags_t *bit_field)
+{
+	*bit_field = virtio_option_flags_default();
+}
+
+uint64_t
+virtio_option_flags_raw(virtio_option_flags_t bit_field)
+{
+	return bit_field.bf[0];
+}
+
+_Atomic uint64_t *
+virtio_option_flags_atomic_ptr_raw(_Atomic virtio_option_flags_t *ptr)
+{
+	return (_Atomic uint64_t *)&((virtio_option_flags_t *)ptr)->bf[0];
+}
+
+virtio_option_flags_t
+virtio_option_flags_clean(virtio_option_flags_t bit_field)
+{
+	return (virtio_option_flags_t){ .bf = {
+						(bit_field.bf[0] &
+						 0xffffffffffffffc0U),
+					} };
+}
+
+bool
+virtio_option_flags_is_equal(virtio_option_flags_t b1, virtio_option_flags_t b2)
+{
+	return ((b1.bf[0] & 0xffffffffffffffc0U) ==
+		(b2.bf[0] & 0xffffffffffffffc0U));
+}
+
+void
+virtio_option_flags_set_valid_device_type(virtio_option_flags_t *bit_field,
+					  bool			 val)
+{
+	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
+	uint64_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0xffffffffffffffbfU;
+	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 6U;
+}
+
+bool
+virtio_option_flags_get_valid_device_type(const virtio_option_flags_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 6U) & (uint64_t)0x1U) << 0U;
+	return val != (uint64_t)0;
+}
+
+void
+virtio_option_flags_copy_valid_device_type(
+	virtio_option_flags_t	    *bit_field_dst,
+	const virtio_option_flags_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0x40U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0x40U;
+}
+
+void
+virtio_option_flags_set_res0(virtio_option_flags_t *bit_field, uint64_t val)
+{
+	uint64_t *bf = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0x7fU;
+	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0x1ffffffffffffffU) << 7U;
+}
+
+uint64_t
+virtio_option_flags_get_res0(const virtio_option_flags_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 7U) & (uint64_t)0x1ffffffffffffffU) << 0U;
+	return (uint64_t)val;
+}
+
+void
+virtio_option_flags_copy_res0(virtio_option_flags_t	  *bit_field_dst,
+			      const virtio_option_flags_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0xffffffffffffff80U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0xffffffffffffff80U;
 }
 
 void
@@ -5532,6 +5920,275 @@ cap_rights_vic_copy_object_activate(cap_rights_vic_t	   *bit_field_dst,
 }
 
 void
+cap_rights_virtio_mmio_init(cap_rights_virtio_mmio_t *bit_field)
+{
+	*bit_field = cap_rights_virtio_mmio_default();
+}
+
+uint32_t
+cap_rights_virtio_mmio_raw(cap_rights_virtio_mmio_t bit_field)
+{
+	return bit_field.bf[0];
+}
+
+_Atomic uint32_t *
+cap_rights_virtio_mmio_atomic_ptr_raw(_Atomic cap_rights_virtio_mmio_t *ptr)
+{
+	return (_Atomic uint32_t *)&((cap_rights_virtio_mmio_t *)ptr)->bf[0];
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_clean(cap_rights_virtio_mmio_t bit_field)
+{
+	return (cap_rights_virtio_mmio_t){ .bf = {
+						   (bit_field.bf[0] &
+						    0x8000000fU),
+					   } };
+}
+
+bool
+cap_rights_virtio_mmio_is_equal(cap_rights_virtio_mmio_t b1,
+				cap_rights_virtio_mmio_t b2)
+{
+	return ((b1.bf[0] & 0x8000000fU) == (b2.bf[0] & 0x8000000fU));
+}
+
+bool
+cap_rights_virtio_mmio_is_empty(cap_rights_virtio_mmio_t bit_field)
+{
+	return ((bit_field.bf[0] & 0x8000000fU) == 0U);
+}
+
+bool
+cap_rights_virtio_mmio_is_clean(cap_rights_virtio_mmio_t bit_field)
+{
+	return ((bit_field.bf[0] & 0x7ffffff0U) == 0x0U);
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_union(cap_rights_virtio_mmio_t b1,
+			     cap_rights_virtio_mmio_t b2)
+{
+	return (cap_rights_virtio_mmio_t){ .bf = {
+						   b1.bf[0] | b2.bf[0],
+					   } };
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_intersection(cap_rights_virtio_mmio_t b1,
+				    cap_rights_virtio_mmio_t b2)
+{
+	return (cap_rights_virtio_mmio_t){ .bf = {
+						   b1.bf[0] & b2.bf[0],
+					   } };
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_inverse(cap_rights_virtio_mmio_t b)
+{
+	return (cap_rights_virtio_mmio_t){ .bf = {
+						   ~b.bf[0],
+					   } };
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_difference(cap_rights_virtio_mmio_t b1,
+				  cap_rights_virtio_mmio_t b2)
+{
+	cap_rights_virtio_mmio_t not_b2 = cap_rights_virtio_mmio_inverse(b2);
+	return cap_rights_virtio_mmio_intersection(b1, not_b2);
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_atomic_union(_Atomic cap_rights_virtio_mmio_t *b1,
+				    cap_rights_virtio_mmio_t	      b2,
+				    memory_order		      order)
+{
+	_Atomic uint32_t *bf =
+		(_Atomic uint32_t *)&((cap_rights_virtio_mmio_t *)b1)->bf[0];
+	return (cap_rights_virtio_mmio_t){
+		.bf = { atomic_fetch_or_explicit(bf, b2.bf[0], order) }
+	};
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_atomic_intersection(_Atomic cap_rights_virtio_mmio_t *b1,
+					   cap_rights_virtio_mmio_t	     b2,
+					   memory_order order)
+{
+	_Atomic uint32_t *bf =
+		(_Atomic uint32_t *)&((cap_rights_virtio_mmio_t *)b1)->bf[0];
+	return (cap_rights_virtio_mmio_t){
+		.bf = { atomic_fetch_and_explicit(bf, b2.bf[0], order) }
+	};
+}
+
+cap_rights_virtio_mmio_t
+cap_rights_virtio_mmio_atomic_difference(_Atomic cap_rights_virtio_mmio_t *b1,
+					 cap_rights_virtio_mmio_t	   b2,
+					 memory_order order)
+{
+	cap_rights_virtio_mmio_t not_b2 = cap_rights_virtio_mmio_inverse(b2);
+	return cap_rights_virtio_mmio_atomic_intersection(b1, not_b2, order);
+}
+
+void
+cap_rights_virtio_mmio_set_bind_backend_virq(
+	cap_rights_virtio_mmio_t *bit_field, bool val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0xfffffffeU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+}
+
+bool
+cap_rights_virtio_mmio_get_bind_backend_virq(
+	const cap_rights_virtio_mmio_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_virtio_mmio_copy_bind_backend_virq(
+	cap_rights_virtio_mmio_t       *bit_field_dst,
+	const cap_rights_virtio_mmio_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x1U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x1U;
+}
+
+void
+cap_rights_virtio_mmio_set_bind_frontend_virq(
+	cap_rights_virtio_mmio_t *bit_field, bool val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0xfffffffdU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+}
+
+bool
+cap_rights_virtio_mmio_get_bind_frontend_virq(
+	const cap_rights_virtio_mmio_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_virtio_mmio_copy_bind_frontend_virq(
+	cap_rights_virtio_mmio_t       *bit_field_dst,
+	const cap_rights_virtio_mmio_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x2U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x2U;
+}
+
+void
+cap_rights_virtio_mmio_set_assert_virq(cap_rights_virtio_mmio_t *bit_field,
+				       bool			 val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0xfffffffbU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+}
+
+bool
+cap_rights_virtio_mmio_get_assert_virq(const cap_rights_virtio_mmio_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_virtio_mmio_copy_assert_virq(
+	cap_rights_virtio_mmio_t       *bit_field_dst,
+	const cap_rights_virtio_mmio_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x4U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x4U;
+}
+
+void
+cap_rights_virtio_mmio_set_config(cap_rights_virtio_mmio_t *bit_field, bool val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0xfffffff7U;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+}
+
+bool
+cap_rights_virtio_mmio_get_config(const cap_rights_virtio_mmio_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_virtio_mmio_copy_config(cap_rights_virtio_mmio_t *bit_field_dst,
+				   const cap_rights_virtio_mmio_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x8U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x8U;
+}
+
+void
+cap_rights_virtio_mmio_set_object_activate(cap_rights_virtio_mmio_t *bit_field,
+					   bool			     val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0x7fffffffU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+}
+
+bool
+cap_rights_virtio_mmio_get_object_activate(
+	const cap_rights_virtio_mmio_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_virtio_mmio_copy_object_activate(
+	cap_rights_virtio_mmio_t       *bit_field_dst,
+	const cap_rights_virtio_mmio_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x80000000U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x80000000U;
+}
+
+void
 cap_rights_vpm_group_init(cap_rights_vpm_group_t *bit_field)
 {
 	*bit_field = cap_rights_vpm_group_default();
@@ -5754,6 +6411,227 @@ void
 cap_rights_vpm_group_copy_object_activate(
 	cap_rights_vpm_group_t	     *bit_field_dst,
 	const cap_rights_vpm_group_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x80000000U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x80000000U;
+}
+
+void
+cap_rights_vrtc_init(cap_rights_vrtc_t *bit_field)
+{
+	*bit_field = cap_rights_vrtc_default();
+}
+
+uint32_t
+cap_rights_vrtc_raw(cap_rights_vrtc_t bit_field)
+{
+	return bit_field.bf[0];
+}
+
+_Atomic uint32_t *
+cap_rights_vrtc_atomic_ptr_raw(_Atomic cap_rights_vrtc_t *ptr)
+{
+	return (_Atomic uint32_t *)&((cap_rights_vrtc_t *)ptr)->bf[0];
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_clean(cap_rights_vrtc_t bit_field)
+{
+	return (cap_rights_vrtc_t){ .bf = {
+					    (bit_field.bf[0] & 0x80000007U),
+				    } };
+}
+
+bool
+cap_rights_vrtc_is_equal(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2)
+{
+	return ((b1.bf[0] & 0x80000007U) == (b2.bf[0] & 0x80000007U));
+}
+
+bool
+cap_rights_vrtc_is_empty(cap_rights_vrtc_t bit_field)
+{
+	return ((bit_field.bf[0] & 0x80000007U) == 0U);
+}
+
+bool
+cap_rights_vrtc_is_clean(cap_rights_vrtc_t bit_field)
+{
+	return ((bit_field.bf[0] & 0x7ffffff8U) == 0x0U);
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_union(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2)
+{
+	return (cap_rights_vrtc_t){ .bf = {
+					    b1.bf[0] | b2.bf[0],
+				    } };
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_intersection(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2)
+{
+	return (cap_rights_vrtc_t){ .bf = {
+					    b1.bf[0] & b2.bf[0],
+				    } };
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_inverse(cap_rights_vrtc_t b)
+{
+	return (cap_rights_vrtc_t){ .bf = {
+					    ~b.bf[0],
+				    } };
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_difference(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2)
+{
+	cap_rights_vrtc_t not_b2 = cap_rights_vrtc_inverse(b2);
+	return cap_rights_vrtc_intersection(b1, not_b2);
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_atomic_union(_Atomic cap_rights_vrtc_t *b1,
+			     cap_rights_vrtc_t b2, memory_order order)
+{
+	_Atomic uint32_t *bf =
+		(_Atomic uint32_t *)&((cap_rights_vrtc_t *)b1)->bf[0];
+	return (cap_rights_vrtc_t){
+		.bf = { atomic_fetch_or_explicit(bf, b2.bf[0], order) }
+	};
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_atomic_intersection(_Atomic cap_rights_vrtc_t *b1,
+				    cap_rights_vrtc_t b2, memory_order order)
+{
+	_Atomic uint32_t *bf =
+		(_Atomic uint32_t *)&((cap_rights_vrtc_t *)b1)->bf[0];
+	return (cap_rights_vrtc_t){
+		.bf = { atomic_fetch_and_explicit(bf, b2.bf[0], order) }
+	};
+}
+
+cap_rights_vrtc_t
+cap_rights_vrtc_atomic_difference(_Atomic cap_rights_vrtc_t *b1,
+				  cap_rights_vrtc_t b2, memory_order order)
+{
+	cap_rights_vrtc_t not_b2 = cap_rights_vrtc_inverse(b2);
+	return cap_rights_vrtc_atomic_intersection(b1, not_b2, order);
+}
+
+void
+cap_rights_vrtc_set_configure(cap_rights_vrtc_t *bit_field, bool val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0xfffffffeU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+}
+
+bool
+cap_rights_vrtc_get_configure(const cap_rights_vrtc_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_vrtc_copy_configure(cap_rights_vrtc_t       *bit_field_dst,
+			       const cap_rights_vrtc_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x1U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x1U;
+}
+
+void
+cap_rights_vrtc_set_attach_addrspace(cap_rights_vrtc_t *bit_field, bool val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0xfffffffdU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+}
+
+bool
+cap_rights_vrtc_get_attach_addrspace(const cap_rights_vrtc_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_vrtc_copy_attach_addrspace(cap_rights_vrtc_t	      *bit_field_dst,
+				      const cap_rights_vrtc_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x2U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x2U;
+}
+
+void
+cap_rights_vrtc_set_set_time_base(cap_rights_vrtc_t *bit_field, bool val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0xfffffffbU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+}
+
+bool
+cap_rights_vrtc_get_set_time_base(const cap_rights_vrtc_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_vrtc_copy_set_time_base(cap_rights_vrtc_t	   *bit_field_dst,
+				   const cap_rights_vrtc_t *bit_field_src)
+{
+	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
+	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint32_t)0x4U;
+	bf_dst[0] |= bf_src[0] & (uint32_t)0x4U;
+}
+
+void
+cap_rights_vrtc_set_object_activate(cap_rights_vrtc_t *bit_field, bool val)
+{
+	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
+	uint32_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint32_t)0x7fffffffU;
+	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+}
+
+bool
+cap_rights_vrtc_get_object_activate(const cap_rights_vrtc_t *bit_field)
+{
+	uint32_t	val = 0;
+	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	return val != (uint32_t)0;
+}
+
+void
+cap_rights_vrtc_copy_object_activate(cap_rights_vrtc_t	     *bit_field_dst,
+				     const cap_rights_vrtc_t *bit_field_src)
 {
 	uint32_t       *bf_dst = (uint32_t *)&bit_field_dst->bf[0];
 	const uint32_t *bf_src = (const uint32_t *)&bit_field_src->bf[0];

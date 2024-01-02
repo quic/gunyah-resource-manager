@@ -492,20 +492,6 @@ out:
 }
 
 static void
-kill_all_vcpus(const vm_t *vm)
-{
-	vector_t *vcpus = vm_config_get_vcpus(vm->vm_config);
-
-	size_t num_vcpus = vector_size(vcpus);
-	for (index_t i = 0; i < num_vcpus; i++) {
-		vcpu_t *vcpu = vector_at(vcpu_t *, vcpus, i);
-		assert(vcpu != NULL);
-		error_t err = gunyah_hyp_vcpu_kill(vcpu->master_cap);
-		assert(err == OK);
-	}
-}
-
-static void
 vm_mgnt_handle_allocate(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			void *buf, size_t len)
 {
@@ -737,7 +723,7 @@ vm_mgnt_handle_stop(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	uint8_t flags = buf8[2];
 	if ((flags & VM_STOP_FLAG_FORCE) != 0U) {
-		kill_all_vcpus(vm);
+		vm_config_handle_exit(vm);
 
 		if (vm_mgnt_update_vm_state(vm, VM_STATE_EXITED) != RM_OK) {
 			(void)printf("VM_STOP: Failed to update vm state\n");
@@ -824,7 +810,7 @@ vm_mgnt_handle_exit(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	assert(vm_mgnt_state_change_valid(vm, VM_STATE_EXITED));
 
-	kill_all_vcpus(vm);
+	vm_config_handle_exit(vm);
 
 	err = vm_mgnt_update_vm_state(vm, VM_STATE_EXITED);
 	if (err != RM_OK) {
@@ -889,7 +875,7 @@ vm_mgnt_handle_reset(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	}
 
 	if ((vm->vm_state != VM_STATE_EXITED) && (vm->vm_config != NULL)) {
-		kill_all_vcpus(vm);
+		vm_config_handle_exit(vm);
 	}
 
 	ret = vm_mgnt_update_vm_state(vm, VM_STATE_RESETTING);
@@ -2083,7 +2069,7 @@ watchdog_bite_callback(event_t *event, void *data)
 		goto out;
 	}
 
-	kill_all_vcpus(vm);
+	vm_config_handle_exit(vm);
 
 	if (vm_mgnt_update_vm_state(vm, VM_STATE_EXITED) != RM_OK) {
 		(void)printf("WDOG bite: Failed to update VM %d state\n",
@@ -2191,7 +2177,7 @@ vcpu_halt_callback(event_t *event, void *data)
 		break;
 	}
 
-	kill_all_vcpus(vm);
+	vm_config_handle_exit(vm);
 
 	if (vm_mgnt_update_vm_state(vm, VM_STATE_EXITED) != RM_OK) {
 		(void)printf("VCPU halt: Failed to update VM %d state\n",

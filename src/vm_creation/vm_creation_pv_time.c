@@ -66,8 +66,8 @@ vm_creation_config_vm_info_area(vm_config_t *vmcfg)
 
 	// Allocate IPA
 	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
-		vmcfg->vm, VM_MEMUSE_INFO_AREA, INVALID_ADDRESS,
-		INVALID_ADDRESS, size, PAGE_SIZE);
+		vmcfg->vm, VM_MEMUSE_VDEVICE, INVALID_ADDRESS, INVALID_ADDRESS,
+		size, PAGE_SIZE);
 	if (alloc_ret.err != OK) {
 		ret = alloc_ret.err;
 		(void)printf(
@@ -105,7 +105,7 @@ vm_creation_map_vm_info_area(vm_config_t *vmcfg)
 	}
 
 	// Map it to the VM read-only
-	err = vm_memory_map(vmcfg->vm, VM_MEMUSE_INFO_AREA,
+	err = vm_memory_map(vmcfg->vm, VM_MEMUSE_VDEVICE,
 			    vmcfg->vm_info_area_me_cap,
 			    vmcfg->vm->vm_info_area_ipa, PGTABLE_ACCESS_R,
 			    PGTABLE_VM_MEMTYPE_NORMAL_WB);
@@ -117,17 +117,21 @@ out:
 void
 vm_creation_vm_info_area_teardown(vm_config_t *vmcfg)
 {
-	if (vmcfg->vm->vm_info_area_ipa != ~0UL) {
-		vm_address_range_free(vmcfg->vm, VM_MEMUSE_INFO_AREA,
-				      vmcfg->vm->vm_info_area_ipa,
-				      vmcfg->vm->vm_info_area_size);
-	}
+	if (vmcfg->vm->vm_info_area_size != 0UL) {
+		if (vmcfg->vm->vm_info_area_ipa != ~0UL) {
+			error_t err = vm_address_range_free(
+				vmcfg->vm, VM_MEMUSE_VDEVICE,
+				vmcfg->vm->vm_info_area_ipa,
+				vmcfg->vm->vm_info_area_size);
+			assert(err == OK);
+		}
 
-	if (vmcfg->vm_info_area_me_cap != CSPACE_CAP_INVALID) {
-		memextent_delete(vmcfg->vm_info_area_me_cap);
-	}
+		if (vmcfg->vm_info_area_me_cap != CSPACE_CAP_INVALID) {
+			memextent_delete(vmcfg->vm_info_area_me_cap);
+		}
 
-	if (vmcfg->vm->vm_info_area_rm_ipa != ~0UL) {
-		free((void *)vmcfg->vm->vm_info_area_rm_ipa);
+		if (vmcfg->vm->vm_info_area_rm_ipa != ~0UL) {
+			free((void *)vmcfg->vm->vm_info_area_rm_ipa);
+		}
 	}
 }

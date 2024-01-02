@@ -404,6 +404,10 @@ rm_notify(vmid_t client_id, uint32_t notif_id, void *data, size_t len)
 		exit(1);
 	}
 
+	if (len == 0U) {
+		(void)printf("Length is Zero\n");
+		exit(1);
+	}
 	(void)memcpy((void *)out_buf, data, len);
 
 	rm_error_t rpc_err = rm_rpc_fifo_send_notification(client_id, notif_id,

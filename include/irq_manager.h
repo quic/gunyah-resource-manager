@@ -50,6 +50,10 @@ irq_manager_hwirq_get_owner(uint32_t hw_irq_number);
 error_t
 irq_manager_vm_init(vm_t *vm, cap_id_t vic, count_t max_irq);
 
+// Indicate to the irq_manager that the VM is being reset
+void
+irq_manager_vm_reset(vm_t *vm);
+
 // De-initialize and clean-up VM irq_manager structures
 // Requires all interrupts to be unmapped from the VM
 void

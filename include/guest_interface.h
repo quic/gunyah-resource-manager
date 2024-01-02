@@ -321,6 +321,93 @@ gunyah_hyp_vcpu_set_priority(cap_id_t cap_id, priority_t priority);
 error_t
 gunyah_hyp_vcpu_set_timeslice(cap_id_t cap_id, nanoseconds_t timeslice);
 
+typedef struct gunyah_hyp_partition_create_virtio_mmio_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_virtio_mmio_result_t;
+
+gunyah_hyp_partition_create_virtio_mmio_result_t
+gunyah_hyp_partition_create_virtio_mmio(cap_id_t src_partition,
+					cap_id_t cspace);
+
+error_t
+gunyah_hyp_virtio_mmio_configure(cap_id_t virtio_mmio, cap_id_t memextent,
+				 count_t vqs_num, virtio_option_flags_t flags,
+				 virtio_device_type_t device_type);
+
+error_t
+gunyah_hyp_virtio_mmio_backend_bind_virq(cap_id_t virtio_mmio, cap_id_t vic,
+					 virq_t virq);
+
+error_t
+gunyah_hyp_virtio_mmio_backend_unbind_virq(cap_id_t virtio_mmio);
+
+error_t
+gunyah_hyp_virtio_mmio_frontend_bind_virq(cap_id_t virtio_mmio, cap_id_t vic,
+					  virq_t virq);
+
+error_t
+gunyah_hyp_virtio_mmio_frontend_unbind_virq(cap_id_t virtio_mmio);
+
+error_t
+gunyah_hyp_virtio_mmio_backend_assert_virq(cap_id_t virtio_mmio,
+					   uint32_t interrupt_status);
+
+error_t
+gunyah_hyp_virtio_mmio_backend_set_dev_features(cap_id_t virtio_mmio,
+						uint32_t sel,
+						uint32_t dev_feat);
+
+error_t
+gunyah_hyp_virtio_mmio_backend_set_queue_num_max(cap_id_t virtio_mmio,
+						 uint32_t sel,
+						 uint32_t queue_num_max);
+
+typedef struct gunyah_hyp_virtio_mmio_backend_get_drv_features_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	uint32_t _Alignas(register_t) drv_feat;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+} gunyah_hyp_virtio_mmio_backend_get_drv_features_result_t;
+
+gunyah_hyp_virtio_mmio_backend_get_drv_features_result_t
+gunyah_hyp_virtio_mmio_backend_get_drv_features(cap_id_t virtio_mmio,
+						uint32_t sel);
+
+typedef struct gunyah_hyp_virtio_mmio_backend_get_queue_info_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	uint32_t _Alignas(register_t) queue_num;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+	uint32_t _Alignas(register_t) queue_ready;
+	uint8_t _pad2[4]; // Pad for struct static zero initialization
+	uint64_t _Alignas(register_t) queue_desc;
+	uint64_t _Alignas(register_t) queue_drv;
+	uint64_t _Alignas(register_t) queue_dev;
+} gunyah_hyp_virtio_mmio_backend_get_queue_info_result_t;
+
+gunyah_hyp_virtio_mmio_backend_get_queue_info_result_t
+gunyah_hyp_virtio_mmio_backend_get_queue_info(cap_id_t virtio_mmio,
+					      uint32_t sel);
+
+typedef struct gunyah_hyp_virtio_mmio_backend_get_notification_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	register_t _Alignas(register_t) vqs_bitmap;
+	virtio_mmio_notify_reason_t _Alignas(register_t) reason;
+} gunyah_hyp_virtio_mmio_backend_get_notification_result_t;
+
+gunyah_hyp_virtio_mmio_backend_get_notification_result_t
+gunyah_hyp_virtio_mmio_backend_get_notification(cap_id_t virtio_mmio);
+
+error_t
+gunyah_hyp_virtio_mmio_backend_acknowledge_reset(cap_id_t virtio_mmio);
+
+error_t
+gunyah_hyp_virtio_mmio_backend_update_status(cap_id_t virtio_mmio,
+					     uint32_t val);
+
 error_t
 gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source);
 
@@ -366,6 +453,15 @@ gunyah_hyp_vcpu_bind_virq(cap_id_t vcpu, cap_id_t vic, virq_t virq,
 
 error_t
 gunyah_hyp_vcpu_unbind_virq(cap_id_t vcpu, vcpu_virq_type_t virq_type);
+
+error_t
+gunyah_hyp_virtio_input_configure(cap_id_t virtio_mmio_cap, uint64_t devids,
+				  uint32_t prop_bits, uint32_t num_evtypes,
+				  uint32_t num_absaxes);
+
+error_t
+gunyah_hyp_virtio_input_set_data(cap_id_t virtio_mmio_cap, uint32_t sel,
+				 uint32_t subsel, uint32_t size, vmaddr_t data);
 
 error_t
 gunyah_hyp_addrspace_configure_vmmio(cap_id_t addrspace, vmaddr_t vbase,

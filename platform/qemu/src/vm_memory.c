@@ -59,23 +59,38 @@ is_mapped_direct(vm_t *vm, vm_memuse_t memuse)
 {
 	bool ret = false;
 
+	assert(vm != NULL);
+	assert(vm->vm_config != NULL);
+
 	switch (memuse) {
-	case VM_MEMUSE_DEVICE:
+	case VM_MEMUSE_IO:
 		ret = true;
 		break;
 	case VM_MEMUSE_NORMAL:
 	case VM_MEMUSE_BOOTINFO:
-		ret = vm->vmid == VMID_HLOS;
+		ret = (vm->vmid == VMID_HLOS) || vm->vm_config->mem_map_direct;
 		break;
-	case VM_MEMUSE_VIRTIO:
-	case VM_MEMUSE_RTC:
-	case VM_MEMUSE_SMMU:
-	case VM_MEMUSE_INFO_AREA:
+	case VM_MEMUSE_VDEVICE:
+	case VM_MEMUSE_PLATFORM_VDEVICE:
 	default:
 		break;
 	}
 
 	return ret;
+}
+
+static bool
+is_device_mapping(vm_memuse_t memuse, vmaddr_t ipa, size_t size)
+{
+	paddr_t dev_base = rm_get_device_me_base();
+	paddr_t dev_size = rm_get_device_me_size();
+
+	// Platform vdevices are based on real devices, so allow them to overlap
+	// with device extent IPAs. It is the VM's responsibility to ensure
+	// these vdevices don't conflict with other device mappings.
+	return (memuse == VM_MEMUSE_PLATFORM_VDEVICE) &&
+	       (ipa != INVALID_ADDRESS) && (ipa >= dev_base) &&
+	       ((ipa + size) <= (dev_base + dev_size));
 }
 
 static cap_id_result_t
@@ -358,7 +373,7 @@ vm_memory_lookup(vm_t *vm, vm_memuse_t memuse, vmaddr_t ipa, size_t size)
 	uint8_t mem_type;
 	if (memuse == VM_MEMUSE_NORMAL) {
 		mem_type = MEM_TYPE_NORMAL;
-	} else if (memuse == VM_MEMUSE_DEVICE) {
+	} else if (memuse == VM_MEMUSE_IO) {
 		mem_type = MEM_TYPE_IO;
 	} else {
 		// Lookup not supported.
@@ -418,7 +433,7 @@ vm_address_range_init(vm_t *vm)
 			vm->as_allocator, rm_get_device_me_base(),
 			rm_get_device_me_size(), ADDRESS_RANGE_NO_ALIGNMENT);
 		if (as_ret.err != OK) {
-			address_range_allocator_deinit(vm->as_allocator);
+			vm_address_range_destroy(vm);
 			ret = size_result_error(as_ret.err);
 			goto out;
 		}
@@ -435,7 +450,10 @@ vm_address_range_destroy(vm_t *vm)
 {
 	assert(vm != NULL);
 
-	address_range_allocator_deinit(vm->as_allocator);
+	if (vm->as_allocator != NULL) {
+		address_range_allocator_deinit(vm->as_allocator);
+		vm->as_allocator = NULL;
+	}
 }
 
 vm_address_range_result_t
@@ -456,6 +474,13 @@ vm_address_range_alloc(vm_t *vm, vm_memuse_t memuse, vmaddr_t start_addr,
 			ret.err = ERROR_DENIED;
 		}
 
+		goto out;
+	}
+
+	if (is_device_mapping(memuse, start_addr, size)) {
+		ret.base = start_addr;
+		ret.size = size;
+		ret.tag	 = ADDRESS_RANGE_NO_TAG;
 		goto out;
 	}
 
@@ -480,7 +505,8 @@ vm_address_range_free(vm_t *vm, vm_memuse_t memuse, vmaddr_t base, size_t size)
 
 	assert(vm != NULL);
 
-	if (is_mapped_direct(vm, memuse)) {
+	if (is_mapped_direct(vm, memuse) ||
+	    is_device_mapping(memuse, base, size)) {
 		err = OK;
 		goto out;
 	}

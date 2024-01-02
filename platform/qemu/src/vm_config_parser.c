@@ -33,7 +33,6 @@
 #include <vm_config_struct.h>
 #include <vm_mgnt.h>
 
-// Must be last
 #include <platform_vm_config_parser.h>
 #include <vm_config_parser.h>
 
@@ -42,6 +41,19 @@ platform_parse_vm_config(void *data, void *fdt, int node_ofs, ctx_t *ctx);
 
 static error_t
 parse_segments(vm_config_parser_data_t *vd, void *fdt, int node_ofs);
+
+rm_error_t
+platform_alloc_parser_data(vm_config_parser_data_t *vd)
+{
+	(void)vd;
+	return RM_OK;
+}
+
+void
+platform_free_parser_data(vm_config_parser_data_t *vd)
+{
+	(void)vd;
+}
 
 listener_return_t
 platform_parse_vm_config(void *data, void *fdt, int node_ofs, ctx_t *ctx)

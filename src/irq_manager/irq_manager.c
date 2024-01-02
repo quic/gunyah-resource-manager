@@ -189,13 +189,21 @@ irq_manager_init(const rm_env_data_t *env_data)
 	// Deprecated:
 	// Update all restricted IRQs ownership
 	uint32_t num_reserved = env_data->num_reserved_dev_irqs;
+	assert(num_reserved <= util_array_size(env_data->reserved_dev_irq));
 
 	for (index_t i = 0; i < num_reserved; i++) {
 		uint32_t res_irq = env_data->reserved_dev_irq[i];
+		if ((res_irq < first_irq) || (res_irq > last_irq) ||
+		    (irq_env->vic_hwirq[res_irq] == CSPACE_CAP_INVALID)) {
+			LOG("Warning: skipping invalid reserved irq %d\n",
+			    res_irq);
+			continue;
+		}
 
 		ret = irq_manager_hwirq_donate(res_irq, VMID_ANY);
 		if (ret != OK) {
-			LOG("%i: invalid reserved irq %d\n", i, res_irq);
+			LOG("%i: res irq %d\n", i, res_irq);
+			goto out_free;
 		}
 	}
 
@@ -374,6 +382,18 @@ out:
 		LOG_ERR(ret);
 	}
 	return ret;
+}
+
+void
+irq_manager_vm_reset(vm_t *vm)
+{
+	assert(vm != NULL);
+	assert(vm->irq_manager != NULL);
+	assert(vm->irq_manager->vic != CSPACE_CAP_INVALID);
+
+	// Currently we use the vic == CSPACE_CAP_INVALID to tell that the vm
+	// is being reset.
+	vm->irq_manager->vic = CSPACE_CAP_INVALID;
 }
 
 static error_t
@@ -814,6 +834,12 @@ irq_manager_vm_hwirq_unmap_internal(const vm_t *vm, uint32_t irq_number,
 	assert(hw_irq->capid != CSPACE_CAP_INVALID);
 
 	ret = gunyah_hyp_hwirq_unbind_virq(hw_irq->capid);
+	if ((ret == ERROR_VIRQ_NOT_BOUND) &&
+	    (vm->irq_manager->vic == CSPACE_CAP_INVALID)) {
+		// It is expected that the VIRQ may have been unbound when the
+		// VM's VIC is deleted.
+		ret = OK;
+	}
 	assert(ret == OK);
 
 	if (owner) {

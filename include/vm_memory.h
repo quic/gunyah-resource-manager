@@ -9,13 +9,18 @@
 // This enum gives information on the use of memory being mapped in a VM.
 // The mapping behaviour of memory may differ depending on its usage.
 typedef enum {
+	// Used for mapping normal DDR memory.
 	VM_MEMUSE_NORMAL,
-	VM_MEMUSE_DEVICE,
-	VM_MEMUSE_VIRTIO,
+	// Used for mapping physical devices.
+	VM_MEMUSE_IO,
+	// Used for purely virtual devices, such as virtio-mmio.
+	// Must not overlap with the physical device range.
+	VM_MEMUSE_VDEVICE,
+	// Virtual devices based on real physical devices.
+	// May overlap with the physical device range.
+	VM_MEMUSE_PLATFORM_VDEVICE,
+	// Used for VM boot info mapping.
 	VM_MEMUSE_BOOTINFO,
-	VM_MEMUSE_RTC,
-	VM_MEMUSE_SMMU,
-	VM_MEMUSE_INFO_AREA,
 } vm_memuse_t;
 
 error_t

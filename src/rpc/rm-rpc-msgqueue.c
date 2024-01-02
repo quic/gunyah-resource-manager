@@ -322,6 +322,7 @@ rm_rpc_server_remove_link(vmid_t client_id)
 
 	list_remove(rm_rpc_transport_t, &transport_list, t, );
 	takedown_transport(t, transport_id, client_id);
+	free(t);
 out:
 	return err;
 }

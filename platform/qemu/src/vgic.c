@@ -23,7 +23,6 @@
 #pragma clang diagnostic pop
 
 #include <util.h>
-#include <utils/address_range_allocator.h>
 #include <utils/vector.h>
 
 #include <dt_overlay.h>
@@ -38,10 +37,10 @@
 #include <vgic.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
+#include <vm_memory.h>
 #include <vm_mgnt.h>
 #include <vm_vcpu.h>
 
-// Must be last
 #include <platform_vm_config_parser.h>
 #include <vm_config_parser.h>
 
@@ -125,17 +124,16 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 		goto out;
 	}
 
-	address_range_allocator_ret_t alloc_ret = address_range_allocator_alloc(
-		vm->as_allocator, vm->vm_config->platform.vgic_gicd_base,
+	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
+		vm, VM_MEMUSE_PLATFORM_VDEVICE,
+		vm->vm_config->platform.vgic_gicd_base, INVALID_ADDRESS,
 		vgic_gicd_size, vgic_gicd_size);
-	if ((alloc_ret.err != OK) &&
-	    (vm->vm_config->platform.vgic_gicd_base == INVALID_ADDRESS)) {
+	if (alloc_ret.err == OK) {
+		vm->vm_config->platform.vgic_gicd_base = alloc_ret.base;
+	} else {
 		err = alloc_ret.err;
 		LOG_LOC("alloc GICD");
 		goto out;
-	}
-	if (alloc_ret.err == OK) {
-		vm->vm_config->platform.vgic_gicd_base = alloc_ret.base_address;
 	}
 
 	err = gunyah_hyp_addrspace_attach_vdevice(
@@ -172,17 +170,16 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 		goto out;
 	}
 
-	alloc_ret = address_range_allocator_alloc(
-		vm->as_allocator, vm->vm_config->platform.vgic_gicr_base,
+	alloc_ret = vm_address_range_alloc(
+		vm, VM_MEMUSE_PLATFORM_VDEVICE,
+		vm->vm_config->platform.vgic_gicr_base, INVALID_ADDRESS,
 		gicr_total_size, vm->vm_config->platform.vgic_gicr_stride);
-	if ((alloc_ret.err != OK) &&
-	    (vm->vm_config->platform.vgic_gicr_base == INVALID_ADDRESS)) {
+	if (alloc_ret.err == OK) {
+		vm->vm_config->platform.vgic_gicr_base = alloc_ret.base;
+	} else {
 		err = alloc_ret.err;
 		LOG_LOC("alloc GICR");
 		goto out;
-	}
-	if (alloc_ret.err == OK) {
-		vm->vm_config->platform.vgic_gicr_base = alloc_ret.base_address;
 	}
 
 	cpu_index_t cpu_id = 0;

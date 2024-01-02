@@ -42,7 +42,6 @@
 #include <vm_memory.h>
 #include <vm_mgnt.h>
 
-// Must be last
 #include <platform_vm_config_parser.h>
 #include <vm_config_parser.h>
 
@@ -130,8 +129,8 @@ add_rtc(vm_config_t *vmcfg, rtc_data_t *d)
 
 	// Reserve a region for the virtual RTC device. Leave it unmapped.
 	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
-		vmcfg->vm, VM_MEMUSE_RTC, d->ipa_base, INVALID_ADDRESS,
-		RTC_IPA_SIZE, ALIGN_4KB);
+		vmcfg->vm, VM_MEMUSE_PLATFORM_VDEVICE, d->ipa_base,
+		INVALID_ADDRESS, RTC_IPA_SIZE, ALIGN_4KB);
 	if (alloc_ret.err != OK) {
 		err = alloc_ret.err;
 		(void)printf(
@@ -167,10 +166,12 @@ add_rtc(vm_config_t *vmcfg, rtc_data_t *d)
 
 out_free:
 	if (err != OK) {
-		vm_address_range_free(vmcfg->vm, VM_MEMUSE_RTC, ipa,
-				      RTC_IPA_SIZE);
+		error_t err_del = vm_address_range_free(
+			vmcfg->vm, VM_MEMUSE_PLATFORM_VDEVICE, ipa,
+			RTC_IPA_SIZE);
+		assert(err_del == OK);
 		if (vmcfg->rtc != CSPACE_CAP_INVALID) {
-			error_t err_del = gunyah_hyp_cspace_delete_cap_from(
+			err_del = gunyah_hyp_cspace_delete_cap_from(
 				rm_get_rm_cspace(), vmcfg->rtc);
 			assert(err_del == OK);
 			vmcfg->rtc = CSPACE_CAP_INVALID;
@@ -225,8 +226,9 @@ handle_rtc_teardown(vm_config_t *vmcfg, vdevice_node_t **node)
 
 	struct vdevice_rtc *vrtc = (struct vdevice_rtc *)(*node)->config;
 
-	vm_address_range_free(vmcfg->vm, VM_MEMUSE_RTC, vrtc->ipa,
-			      RTC_IPA_SIZE);
+	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_PLATFORM_VDEVICE,
+				    vrtc->ipa, RTC_IPA_SIZE);
+	assert(err == OK);
 
 	vm_config_delete_vdevice_node(vmcfg, node);
 

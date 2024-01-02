@@ -47,7 +47,7 @@ error_t
 platform_init_complete(void);
 
 error_t
-platform_vm_create(vm_t *vm, bool hlos);
+platform_vm_create(const vm_t *vm, bool hlos);
 
 error_t
 platform_vm_dt_create_hlos(vm_t *vm);
@@ -63,6 +63,9 @@ platform_vm_init(vm_t *vm);
 
 error_t
 platform_vm_takedown(vm_t *vm);
+
+error_t
+platform_vm_exit(const vm_t *vm);
 
 error_t
 platform_vm_destroy(vm_t *vm, bool hlos);
@@ -108,9 +111,6 @@ platform_has_vsmmu_v2_support(void);
 cap_id_result_t
 platform_vrtc_create_and_configure(cap_id_t p_cap, cap_id_t cs_cap,
 				   vmaddr_t ipa);
-
-bool
-platform_has_watchdog_hlos_virtual_regs(void);
 
 error_t
 platform_pre_hlos_vm_init(const rm_env_data_t *env_data);

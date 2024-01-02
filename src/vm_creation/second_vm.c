@@ -199,10 +199,19 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 		goto out_dealloc_vm_config;
 	}
 
+	err = platform_vm_create(vm, false);
+	if (err != OK) {
+		LOG_ERR(err);
+		rm_err = rm_error_from_hyp(err);
+		goto out_teardown_vm_memory;
+	}
+
 	rm_err = RM_OK;
 
 	goto out;
 
+out_teardown_vm_memory:
+	vm_memory_teardown(vm);
 out_dealloc_vm_config:
 	vm_config_dealloc(vm);
 out_destroy_cspace:
@@ -283,6 +292,19 @@ vm_creation_init(vm_t *vm)
 
 	error_t free_ret = dtb_parser_free(ops, parse_ret.r);
 	assert(free_ret == OK);
+
+#if defined(GUEST_RAM_DUMP_ENABLE) && GUEST_RAM_DUMP_ENABLE
+	// Override mem_unsanitized value with dtb parsed value
+	// if the config is trusted and guest ram dump is allowed
+	// for vm do not sanitize guest vm region
+	if (!platform_get_security_state() && vm->vm_config->trusted_config &&
+	    vm->vm_config->guestdump_allowed) {
+		// disable sanitization of Guest VM region
+		vm->vm_config->mem_unsanitized = true;
+		printf("GUEST_RAM_DUMP: Sanitization disabled for VM %d region.\n",
+		       vm->vmid);
+	}
+#endif // GUEST_RAM_DUMP_ENABLE
 
 	err = platform_vm_init(vm);
 

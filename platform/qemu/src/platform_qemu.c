@@ -182,7 +182,7 @@ platform_init_complete(void)
 }
 
 error_t
-platform_vm_create(vm_t *vm, bool hlos)
+platform_vm_create(const vm_t *vm, bool hlos)
 {
 	(void)vm;
 	(void)hlos;
@@ -295,6 +295,13 @@ platform_memparcel_release(memparcel_t *mp, vm_t *vm)
 
 error_t
 platform_vm_takedown(vm_t *vm)
+{
+	(void)vm;
+	return OK;
+}
+
+error_t
+platform_vm_exit(const vm_t *vm)
 {
 	(void)vm;
 	return OK;
@@ -434,10 +441,4 @@ platform_process_qcbor_items(qcbor_item_t     *item,
 
 out:
 	return ret;
-}
-
-bool
-platform_has_watchdog_hlos_virtual_regs(void)
-{
-	return false;
 }

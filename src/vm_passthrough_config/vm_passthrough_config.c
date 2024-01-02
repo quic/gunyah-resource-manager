@@ -99,7 +99,7 @@ vm_passthrough_config_unmap_ioranges(const rm_env_data_t *env_data)
 				root_env_mmio_range_properties_get_num_pages(
 					&io_range.attrs);
 			vm_memory_result_t ret = vm_memory_lookup(
-				hlos_vm, VM_MEMUSE_DEVICE, ipa, size);
+				hlos_vm, VM_MEMUSE_IO, ipa, size);
 			if (ret.err != OK) {
 				(void)printf(
 					"vm_passthrough_config: Lookup of %lx %lx failed %d\n",
@@ -110,7 +110,7 @@ vm_passthrough_config_unmap_ioranges(const rm_env_data_t *env_data)
 			size_t offset =
 				io_range.address - rm_get_device_me_base();
 			err = vm_memory_unmap_partial(
-				hlos_vm, VM_MEMUSE_DEVICE,
+				hlos_vm, VM_MEMUSE_IO,
 				vm_memory_get_owned_extent(hlos_vm,
 							   MEM_TYPE_IO),
 				ipa, offset, size);

@@ -51,6 +51,7 @@ rm_vm_create(const rm_env_data_t *env_data)
 		goto out;
 	}
 	vmcfg->addrspace = env_data->addrspace_capid;
+	rm->priority	 = ROOTVM_PRIORITY;
 
 	ret = vm_config_add_vcpu(vmcfg, env_data->vcpu_capid,
 				 env_data->boot_core, true, NULL);

@@ -121,11 +121,13 @@ RM_PADDED(typedef struct virtio_mmio_data {
 	paddr_t	 mem_base_ipa;
 	uint64_t dma_base;
 
-	vmid_t	peer;
-	count_t vqs_num;
-	bool	need_allocate;
-	bool	dma_coherent;
-	uint8_t need_allocate_padding[2];
+	vmid_t		     peer;
+	count_t		     vqs_num;
+	virtio_device_type_t device_type;
+	bool		     valid_device_type;
+	bool		     need_allocate;
+	bool		     dma_coherent;
+	uint8_t		     need_allocate_padding[2];
 } virtio_mmio_data_t)
 
 RM_PADDED(typedef struct iomem_data {
@@ -205,12 +207,17 @@ RM_PADDED(typedef struct vcpu_data_s {
 	bool  boot_vcpu;
 } vcpu_data_t)
 
-RM_PADDED(struct dtb_parser_data_s {
+RM_PADDED_BEGIN
+
+struct dtb_parser_data_s {
 	vm_auth_type_t auth_type;
 
 	vm_config_vm_type_t vm_type;
 	vm_config_os_type_t os_type;
 
+#if defined(GUEST_RAM_DUMP_ENABLE) && GUEST_RAM_DUMP_ENABLE
+	bool guest_ram_dump;
+#endif // GUEST_RAM_DUMP_ENABLE
 	bool ras_error_handler;
 	bool amu_counting_disabled;
 	bool sensitive;
@@ -218,6 +225,10 @@ RM_PADDED(struct dtb_parser_data_s {
 	bool context_dump;
 	bool no_shutdown;
 	bool no_reset;
+
+#if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
+	bool insecure_console;
+#endif
 
 	char	*kernel_entry_segment;
 	uint64_t kernel_entry_offset;
@@ -270,6 +281,8 @@ RM_PADDED(struct dtb_parser_data_s {
 	vector_t *platform_data;
 
 	platform_vm_config_parser_data_t platform;
-})
+};
+
+RM_PADDED_END
 
 typedef struct dtb_parser_data_s vm_config_parser_data_t;

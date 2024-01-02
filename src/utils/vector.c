@@ -222,6 +222,9 @@ vector_swap_threadsafe(vector_t *vector, index_t idx1, index_t idx2, void *tmp)
 	size_t	  offset1 = idx1 * vector->element_sz;
 	size_t	  offset2 = idx2 * vector->element_sz;
 
+	if (vector->element_sz == 0U) {
+		goto out;
+	}
 	// 1 -> tmp
 	(void)memmove(tmp, (void *)(base + offset1), vector->element_sz);
 	// 2 -> 1

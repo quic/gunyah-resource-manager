@@ -73,8 +73,21 @@
 #define CAP_RIGHTS_VIC_OBJECT_ACTIVATE (cap_rights_t)0x80000000U
 #define CAP_RIGHTS_VIC_ALL	       (cap_rights_t)0x80000007U
 
+#define CAP_RIGHTS_VIRTIO_MMIO_BIND_BACKEND_VIRQ  (cap_rights_t)0x1U
+#define CAP_RIGHTS_VIRTIO_MMIO_BIND_FRONTEND_VIRQ (cap_rights_t)0x2U
+#define CAP_RIGHTS_VIRTIO_MMIO_ASSERT_VIRQ	  (cap_rights_t)0x4U
+#define CAP_RIGHTS_VIRTIO_MMIO_CONFIG		  (cap_rights_t)0x8U
+#define CAP_RIGHTS_VIRTIO_MMIO_OBJECT_ACTIVATE	  (cap_rights_t)0x80000000U
+#define CAP_RIGHTS_VIRTIO_MMIO_ALL		  (cap_rights_t)0x8000000fU
+
 #define CAP_RIGHTS_VPM_GROUP_ATTACH_VCPU     (cap_rights_t)0x1U
 #define CAP_RIGHTS_VPM_GROUP_BIND_VIRQ	     (cap_rights_t)0x2U
 #define CAP_RIGHTS_VPM_GROUP_QUERY	     (cap_rights_t)0x4U
 #define CAP_RIGHTS_VPM_GROUP_OBJECT_ACTIVATE (cap_rights_t)0x80000000U
 #define CAP_RIGHTS_VPM_GROUP_ALL	     (cap_rights_t)0x80000007U
+
+#define CAP_RIGHTS_VRTC_CONFIGURE	 (cap_rights_t)0x1U
+#define CAP_RIGHTS_VRTC_ATTACH_ADDRSPACE (cap_rights_t)0x2U
+#define CAP_RIGHTS_VRTC_SET_TIME_BASE	 (cap_rights_t)0x4U
+#define CAP_RIGHTS_VRTC_OBJECT_ACTIVATE	 (cap_rights_t)0x80000000U
+#define CAP_RIGHTS_VRTC_ALL		 (cap_rights_t)0x80000007U

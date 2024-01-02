@@ -50,7 +50,8 @@ check_listeners(dtb_parser_data_t *data, const dtb_listener_t *listeners,
 
 static listener_return_t
 check_path_listener(dtb_parser_data_t *data, const dtb_listener_t *listener,
-		    const void *fdt, int node_ofs, const ctx_t *ctx);
+		    const void *fdt, int node_ofs, const ctx_t *ctx,
+		    const char *path);
 
 static listener_return_t
 check_strings_prop_listener(dtb_parser_data_t	 *data,
@@ -337,12 +338,19 @@ check_listeners(dtb_parser_data_t *data, const dtb_listener_t *listeners,
 {
 	listener_return_t act = RET_CONTINUE;
 
+	char path[MAX_PATH_LEN];
+	int  path_ret = fdt_get_path(fdt, node_ofs, path, MAX_PATH_LEN);
+	if (path_ret != 0) {
+		act = RET_ERROR;
+		goto out_get_path_failure;
+	}
+
 	for (index_t i = 0; i < listener_cnt; ++i) {
 		const dtb_listener_t *cur_listener = listeners + i;
 
 		if (cur_listener->type == BY_PATH) {
 			act = check_path_listener(data, cur_listener, fdt,
-						  node_ofs, ctx);
+						  node_ofs, ctx, path);
 		} else if (cur_listener->type == BY_STRING_PROP) {
 			act = check_strings_prop_listener(data, cur_listener,
 							  fdt, node_ofs, ctx);
@@ -357,21 +365,16 @@ check_listeners(dtb_parser_data_t *data, const dtb_listener_t *listeners,
 		}
 	}
 
+out_get_path_failure:
 	return act;
 }
 
 static listener_return_t
 check_path_listener(dtb_parser_data_t *data, const dtb_listener_t *listener,
-		    const void *fdt, int node_ofs, const ctx_t *ctx)
+		    const void *fdt, int node_ofs, const ctx_t *ctx,
+		    const char *path)
 {
 	listener_return_t ret = RET_CONTINUE;
-
-	char path[MAX_PATH_LEN];
-	int  path_ret = fdt_get_path(fdt, node_ofs, path, MAX_PATH_LEN);
-	if (path_ret != 0) {
-		ret = RET_ERROR;
-		goto out_get_path_failure;
-	}
 
 	regex_t regex;
 	int	reg_ret = regcomp(&regex, listener->expected_path,
@@ -394,7 +397,6 @@ check_path_listener(dtb_parser_data_t *data, const dtb_listener_t *listener,
 	regfree(&regex);
 
 out_regcomp_failure:
-out_get_path_failure:
 	return ret;
 }
 

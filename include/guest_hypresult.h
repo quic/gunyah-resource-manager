@@ -692,25 +692,25 @@ vmaddr_ptr_result_error(error_t err);
 vmaddr_ptr_result_t
 vmaddr_ptr_result_ok(vmaddr_t *ret);
 
-typedef struct smccc_interface_id_result {
-	smccc_interface_id_t r;
+typedef struct smccc_owner_id_result {
+	smccc_owner_id_t r;
 	error_t alignas(register_t) e;
-} smccc_interface_id_result_t;
+} smccc_owner_id_result_t;
 
-smccc_interface_id_result_t
-smccc_interface_id_result_error(error_t err);
-smccc_interface_id_result_t
-smccc_interface_id_result_ok(smccc_interface_id_t ret);
+smccc_owner_id_result_t
+smccc_owner_id_result_error(error_t err);
+smccc_owner_id_result_t
+smccc_owner_id_result_ok(smccc_owner_id_t ret);
 
-typedef struct smccc_interface_id_ptr_result {
-	smccc_interface_id_t *r;
+typedef struct smccc_owner_id_ptr_result {
+	smccc_owner_id_t *r;
 	error_t alignas(register_t) e;
-} smccc_interface_id_ptr_result_t;
+} smccc_owner_id_ptr_result_t;
 
-smccc_interface_id_ptr_result_t
-smccc_interface_id_ptr_result_error(error_t err);
-smccc_interface_id_ptr_result_t
-smccc_interface_id_ptr_result_ok(smccc_interface_id_t *ret);
+smccc_owner_id_ptr_result_t
+smccc_owner_id_ptr_result_error(error_t err);
+smccc_owner_id_ptr_result_t
+smccc_owner_id_ptr_result_ok(smccc_owner_id_t *ret);
 
 typedef struct smccc_function_result {
 	smccc_function_t r;
@@ -1093,6 +1093,26 @@ vcpu_run_poweroff_flags_ptr_result_error(error_t err);
 vcpu_run_poweroff_flags_ptr_result_t
 vcpu_run_poweroff_flags_ptr_result_ok(vcpu_run_poweroff_flags_t *ret);
 
+typedef struct vcpu_run_wakeup_from_state_result {
+	vcpu_run_wakeup_from_state_t r;
+	error_t alignas(register_t) e;
+} vcpu_run_wakeup_from_state_result_t;
+
+vcpu_run_wakeup_from_state_result_t
+vcpu_run_wakeup_from_state_result_error(error_t err);
+vcpu_run_wakeup_from_state_result_t
+vcpu_run_wakeup_from_state_result_ok(vcpu_run_wakeup_from_state_t ret);
+
+typedef struct vcpu_run_wakeup_from_state_ptr_result {
+	vcpu_run_wakeup_from_state_t *r;
+	error_t alignas(register_t) e;
+} vcpu_run_wakeup_from_state_ptr_result_t;
+
+vcpu_run_wakeup_from_state_ptr_result_t
+vcpu_run_wakeup_from_state_ptr_result_error(error_t err);
+vcpu_run_wakeup_from_state_ptr_result_t
+vcpu_run_wakeup_from_state_ptr_result_ok(vcpu_run_wakeup_from_state_t *ret);
+
 typedef struct vic_option_flags_result {
 	vic_option_flags_t r;
 	error_t alignas(register_t) e;
@@ -1132,6 +1152,66 @@ virq_ptr_result_t
 virq_ptr_result_error(error_t err);
 virq_ptr_result_t
 virq_ptr_result_ok(virq_t *ret);
+
+typedef struct virtio_mmio_notify_reason_result {
+	virtio_mmio_notify_reason_t r;
+	error_t alignas(register_t) e;
+} virtio_mmio_notify_reason_result_t;
+
+virtio_mmio_notify_reason_result_t
+virtio_mmio_notify_reason_result_error(error_t err);
+virtio_mmio_notify_reason_result_t
+virtio_mmio_notify_reason_result_ok(virtio_mmio_notify_reason_t ret);
+
+typedef struct virtio_mmio_notify_reason_ptr_result {
+	virtio_mmio_notify_reason_t *r;
+	error_t alignas(register_t) e;
+} virtio_mmio_notify_reason_ptr_result_t;
+
+virtio_mmio_notify_reason_ptr_result_t
+virtio_mmio_notify_reason_ptr_result_error(error_t err);
+virtio_mmio_notify_reason_ptr_result_t
+virtio_mmio_notify_reason_ptr_result_ok(virtio_mmio_notify_reason_t *ret);
+
+typedef struct virtio_option_flags_result {
+	virtio_option_flags_t r;
+	error_t alignas(register_t) e;
+} virtio_option_flags_result_t;
+
+virtio_option_flags_result_t
+virtio_option_flags_result_error(error_t err);
+virtio_option_flags_result_t
+virtio_option_flags_result_ok(virtio_option_flags_t ret);
+
+typedef struct virtio_option_flags_ptr_result {
+	virtio_option_flags_t *r;
+	error_t alignas(register_t) e;
+} virtio_option_flags_ptr_result_t;
+
+virtio_option_flags_ptr_result_t
+virtio_option_flags_ptr_result_error(error_t err);
+virtio_option_flags_ptr_result_t
+virtio_option_flags_ptr_result_ok(virtio_option_flags_t *ret);
+
+typedef struct virtio_device_type_result {
+	virtio_device_type_t r;
+	error_t alignas(register_t) e;
+} virtio_device_type_result_t;
+
+virtio_device_type_result_t
+virtio_device_type_result_error(error_t err);
+virtio_device_type_result_t
+virtio_device_type_result_ok(virtio_device_type_t ret);
+
+typedef struct virtio_device_type_ptr_result {
+	virtio_device_type_t *r;
+	error_t alignas(register_t) e;
+} virtio_device_type_ptr_result_t;
+
+virtio_device_type_ptr_result_t
+virtio_device_type_ptr_result_error(error_t err);
+virtio_device_type_ptr_result_t
+virtio_device_type_ptr_result_ok(virtio_device_type_t *ret);
 
 typedef struct vpm_group_option_flags_result {
 	vpm_group_option_flags_t r;
@@ -1533,6 +1613,26 @@ cap_rights_vic_ptr_result_error(error_t err);
 cap_rights_vic_ptr_result_t
 cap_rights_vic_ptr_result_ok(cap_rights_vic_t *ret);
 
+typedef struct cap_rights_virtio_mmio_result {
+	cap_rights_virtio_mmio_t r;
+	error_t alignas(register_t) e;
+} cap_rights_virtio_mmio_result_t;
+
+cap_rights_virtio_mmio_result_t
+cap_rights_virtio_mmio_result_error(error_t err);
+cap_rights_virtio_mmio_result_t
+cap_rights_virtio_mmio_result_ok(cap_rights_virtio_mmio_t ret);
+
+typedef struct cap_rights_virtio_mmio_ptr_result {
+	cap_rights_virtio_mmio_t *r;
+	error_t alignas(register_t) e;
+} cap_rights_virtio_mmio_ptr_result_t;
+
+cap_rights_virtio_mmio_ptr_result_t
+cap_rights_virtio_mmio_ptr_result_error(error_t err);
+cap_rights_virtio_mmio_ptr_result_t
+cap_rights_virtio_mmio_ptr_result_ok(cap_rights_virtio_mmio_t *ret);
+
 typedef struct cap_rights_vpm_group_result {
 	cap_rights_vpm_group_t r;
 	error_t alignas(register_t) e;
@@ -1552,6 +1652,26 @@ cap_rights_vpm_group_ptr_result_t
 cap_rights_vpm_group_ptr_result_error(error_t err);
 cap_rights_vpm_group_ptr_result_t
 cap_rights_vpm_group_ptr_result_ok(cap_rights_vpm_group_t *ret);
+
+typedef struct cap_rights_vrtc_result {
+	cap_rights_vrtc_t r;
+	error_t alignas(register_t) e;
+} cap_rights_vrtc_result_t;
+
+cap_rights_vrtc_result_t
+cap_rights_vrtc_result_error(error_t err);
+cap_rights_vrtc_result_t
+cap_rights_vrtc_result_ok(cap_rights_vrtc_t ret);
+
+typedef struct cap_rights_vrtc_ptr_result {
+	cap_rights_vrtc_t *r;
+	error_t alignas(register_t) e;
+} cap_rights_vrtc_ptr_result_t;
+
+cap_rights_vrtc_ptr_result_t
+cap_rights_vrtc_ptr_result_error(error_t err);
+cap_rights_vrtc_ptr_result_t
+cap_rights_vrtc_ptr_result_ok(cap_rights_vrtc_t *ret);
 
 typedef struct bool_result {
 	bool r;

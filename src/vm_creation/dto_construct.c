@@ -226,6 +226,55 @@ out:
 	return ret;
 }
 
+static error_t
+dto_add_msg_queue_properties(const struct vdevice_node *node, dto_t *dto,
+			     const struct vdevice_msg_queue_pair *cfg)
+{
+	error_t e = OK;
+
+	e = dto_property_add_u32(dto, "qcom,free-irq-start", 0);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_empty(dto, "qcom,is-full-duplex");
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "qcom,tx-message-size",
+				 (uint32_t)cfg->tx_max_msg_size);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "qcom,rx-message-size",
+				 (uint32_t)cfg->rx_max_msg_size);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "qcom,tx-queue-depth",
+				 (uint32_t)cfg->tx_queue_depth);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "qcom,rx-queue-depth",
+				 (uint32_t)cfg->rx_queue_depth);
+	if (e != OK) {
+		goto err;
+	}
+
+	e = dto_property_add_u32(dto, "qcom,vdevice-handle", node->handle);
+	if (e != OK) {
+		goto err;
+	}
+
+err:
+	return e;
+}
+
 error_t
 dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 {
@@ -276,41 +325,7 @@ dto_create_msg_queue_pair(struct vdevice_node *node, dto_t *dto)
 	}
 
 	// dto_property_add_empty(dto, "qcom,console-dev");	// for SVM
-	e = dto_property_add_u32(dto, "qcom,free-irq-start", 0);
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_add_empty(dto, "qcom,is-full-duplex");
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_add_u32(dto, "qcom,tx-message-size",
-				 (uint32_t)cfg->tx_max_msg_size);
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_add_u32(dto, "qcom,rx-message-size",
-				 (uint32_t)cfg->rx_max_msg_size);
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_add_u32(dto, "qcom,tx-queue-depth",
-				 (uint32_t)cfg->tx_queue_depth);
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_add_u32(dto, "qcom,rx-queue-depth",
-				 (uint32_t)cfg->rx_queue_depth);
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_add_u32(dto, "qcom,vdevice-handle", node->handle);
+	e = dto_add_msg_queue_properties(node, dto, cfg);
 	if (e != OK) {
 		goto err;
 	}
@@ -513,7 +528,16 @@ dto_create_watchdog(struct vdevice_node *node, dto_t *dto)
 		goto err_begin;
 	}
 
+#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
+	uint32_t wdt_addr = (uint32_t)rm_get_watchdog_address();
+	// Two frames, 64K apart
+	uint32_t wdt_reg[4] = { wdt_addr, PAGE_SIZE, wdt_addr + 0x10000U,
+				PAGE_SIZE };
+	dto_property_add_u32array(dto, "reg", wdt_reg, 2);
+	const char *c[] = { "arm,sbsa,gwdt" };
+#else
 	const char *c[] = { "qcom,gh-watchdog" };
+#endif
 	e = vm_creation_add_compatibles(node, c, util_array_size(c), dto);
 	if (e != OK) {
 		goto err_compatibles;

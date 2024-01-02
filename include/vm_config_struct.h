@@ -19,9 +19,7 @@ typedef enum {
 	VDEV_WATCHDOG,
 #endif
 	VDEV_VIRTUAL_PM,
-#if defined(CAP_RIGHTS_VIRTIO_MMIO_ALL)
 	VDEV_VIRTIO_MMIO,
-#endif
 	VDEV_IOMEM,
 	VDEV_RTC,
 	VDEV_MINIDUMP,
@@ -157,7 +155,6 @@ struct vdevice_shm {
 struct vdevice_watchdog {
 	interrupt_data_t bark_virq;
 	interrupt_data_t bite_virq;
-	bool		 virtual_regs;
 
 	vmid_t	 manager;
 	cap_id_t manager_cap;
@@ -251,7 +248,13 @@ struct vm_config {
 	paddr_t mem_size_min;
 	paddr_t mem_size_max;
 	bool	mem_unsanitized;
-	bool	mem_map_direct;
+#if defined(GUEST_RAM_DUMP_ENABLE) && GUEST_RAM_DUMP_ENABLE
+	bool guestdump_allowed;
+#endif // GUEST_RAM_DUMP_ENABLE
+	bool mem_map_direct;
+#if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
+	bool insecure_console;
+#endif // PLATFORM_ALLOW_INSECURE_CONSOLE
 
 	paddr_t fw_ipa_base;
 	paddr_t fw_size_max;

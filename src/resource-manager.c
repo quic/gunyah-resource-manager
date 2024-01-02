@@ -353,8 +353,18 @@ rm_get_watchdog_supported(void)
 paddr_t
 rm_get_watchdog_address(void)
 {
+	paddr_t addr;
+
+#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
+	// This is temporary and will be removed when hypervisor DT becomes
+	// available.
+	addr = PLATFORM_SBSA_WDT_ADDR;
+#else
 	assert(priv_env_data != NULL);
-	return priv_env_data->wdt_address;
+	addr = priv_env_data->wdt_address;
+#endif
+
+	return addr;
 }
 
 count_t

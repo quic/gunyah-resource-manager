@@ -137,6 +137,10 @@ IncludeCategories:
     Priority:        -50
     SortPriority:    0
     CaseSensitive:   true
+  - Regex:           '^<.*vm_config_parser\.h>'
+    Priority:        -10
+    SortPriority:    0
+    CaseSensitive:   true
   - Regex:           '^<'
     Priority:        -20
     SortPriority:    0

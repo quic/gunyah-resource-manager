@@ -347,7 +347,7 @@ static error_t
 map_memory_region(vm_t *vm, vm_meminfo_t *vm_info, cap_id_t me_cap,
 		  uint8_t mem_type, vmaddr_t ipa, paddr_t phys, size_t size)
 {
-	vm_memuse_t	 memuse = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_DEVICE
+	vm_memuse_t	 memuse = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_IO
 							    : VM_MEMUSE_NORMAL;
 	size_t		 offset = phys - vm_memory_get_extent_base(mem_type);
 	pgtable_access_t access = mem_rights_to_pgtable_access(vm_info->rights);
@@ -362,7 +362,7 @@ static error_t
 unmap_memory_region(vm_t *vm, cap_id_t me_cap, uint8_t mem_type, vmaddr_t ipa,
 		    paddr_t phys, size_t size)
 {
-	vm_memuse_t memuse = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_DEVICE
+	vm_memuse_t memuse = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_IO
 						       : VM_MEMUSE_NORMAL;
 	size_t	    offset = phys - vm_memory_get_extent_base(mem_type);
 
@@ -428,7 +428,7 @@ add_sgl_to_mp(vm_t *vm, memparcel_t *mp, vm_meminfo_t *owner_info,
 	uint8_t	       trans_type = mp->trans_type;
 	vm_acl_info_t *acl_info	  = mp->acl_info;
 
-	vm_memuse_t memuse  = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_DEVICE
+	vm_memuse_t memuse  = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_IO
 							: VM_MEMUSE_NORMAL;
 	count_t	    old_len = region_list_get_len(mp->region_list);
 
@@ -1137,7 +1137,7 @@ static vm_address_range_result_t
 alloc_as_range(vm_t *vm, uint8_t mem_type, vmaddr_t ipa, paddr_t phys,
 	       size_t size)
 {
-	vm_memuse_t memuse    = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_DEVICE
+	vm_memuse_t memuse    = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_IO
 							  : VM_MEMUSE_NORMAL;
 	size_t	    alignment = ((ipa == INVALID_ADDRESS) && (size >= SIZE_2M))
 					? SIZE_2M
@@ -1158,7 +1158,7 @@ validate_as_tag(paddr_t phys, size_t size, address_range_tag_t ipa_tag)
 static void
 free_as_range(vm_t *vm, uint8_t mem_type, vmaddr_t ipa, size_t size)
 {
-	vm_memuse_t memuse = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_DEVICE
+	vm_memuse_t memuse = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_IO
 						       : VM_MEMUSE_NORMAL;
 
 	error_t err = vm_address_range_free(vm, memuse, ipa, size);
@@ -2032,7 +2032,7 @@ memparcel_notify_shared(memparcel_t *mp, vmid_t src_vmid,
 	index_t	     idx;
 	mem_region_t region;
 	uint64_t    *size_list = (uint64_t *)curr;
-	region_list_loop(mp->region_list, region, idx)
+	region_list_loop_range(mp->region_list, region, idx, 0U, num_regions)
 	{
 		size_list[idx] = mem_region_get_size(region);
 		curr += sizeof(uint64_t);

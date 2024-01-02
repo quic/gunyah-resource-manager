@@ -53,8 +53,9 @@ check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 	bool check_qcbor_##dtype(const char   *fname,                          \
 				 qcbor_item_t *qcbor_item_ptr, dtype *dstp)    \
 	{                                                                      \
-		if (strncmp(qcbor_item_ptr->label.string.ptr, fname,           \
-			    qcbor_item_ptr->label.string.len) == 0) {          \
+		if ((qcbor_item_ptr->label.string.len != 0U) &&                \
+		    (strncmp(qcbor_item_ptr->label.string.ptr, fname,          \
+			     qcbor_item_ptr->label.string.len) == 0)) {        \
 			qcbor_item_conv_uint64(qcbor_item_ptr);                \
 			if (qcbor_item_ptr->uDataType == QCBOR_TYPE_UINT64) {  \
 				*dstp = (dtype)qcbor_item_ptr->val.uint64;     \

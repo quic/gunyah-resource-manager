@@ -36,12 +36,11 @@
 #include <vm_config_struct.h>
 #include <vm_mgnt.h>
 
-#include "libfdt_env.h"
-#include "vm_parser_rtc.h"
-
-// Must be last
 #include <platform_vm_config_parser.h>
 #include <vm_config_parser.h>
+
+#include "libfdt_env.h"
+#include "vm_parser_rtc.h"
 
 #define LABEL_ID "qcom,label"
 
@@ -62,7 +61,7 @@ parse_memory(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	     const ctx_t *ctx);
 
 static listener_return_t
-parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs,
 		const ctx_t *ctx);
 
 static listener_return_t
@@ -281,104 +280,11 @@ warn_if_not_phys(const void *fdt, int node_ofs, const ctx_t *ctx)
 }
 
 static listener_return_t
-parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
-		const ctx_t *ctx)
+parse_vm_info(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs)
 {
 	listener_return_t ret = RET_CLAIMED;
 
-	int len = 0;
-
-	warn_if_not_phys(fdt, node_ofs, ctx);
-
-	// get vm type
-	const char *vm_type =
-		fdt_stringlist_get(fdt, node_ofs, "vm-type", 0, NULL);
-	if (vm_type != NULL) {
-		// default is aarch64, refactor it when have more types
-		if (strcmp(vm_type, "aarch64-guest") == 0) {
-			vd->vm_type = VM_CONFIG_VM_TYPE_AARCH64_GUEST;
-		}
-	}
-
-	const char *os_type =
-		fdt_stringlist_get(fdt, node_ofs, "os-type", 0, NULL);
-	if (os_type != NULL) {
-		if (strcmp(os_type, "linux") == 0) {
-			vd->os_type = VM_CONFIG_OS_TYPE_LINUX;
-		}
-	}
-
-	int vm_attrs_count = fdt_stringlist_count(fdt, node_ofs, "vm-attrs");
-	if (vm_attrs_count == -FDT_ERR_BADVALUE) {
-		(void)printf("Error: malformed stringlist in vm-attrs\n");
-		ret = RET_ERROR;
-		goto out;
-	}
-	for (int i = 0; i < vm_attrs_count; i++) {
-		const char *vm_attr =
-			fdt_stringlist_get(fdt, node_ofs, "vm-attrs", i, NULL);
-		if (strcmp(vm_attr, "ras-error-handler") == 0) {
-			vd->ras_error_handler = true;
-		} else if (strcmp(vm_attr, "amu-counting-disabled") == 0) {
-			vd->amu_counting_disabled = true;
-		} else if (strcmp(vm_attr, "crash-fatal") == 0) {
-			vd->crash_fatal = true;
-			// Crash-fatal implies no-shutdown.
-			vd->no_shutdown = true;
-			// Crash-fatal implies reset is not allowed.
-			vd->no_reset = true;
-		} else if (strcmp(vm_attr, "context-dump") == 0) {
-			vd->context_dump = true;
-		} else if (strcmp(vm_attr, "no-shutdown") == 0) {
-			vd->no_shutdown = true;
-		} else if (strcmp(vm_attr, "no-reset") == 0) {
-			vd->no_reset = true;
-		} else {
-			(void)printf("Warning: Unknown VM attribute \"%s\"\n",
-				     vm_attr);
-		}
-	}
-
-	const char *kernel_entry_segment = fdt_stringlist_get(
-		fdt, node_ofs, "kernel-entry-segment", 0, NULL);
-	if (kernel_entry_segment != NULL) {
-		vd->kernel_entry_segment = strdup(kernel_entry_segment);
-		if (vd->kernel_entry_segment == NULL) {
-			(void)printf(
-				"Error: out of memory copying entry segment\n");
-			ret = RET_ERROR;
-			goto out;
-		}
-	}
-
-	if (fdt_getprop_num(fdt, node_ofs, "kernel-entry-offset",
-			    ctx->addr_cells, &vd->kernel_entry_offset) != OK) {
-		// kernel-entry-offset is unset, use the default
-	}
-
-	// get vendor name
-	const char *vendor_name =
-		fdt_stringlist_get(fdt, node_ofs, "vendor", 0, NULL);
-	if (vendor_name != NULL) {
-		vd->vendor_name = strdup(vendor_name);
-		if (vd->vendor_name == NULL) {
-			(void)printf(
-				"Error: out of memory copying vendor name\n");
-			ret = RET_ERROR;
-			goto out;
-		}
-	}
-
-	// Get VM/image name
-	const char *image_name =
-		fdt_stringlist_get(fdt, node_ofs, "image-name", 0, &len);
-	if ((image_name != NULL) && (len < VM_MAX_NAME_LEN)) {
-		strlcpy(vd->vm_name, image_name, VM_MAX_NAME_LEN);
-	} else {
-		(void)printf("Error: image name missing or too long\n");
-		ret = RET_ERROR;
-		goto out;
-	}
+	int32_t len = 0;
 
 	// Get VM URI
 	const char *vm_uri =
@@ -412,6 +318,172 @@ parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	} else {
 		(void)memset(vd->vm_guid, 0, sizeof(vd->vm_guid));
 		vd->has_guid = false;
+	}
+
+out:
+	return ret;
+}
+
+static listener_return_t
+get_vendor_and_vm_name(vm_config_parser_data_t *vd, const void *fdt,
+		       int32_t node_ofs)
+{
+	listener_return_t ret = RET_CLAIMED;
+
+	int32_t len = 0;
+
+	// get vendor name
+	const char *vendor_name =
+		fdt_stringlist_get(fdt, node_ofs, "vendor", 0, NULL);
+	if (vendor_name != NULL) {
+		vd->vendor_name = strdup(vendor_name);
+		if (vd->vendor_name == NULL) {
+			(void)printf(
+				"Error: out of memory copying vendor name\n");
+			ret = RET_ERROR;
+			goto out;
+		}
+	}
+
+	// Get VM/image name
+	const char *image_name =
+		fdt_stringlist_get(fdt, node_ofs, "image-name", 0, &len);
+	if ((image_name != NULL) && (len < VM_MAX_NAME_LEN)) {
+		strlcpy(vd->vm_name, image_name, VM_MAX_NAME_LEN);
+	} else {
+		(void)printf("Error: image name missing or too long\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+out:
+	return ret;
+}
+
+static listener_return_t
+parse_kernel_image_info(vm_config_parser_data_t *vd, const void *fdt,
+			int32_t node_ofs, const ctx_t *ctx)
+{
+	listener_return_t ret = RET_CLAIMED;
+
+	const char *kernel_entry_segment = fdt_stringlist_get(
+		fdt, node_ofs, "kernel-entry-segment", 0, NULL);
+	if (kernel_entry_segment != NULL) {
+		vd->kernel_entry_segment = strdup(kernel_entry_segment);
+		if (vd->kernel_entry_segment == NULL) {
+			(void)printf(
+				"Error: out of memory copying entry segment\n");
+			ret = RET_ERROR;
+			goto out;
+		}
+	}
+
+	if (fdt_getprop_num(fdt, node_ofs, "kernel-entry-offset",
+			    ctx->addr_cells, &vd->kernel_entry_offset) != OK) {
+		// kernel-entry-offset is unset, use the default
+	}
+
+out:
+	return ret;
+}
+
+static listener_return_t
+parse_vm_attrs(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs)
+{
+	listener_return_t ret = RET_CLAIMED;
+
+	int vm_attrs_count = fdt_stringlist_count(fdt, node_ofs, "vm-attrs");
+	if (vm_attrs_count == -FDT_ERR_BADVALUE) {
+		(void)printf("Error: malformed stringlist in vm-attrs\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+	for (int i = 0; i < vm_attrs_count; i++) {
+		const char *vm_attr =
+			fdt_stringlist_get(fdt, node_ofs, "vm-attrs", i, NULL);
+		if (strcmp(vm_attr, "ras-error-handler") == 0) {
+			vd->ras_error_handler = true;
+		} else if (strcmp(vm_attr, "amu-counting-disabled") == 0) {
+			vd->amu_counting_disabled = true;
+		} else if (strcmp(vm_attr, "crash-fatal") == 0) {
+			vd->crash_fatal = true;
+			// Crash-fatal implies no-shutdown.
+			vd->no_shutdown = true;
+			// Crash-fatal implies reset is not allowed.
+			vd->no_reset = true;
+		} else if (strcmp(vm_attr, "context-dump") == 0) {
+			vd->context_dump = true;
+		} else if (strcmp(vm_attr, "no-shutdown") == 0) {
+			vd->no_shutdown = true;
+		} else if (strcmp(vm_attr, "no-reset") == 0) {
+			vd->no_reset = true;
+		}
+#if defined(GUEST_RAM_DUMP_ENABLE) && GUEST_RAM_DUMP_ENABLE
+		else if (strcmp(vm_attr, "guest-ram-dump") == 0) {
+			// get guest ram dump status
+			vd->guest_ram_dump = true;
+		}
+#endif // GUEST_RAM_DUMP_ENABLE
+#if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
+		else if (strcmp(vm_attr, "insecure-console") == 0) {
+			vd->insecure_console = true;
+			(void)printf("VM has insecure console\n");
+		}
+#endif // PLATFORM_ALLOW_INSECURE_CONSOLE
+		else {
+			(void)printf("Warning: Unknown VM attribute \"%s\"\n",
+				     vm_attr);
+		}
+	}
+
+out:
+	return ret;
+}
+
+static listener_return_t
+parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs,
+		const ctx_t *ctx)
+{
+	listener_return_t ret = RET_CLAIMED;
+
+	warn_if_not_phys(fdt, node_ofs, ctx);
+
+	// get vm type
+	const char *vm_type =
+		fdt_stringlist_get(fdt, node_ofs, "vm-type", 0, NULL);
+	if (vm_type != NULL) {
+		// default is aarch64, refactor it when have more types
+		if (strcmp(vm_type, "aarch64-guest") == 0) {
+			vd->vm_type = VM_CONFIG_VM_TYPE_AARCH64_GUEST;
+		}
+	}
+
+	const char *os_type =
+		fdt_stringlist_get(fdt, node_ofs, "os-type", 0, NULL);
+	if (os_type != NULL) {
+		if (strcmp(os_type, "linux") == 0) {
+			vd->os_type = VM_CONFIG_OS_TYPE_LINUX;
+		}
+	}
+
+	ret = parse_vm_attrs(vd, fdt, node_ofs);
+	if (ret != RET_CLAIMED) {
+		goto out;
+	}
+
+	ret = parse_kernel_image_info(vd, fdt, node_ofs, ctx);
+	if (ret != RET_CLAIMED) {
+		goto out;
+	}
+
+	ret = get_vendor_and_vm_name(vd, fdt, node_ofs);
+	if (ret != RET_CLAIMED) {
+		goto out;
+	}
+
+	ret = parse_vm_info(vd, fdt, node_ofs);
+	if (ret != RET_CLAIMED) {
+		goto out;
 	}
 
 	// parse io memory range
@@ -1117,6 +1189,14 @@ parse_virtio_mmio(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		cfg.dma_base = 0U;
 	}
 
+	if (fdt_getprop_u32(fdt, node_ofs, "virtio,device-type",
+			    &cfg.device_type) != OK) {
+		cfg.device_type	      = VIRTIO_DEVICE_TYPE_INVALID;
+		cfg.valid_device_type = false;
+	} else {
+		cfg.valid_device_type = true;
+	}
+
 	ret = parse_memory_node(fdt, node_ofs, ctx, &cfg.general.label,
 				&cfg.mem_base_ipa, &cfg.need_allocate, NULL);
 	if (ret != RET_CLAIMED) {
@@ -1700,6 +1780,11 @@ alloc_parser_data(const vm_config_parser_params_t *params)
 		goto err_out;
 	}
 
+	rm_error_t rm_err = platform_alloc_parser_data(ret);
+	if (rm_err != RM_OK) {
+		goto err_out;
+	}
+
 	ret->mem_base_ipa = PLATFORM_SVM_IPA_BASE;
 	ret->mem_size_min = 0U;
 	ret->mem_size_max = PLATFORM_SVM_IPA_SIZE;
@@ -1839,6 +1924,8 @@ free_parser_data(vm_config_parser_data_t *vd)
 	if (vd->affinity_map != NULL) {
 		free(vd->affinity_map);
 	}
+
+	platform_free_parser_data(vd);
 
 	free(vd);
 
@@ -2020,13 +2107,18 @@ parse_iomem_opt(const void *fdt, int node_ofs, iomem_data_t *cfg)
 	const fdt32_t *sgl_entry = (const fdt32_t *)fdt_getprop(
 		fdt, node_ofs, "qcom,rm_sglist", &len);
 	if (sgl_entry != NULL) {
-		if (((size_t)len % sizeof(cfg->rm_sglist[0])) != 0U) {
+		const count_t addr_cells  = 2U;
+		const count_t size_cells  = 2U;
+		const count_t entry_cells = addr_cells + size_cells;
+		size_t	      entry_size  = entry_cells * sizeof(fdt32_t);
+
+		if (((size_t)len % entry_size) != 0U) {
 			(void)printf("Error: invalid qcom,rm_sglist value\n");
 			ret = RET_ERROR;
 			goto out;
 		}
 
-		size_t entries = (size_t)len / sizeof(cfg->rm_sglist[0]);
+		size_t entries = (size_t)len / entry_size;
 
 		cfg->rm_sglist = calloc(entries, sizeof(cfg->rm_sglist[0]));
 		if (cfg->rm_sglist == NULL) {
@@ -2036,12 +2128,11 @@ parse_iomem_opt(const void *fdt, int node_ofs, iomem_data_t *cfg)
 		cfg->rm_sglist_len = entries;
 
 		for (index_t i = 0; i < entries; i++) {
-			cfg->rm_sglist[i].ipa = fdt_read_num(sgl_entry, 2U);
-			cfg->rm_sglist[i].size =
-				fdt_read_num(sgl_entry + 2, 2U);
-
-			// next sgl entry
-			sgl_entry += 4;
+			cfg->rm_sglist[i].ipa = fdt_read_num(
+				&sgl_entry[i * entry_cells], addr_cells);
+			cfg->rm_sglist[i].size = fdt_read_num(
+				&sgl_entry[(i * entry_cells) + addr_cells],
+				size_cells);
 		}
 	}
 

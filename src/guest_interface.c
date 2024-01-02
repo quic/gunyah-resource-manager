@@ -1214,6 +1214,292 @@ gunyah_hyp_vcpu_set_timeslice(cap_id_t cap_id, nanoseconds_t timeslice)
 	return (error_t)out_x0_;
 }
 
+gunyah_hyp_partition_create_virtio_mmio_result_t
+gunyah_hyp_partition_create_virtio_mmio(cap_id_t src_partition, cap_id_t cspace)
+{
+	const register uint64_t in_x0_ __asm__("x0") =
+		(uint64_t)(src_partition);
+	const register uint64_t in_x1_ __asm__("x1") = (uint64_t)(cspace);
+	register uint64_t	in_x2_ __asm__("x2") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+	register uint64_t	out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6048"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_partition_create_virtio_mmio_result_t){
+		.error	 = (error_t)out_x0_,
+		.new_cap = (cap_id_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_virtio_mmio_configure(cap_id_t virtio_mmio, cap_id_t memextent,
+				 count_t vqs_num, virtio_option_flags_t flags,
+				 virtio_device_type_t device_type)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint64_t	in_x1_ __asm__("x1") = (uint64_t)(memextent);
+	register uint32_t	in_x2_ __asm__("x2") = (uint32_t)(vqs_num);
+	register uint64_t	in_x3_ __asm__("x3") = (uint64_t)(flags.bf[0]);
+	register uint32_t	in_x4_ __asm__("x4") = (uint32_t)(device_type);
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6049"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_)
+			 : "r"(in_x0_)
+			 : "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
+			   "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_backend_bind_virq(cap_id_t virtio_mmio, cap_id_t vic,
+					 virq_t virq)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint64_t	in_x1_ __asm__("x1") = (uint64_t)(vic);
+	register uint32_t	in_x2_ __asm__("x2") = (uint32_t)(virq);
+	register uint64_t	in_x3_ __asm__("x3") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x604a"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_backend_unbind_virq(cap_id_t virtio_mmio)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint64_t	in_x1_ __asm__("x1") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x604b"
+			 : "=r"(out_x0_), "+r"(in_x1_)
+			 : "r"(in_x0_)
+			 : "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9",
+			   "x10", "x11", "x12", "x13", "x14", "x15", "x16",
+			   "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_frontend_bind_virq(cap_id_t virtio_mmio, cap_id_t vic,
+					  virq_t virq)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint64_t	in_x1_ __asm__("x1") = (uint64_t)(vic);
+	register uint32_t	in_x2_ __asm__("x2") = (uint32_t)(virq);
+	register uint64_t	in_x3_ __asm__("x3") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x604c"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_frontend_unbind_virq(cap_id_t virtio_mmio)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint64_t	in_x1_ __asm__("x1") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x604d"
+			 : "=r"(out_x0_), "+r"(in_x1_)
+			 : "r"(in_x0_)
+			 : "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9",
+			   "x10", "x11", "x12", "x13", "x14", "x15", "x16",
+			   "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_backend_assert_virq(cap_id_t virtio_mmio,
+					   uint32_t interrupt_status)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint32_t in_x1_ __asm__("x1") = (uint32_t)(interrupt_status);
+	register uint64_t in_x2_ __asm__("x2") = 0x0U;
+	register uint32_t out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x604e"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_backend_set_dev_features(cap_id_t virtio_mmio,
+						uint32_t sel, uint32_t dev_feat)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint32_t	in_x1_ __asm__("x1") = (uint32_t)(sel);
+	register uint32_t	in_x2_ __asm__("x2") = (uint32_t)(dev_feat);
+	register uint64_t	in_x3_ __asm__("x3") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x604f"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_backend_set_queue_num_max(cap_id_t virtio_mmio,
+						 uint32_t sel,
+						 uint32_t queue_num_max)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint32_t	in_x1_ __asm__("x1") = (uint32_t)(sel);
+	register uint32_t in_x2_ __asm__("x2") = (uint32_t)(queue_num_max);
+	register uint64_t in_x3_ __asm__("x3") = 0x0U;
+	register uint32_t out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6050"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_virtio_mmio_backend_get_drv_features_result_t
+gunyah_hyp_virtio_mmio_backend_get_drv_features(cap_id_t virtio_mmio,
+						uint32_t sel)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	const register uint32_t in_x1_ __asm__("x1") = (uint32_t)(sel);
+	register uint64_t	in_x2_ __asm__("x2") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+	register uint32_t	out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6051"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_virtio_mmio_backend_get_drv_features_result_t){
+		.error	  = (error_t)out_x0_,
+		.drv_feat = (uint32_t)out_x1_,
+	};
+}
+
+gunyah_hyp_virtio_mmio_backend_get_queue_info_result_t
+gunyah_hyp_virtio_mmio_backend_get_queue_info(cap_id_t virtio_mmio,
+					      uint32_t sel)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	const register uint32_t in_x1_ __asm__("x1") = (uint32_t)(sel);
+	const register uint64_t in_x2_ __asm__("x2") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+	register uint32_t	out_x1_ __asm__("x1");
+	register uint32_t	out_x2_ __asm__("x2");
+	register uint64_t	out_x3_ __asm__("x3");
+	register uint64_t	out_x4_ __asm__("x4");
+	register uint64_t	out_x5_ __asm__("x5");
+
+	__asm__ volatile("hvc 0x6052"
+			 : "=r"(out_x0_), "=r"(out_x1_), "=r"(out_x2_),
+			   "=r"(out_x3_), "=r"(out_x4_), "=r"(out_x5_)
+			 : "r"(in_x0_), "r"(in_x1_), "r"(in_x2_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_virtio_mmio_backend_get_queue_info_result_t){
+		.error	     = (error_t)out_x0_,
+		.queue_num   = (uint32_t)out_x1_,
+		.queue_ready = (uint32_t)out_x2_,
+		.queue_desc  = (uint64_t)out_x3_,
+		.queue_drv   = (uint64_t)out_x4_,
+		.queue_dev   = (uint64_t)out_x5_,
+	};
+}
+
+gunyah_hyp_virtio_mmio_backend_get_notification_result_t
+gunyah_hyp_virtio_mmio_backend_get_notification(cap_id_t virtio_mmio)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	const register uint64_t in_x1_ __asm__("x1") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+	register uint64_t	out_x1_ __asm__("x1");
+	register uint64_t	out_x2_ __asm__("x2");
+
+	__asm__ volatile("hvc 0x6053"
+			 : "=r"(out_x0_), "=r"(out_x1_), "=r"(out_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_virtio_mmio_backend_get_notification_result_t){
+		.error	    = (error_t)out_x0_,
+		.vqs_bitmap = (register_t)out_x1_,
+		.reason	    = virtio_mmio_notify_reason_cast((uint64_t)out_x2_),
+	};
+}
+
+error_t
+gunyah_hyp_virtio_mmio_backend_acknowledge_reset(cap_id_t virtio_mmio)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint64_t	in_x1_ __asm__("x1") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6054"
+			 : "=r"(out_x0_), "+r"(in_x1_)
+			 : "r"(in_x0_)
+			 : "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9",
+			   "x10", "x11", "x12", "x13", "x14", "x15", "x16",
+			   "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_mmio_backend_update_status(cap_id_t virtio_mmio, uint32_t val)
+{
+	const register uint64_t in_x0_ __asm__("x0") = (uint64_t)(virtio_mmio);
+	register uint32_t	in_x1_ __asm__("x1") = (uint32_t)(val);
+	register uint64_t	in_x2_ __asm__("x2") = 0x0U;
+	register uint32_t	out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6055"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
 error_t
 gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source)
 {
@@ -1358,6 +1644,53 @@ gunyah_hyp_vcpu_unbind_virq(cap_id_t vcpu, vcpu_virq_type_t virq_type)
 			 : "r"(in_x0_)
 			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
 			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_input_configure(cap_id_t virtio_mmio_cap, uint64_t devids,
+				  uint32_t prop_bits, uint32_t num_evtypes,
+				  uint32_t num_absaxes)
+{
+	const register uint64_t in_x0_ __asm__("x0") =
+		(uint64_t)(virtio_mmio_cap);
+	register uint64_t in_x1_ __asm__("x1") = (uint64_t)(devids);
+	register uint32_t in_x2_ __asm__("x2") = (uint32_t)(prop_bits);
+	register uint32_t in_x3_ __asm__("x3") = (uint32_t)(num_evtypes);
+	register uint32_t in_x4_ __asm__("x4") = (uint32_t)(num_absaxes);
+	register uint64_t in_x5_ __asm__("x5") = 0x0U;
+	register uint32_t out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x605e"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
+			 : "r"(in_x0_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_input_set_data(cap_id_t virtio_mmio_cap, uint32_t sel,
+				 uint32_t subsel, uint32_t size, vmaddr_t data)
+{
+	const register uint64_t in_x0_ __asm__("x0") =
+		(uint64_t)(virtio_mmio_cap);
+	register uint32_t in_x1_ __asm__("x1") = (uint32_t)(sel);
+	register uint32_t in_x2_ __asm__("x2") = (uint32_t)(subsel);
+	register uint32_t in_x3_ __asm__("x3") = (uint32_t)(size);
+	register uint64_t in_x4_ __asm__("x4") = (uint64_t)(data);
+	register uint64_t in_x5_ __asm__("x5") = 0x0U;
+	register uint32_t out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x605f"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
+			 : "r"(in_x0_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
 
 	return (error_t)out_x0_;
 }

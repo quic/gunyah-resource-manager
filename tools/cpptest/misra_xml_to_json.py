@@ -42,13 +42,20 @@ severity_map = {
 }
 
 deviation_map = {
+    # Deviation because the behaviour proscribed by the rule is exactly the
+    # intended behaviour of assert(): it prints the unexpanded expression.
     'MISRAC2012-RULE_20_12-a': [
         (None, re.compile(r"parameter of potential macro 'assert'")),
     ],
     'MISRAC2012-RULE_21_6-a': [
         (None, re.compile(r"Usage of 'printf' function")),
     ],
+    # False positives due to __c11 builtins taking int memory order arguments
+    # instead of enum in the Clang implementation.
     'MISRAC2012-RULE_10_3-b': [
+        (None, re.compile(r"number '1'.*'essentially Enum'.*"
+                          r"'__c11_atomic_(thread|signal)_fence'.*"
+                          r"'essentially signed'")),
         (None, re.compile(r"number '2'.*'essentially Enum'.*"
                           r"'__c11_atomic_load'.*'essentially signed'")),
         (None, re.compile(r"number '3'.*'essentially Enum'.*"
@@ -57,8 +64,28 @@ deviation_map = {
         (None, re.compile(r"number '[45]'.*'essentially Enum'.*"
                           r"'__c11_atomic_compare_exchange_(strong|weak)'.*"
                           r"'essentially signed'")),
-    ]
-
+    ],
+    'MISRAC2012-RULE_8_13-a': [
+        # False positives due to the could-be-const check not understanding
+        # that an inline assembly output constraint that dereferences a
+        # pointer is a write to that pointer.
+        (re.compile(r'^src/guest_accessors\.c$'),
+         re.compile(r'parameter "b1"')),
+    ],
+    # False positive due to a builtin sizeof variant that does not evaluate its
+    # argument, so there is no uninitialised use.
+    'MISRAC2012-RULE_9_1-a': [
+        (None, re.compile(r'passed to "__builtin_object_size"')),
+    ],
+    'MISRAC2012-RULE_1_3-b': [
+        (None, re.compile(r'passed to "__builtin_object_size"')),
+    ],
+    # Compliance with rule 21.25 would have a significant performance impact.
+    # All existing uses have been thoroughly analysed and tested, so we will
+    # seek a project-wide deviation for this rule.
+    'MISRAC2012-RULE_21_25-a': [
+        (None, None),
+    ],
 }
 
 

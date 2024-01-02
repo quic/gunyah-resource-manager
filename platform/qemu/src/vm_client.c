@@ -20,7 +20,6 @@
 #include <vm_config.h>
 #include <vm_config_struct.h>
 
-// Must be last
 #include <platform_vm_config_parser.h>
 
 error_t

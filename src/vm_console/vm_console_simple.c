@@ -134,6 +134,7 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 {
 	rm_error_t    err;
 	vm_console_t *console = get_console(requester, target);
+	vmid_t	      self    = (target == 0U) ? requester : target;
 
 	if (console == NULL) {
 		err = RM_ERROR_ARGUMENT_INVALID;
@@ -157,7 +158,7 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 		goto out;
 	}
 
-	if (platform_get_security_state()) {
+	if (!vm_config_check_console_allowed(self)) {
 		err = RM_OK;
 		goto out;
 	}
@@ -195,6 +196,7 @@ handle_flush(vmid_t requester, uint16_t seq_num, vmid_t target)
 {
 	rm_error_t    err     = RM_OK;
 	vm_console_t *console = get_console(requester, target);
+	vmid_t	      self    = (target == 0U) ? requester : target;
 
 	if (console == NULL) {
 		err = RM_ERROR_ARGUMENT_INVALID;
@@ -212,8 +214,9 @@ handle_flush(vmid_t requester, uint16_t seq_num, vmid_t target)
 		goto out;
 	}
 
-	if (platform_get_security_state()) {
+	if (!vm_config_check_console_allowed(self)) {
 		err = RM_OK;
+		goto out;
 	}
 
 	// Chars are sent immediately on write, there is nothing to flush.

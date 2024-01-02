@@ -38,7 +38,6 @@
 #include <platform.h>
 #include <platform_dt.h>
 #include <platform_vm_config.h>
-#include <platform_vm_config_parser.h>
 #include <random.h>
 #include <rm-rpc-fifo.h>
 #include <rm-rpc.h>
@@ -50,6 +49,8 @@
 #include <vm_mgnt.h>
 #include <vm_mgnt_message.h>
 #include <vm_vcpu.h>
+
+#include <platform_vm_config_parser.h>
 
 // Late include
 #include <vm_config_parser.h>
@@ -638,6 +639,59 @@ out:
 }
 
 static error_t
+vdev_node_add_compatible_string(dto_t *dto, vmid_t vmid, label_t label)
+{
+	error_t ret = OK;
+
+	vm_t *cur_vm = vm_lookup(vmid);
+	assert(cur_vm != NULL);
+	assert(cur_vm->vm_config != NULL);
+
+	count_t compatible_cnt = 0U;
+
+	const char *compatibles[VDEVICE_MAX_PUSH_COMPATIBLES];
+
+	vdevice_node_t *node = NULL;
+	loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
+	{
+		if (!node->export_to_dt) {
+			continue;
+		}
+
+		if (node->type == VDEV_SHM) {
+			struct vdevice_shm *cfg =
+				(struct vdevice_shm *)node->config;
+			if (cfg->label == label) {
+				compatible_cnt = node->push_compatible_num;
+				memcpy(&compatibles, &node->push_compatible,
+				       sizeof(node->push_compatible));
+				break;
+			}
+		} else if (node->type == VDEV_VIRTIO_MMIO) {
+			struct vdevice_virtio_mmio *cfg =
+				(struct vdevice_virtio_mmio *)node->config;
+			if (cfg->label == label) {
+				compatible_cnt = node->push_compatible_num;
+				memcpy(&compatibles, &node->push_compatible,
+				       sizeof(node->push_compatible));
+				break;
+			}
+		} else {
+			// no other vdevice types to be considered
+		}
+	}
+
+	if (compatible_cnt == 0U) {
+		(void)printf("No vdevice found with label %x\n", label);
+	} else {
+		ret = dto_property_add_stringlist(dto, "compatible", compatibles,
+						  compatible_cnt);
+	}
+
+	return ret;
+}
+
+static error_t
 create_reserved_buffer_node(dto_t *dto, vmid_t vmid, memparcel_t *mp,
 			    count_t root_addr_cells, count_t root_size_cells)
 {
@@ -741,56 +795,12 @@ create_reserved_buffer_node(dto_t *dto, vmid_t vmid, memparcel_t *mp,
 
 	memparcel_set_phandle(mp, vmid, phandle, false);
 
-	// get pushed-compaitbles and add it
+	// get pushed-compatibles and add it
 	// Find the SHM node
-	vm_t *cur_vm = vm_lookup(vmid);
-	assert(cur_vm != NULL);
-	assert(cur_vm->vm_config != NULL);
-
-	count_t compatible_cnt = 0U;
-
-	const char *compatibles[VDEVICE_MAX_PUSH_COMPATIBLES];
-
-	vdevice_node_t *node = NULL;
-	loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
-	{
-		if (!node->export_to_dt) {
-			continue;
-		}
-
-		if (node->type == VDEV_SHM) {
-			struct vdevice_shm *cfg =
-				(struct vdevice_shm *)node->config;
-			if (cfg->label == label) {
-				compatible_cnt = node->push_compatible_num;
-				memcpy(&compatibles, &node->push_compatible,
-				       sizeof(node->push_compatible));
-				break;
-			}
-#if defined(CAP_RIGHTS_VIRTIO_MMIO_ALL)
-		} else if (node->type == VDEV_VIRTIO_MMIO) {
-			struct vdevice_virtio_mmio *cfg =
-				(struct vdevice_virtio_mmio *)node->config;
-			if (cfg->label == label) {
-				compatible_cnt = node->push_compatible_num;
-				memcpy(&compatibles, &node->push_compatible,
-				       sizeof(node->push_compatible));
-				break;
-			}
-#endif
-		} else {
-			// no other vdevice types to be considered
-		}
-	}
-
-	if (compatible_cnt == 0U) {
-		(void)printf("No vdevice found with label %x\n", label);
-		ret = ERROR_DENIED;
+	ret = vdev_node_add_compatible_string(dto, vmid, label);
+	if (ret != OK) {
 		goto out_free_blob;
 	}
-
-	ret = dto_property_add_stringlist(dto, "compatible", compatibles,
-					  compatible_cnt);
 
 out_free_blob:
 	free(blob);
@@ -1788,10 +1798,8 @@ create_dt_nodes(dto_t *dto, vmid_t vmid)
 		} else if (node->type == VDEV_WATCHDOG) {
 			dto_err = dto_create_watchdog(node, dto);
 #endif
-#if defined(CAP_RIGHTS_VIRTIO_MMIO_ALL)
 		} else if (node->type == VDEV_VIRTIO_MMIO) {
 			dto_err = dto_create_virtio_mmio(node, dto, vmid);
-#endif
 		} else if (node->type == VDEV_IOMEM) {
 			// no need to add IOMEM node under hypervisor node
 			continue;
@@ -1856,12 +1864,7 @@ vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp)
 		}
 
 		if ((node->type == VDEV_SHM) ||
-#if defined(CAP_RIGHTS_VIRTIO_MMIO_ALL)
-		    || (node->type == VDEV_VIRTIO_MMIO)
-#else
-		    false
-#endif
-		) {
+		    (node->type == VDEV_VIRTIO_MMIO)) {
 			if (!need_allocate) {
 				if (!memparcel_is_shared(mp, vm->vmid)) {
 					ret = accept_memparcel_fixed(
@@ -1910,6 +1913,7 @@ process_image_memparcel(vm_t *vm)
 
 	sgl_entry_t sgl_accept[1U] = { { .ipa  = vm->vm_config->mem_ipa_base,
 					 .size = vm->mem_size } };
+	uint16_t    sgl_len	   = util_array_size(sgl_accept);
 
 	acl_entry_t acl[1U]	 = { { .vmid   = vm->vmid,
 				       .rights = MEM_RIGHTS_RWX } };
@@ -1917,7 +1921,10 @@ process_image_memparcel(vm_t *vm)
 	uint8_t	    accept_flags = MEM_ACCEPT_FLAG_DONE |
 			       MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
 
-	if (!vm->vm_config->mem_map_direct) {
+	if (vm->vm_config->mem_map_direct) {
+		// The memparcel may be scattered; ignore the SGL.
+		sgl_len = 0U;
+	} else {
 		accept_flags |= MEM_ACCEPT_FLAG_MAP_CONTIGUOUS;
 	}
 
@@ -1951,10 +1958,9 @@ process_image_memparcel(vm_t *vm)
 	}
 #endif
 
-	err = memparcel_accept(vm->vmid, util_array_size(acl),
-			       util_array_size(sgl_accept), 0U, acl, sgl_accept,
-			       NULL, 0U, vm->mem_mp_handle, 0U, MEM_TYPE_NORMAL,
-			       trans_type, accept_flags);
+	err = memparcel_accept(vm->vmid, util_array_size(acl), sgl_len, 0U, acl,
+			       sgl_accept, NULL, 0U, vm->mem_mp_handle, 0U,
+			       MEM_TYPE_NORMAL, trans_type, accept_flags);
 
 #if defined(CONFIG_DEBUG) && defined(PLATFORM_VM_DEBUG_ACCESS_ALLOWED) &&      \
 	PLATFORM_VM_DEBUG_ACCESS_ALLOWED
