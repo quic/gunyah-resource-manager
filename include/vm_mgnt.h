@@ -2,8 +2,11 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_MGNT_H_
+#define INCLUDE_VM_MGNT_H_
+
 // 16 byte, each costs 2 char, 4 char for '-', 1 for terminator
-#define VM_MAX_GUID_STRING_LEN (16 * 2 + 4 + 1)
+#define VM_MAX_GUID_STRING_LEN ((16 * 2) + 4 + 1)
 
 #define VM_MAX_CRASH_MSG_LEN 192
 
@@ -20,6 +23,7 @@ typedef enum {
 	VM_STATE_EXITED	     = 9,
 	VM_STATE_RESETTING   = 10,
 	VM_STATE_RESET	     = 11,
+	VM_STATE_DEFUNCT     = 12,
 } vm_state_t;
 
 typedef enum {
@@ -73,10 +77,6 @@ typedef enum {
 	VM_RESET_STAGE_CLEANUP_VM	  = 5,
 	VM_RESET_STAGE_COMPLETED	  = 6,
 } vm_reset_stage_t;
-
-struct address_range_allocator;
-typedef struct address_range_allocator address_range_allocator_t;
-typedef uint32_t		       address_range_tag_t;
 
 struct vm_mem_range;
 typedef struct vm_mem_range vm_mem_range_t;
@@ -140,6 +140,7 @@ struct vm_s {
 	vmaddr_t ipa_base;
 	paddr_t	 mem_base;
 	vmaddr_t mem_size;
+	bool	 mem_private;
 
 	uint32_t fw_mp_handle;
 	size_t	 fw_offset;
@@ -148,6 +149,9 @@ struct vm_s {
 	vmaddr_t vm_info_area_ipa;
 	size_t	 vm_info_area_size;
 	vmaddr_t vm_info_area_rm_ipa;
+
+	cap_id_t private_paged_ddr_me;
+	cap_id_t shared_paged_ddr_me;
 
 	cap_id_t owned_ddr_me;
 	cap_id_t owned_device_me;
@@ -160,7 +164,7 @@ struct vm_s {
 	uint32_t platform_subtype;
 	uint32_t hlos_subtype;
 
-	uint32_t signer_info;
+	uint32_t signer_info; /* platform enum vm_sign_t */
 
 	priority_t priority;
 	event_t	   wdog_bite_event;
@@ -175,9 +179,15 @@ struct vm_s {
 	bool no_shutdown;
 	bool no_reset;
 	bool qtee_registered;
+	bool debug_enabled;
+	bool crash_restart;
 
 	vm_reset_stage_t reset_stage;
 	event_t		 reset_event;
+
+	bool	    clean_shutdown;
+	bool	    restart_allowed;
+	exit_type_t exit_type;
 };
 
 #pragma clang diagnostic pop
@@ -216,14 +226,14 @@ vm_deregister_all_peers(vm_t *vm);
 vm_t *
 vm_lookup_by_id(const char *peer_id);
 
-rm_error_t
+void
 vm_mgnt_send_state(vm_t *vm);
 
 bool
 vm_mgnt_is_vm_sensitive(vmid_t vmid);
 
 bool
-vm_mgnt_state_change_valid(const vm_t *vm, vm_state_t vm_state);
+vm_mgnt_state_change_valid(const vm_t *vm, vm_state_t vm_new_state);
 
 rm_error_t
 vm_mgnt_register_event(vm_event_src_t event_src, event_t *event, void *data,
@@ -237,3 +247,9 @@ vm_mgnt_clear_crash_msg(vmid_t client_id);
 
 rm_error_t
 vm_mgnt_new_vm(vmid_t vmid, vmid_t owner);
+
+#else
+
+#error multiple include of vm_mgnt.h
+
+#endif

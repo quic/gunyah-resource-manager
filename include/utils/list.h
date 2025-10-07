@@ -2,111 +2,112 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef UTILS_LIST_H_
+#define UTILS_LIST_H_
+
 // append to the tail of the list
 #define list_append(type, headp, node, prefix)                                 \
 	do {                                                                   \
-		type **_headp = (headp);                                       \
-		type  *_node  = (node);                                        \
-		if (*_headp == NULL) {                                         \
-			_node->prefix##next = NULL;                            \
-			_node->prefix##prev = _node;                           \
-			*_headp		    = _node;                           \
+		if (*(headp) == NULL) {                                        \
+			(node)->prefix##next = NULL;                           \
+			(node)->prefix##prev = (node);                         \
+			*(headp)	     = (node);                         \
 		} else {                                                       \
-			type *_tail		= (*_headp)->prefix##prev;     \
-			_node->prefix##next	= NULL;                        \
-			_node->prefix##prev	= _tail;                       \
-			_tail->prefix##next	= _node;                       \
-			(*_headp)->prefix##prev = _node;                       \
+			type *tail__p		 = (*(headp))->prefix##prev;   \
+			(node)->prefix##next	 = NULL;                       \
+			(node)->prefix##prev	 = tail__p;                    \
+			tail__p->prefix##next	 = (node);                     \
+			(*(headp))->prefix##prev = (node);                     \
 		}                                                              \
 	} while (0)
 
-#define list_append_list(type, to_headp, from_headp, prefix)                   \
-	do {                                                                   \
-		type **_from_headp = (from_headp);                             \
-		type **_to_headp   = (to_headp);                               \
-		if (*_to_headp == NULL) {                                      \
-			*_to_headp = *_from_headp;                             \
-		} else {                                                       \
-			type *_from_tail       = (*_from_headp)->prefix##prev; \
-			type *_to_tail	       = (*_to_headp)->prefix##prev;   \
-			_to_tail->prefix##next = (*_from_headp);               \
-			(*_from_headp)->prefix##prev = _to_tail;               \
-			(*_to_headp)->prefix##prev   = _from_tail;             \
-		}                                                              \
+#define list_append_list(type, to_headp, from_headp, prefix)                    \
+	do {                                                                    \
+		if (*(to_headp) == NULL) {                                      \
+			*(to_headp) = *(from_headp);                            \
+		} else {                                                        \
+			type *from__tail       = (*(from_headp))->prefix##prev; \
+			type *to__tail	       = (*(to_headp))->prefix##prev;   \
+			to__tail->prefix##next = *(from_headp);                 \
+			(*(from_headp))->prefix##prev = to__tail;               \
+			(*(to_headp))->prefix##prev   = from__tail;             \
+		}                                                               \
 	} while (0)
 
 #define list_insert_head(type, headp, node, prefix)                            \
 	do {                                                                   \
-		type **_headp = (headp);                                       \
-		type  *_node  = (node);                                        \
-		if (*_headp == NULL) {                                         \
-			_node->prefix##next = NULL;                            \
-			_node->prefix##prev = _node;                           \
-			*_headp		    = _node;                           \
+		if (*(headp) == NULL) {                                        \
+			(node)->prefix##next = NULL;                           \
+			(node)->prefix##prev = (node);                         \
+			*(headp)	     = (node);                         \
 		} else {                                                       \
-			assert(*_headp != NULL);                               \
-			type *_tail		= (*_headp)->prefix##prev;     \
-			_node->prefix##prev	= _tail;                       \
-			_node->prefix##next	= *_headp;                     \
-			(*_headp)->prefix##prev = _node;                       \
-			*_headp			= _node;                       \
+			assert(*(headp) != NULL);                              \
+			type *tail__p		 = (*(headp))->prefix##prev;   \
+			(node)->prefix##prev	 = tail__p;                    \
+			(node)->prefix##next	 = *(headp);                   \
+			(*(headp))->prefix##prev = (node);                     \
+			*(headp)		 = (node);                     \
 		}                                                              \
 	} while (0)
 
 // insert after current node in list
 #define list_insert_after(type, headp, curr, node, prefix)                     \
 	do {                                                                   \
-		type **_headp = (headp);                                       \
-		type  *_curr  = (curr);                                        \
-		type  *_node  = (node);                                        \
-		assert(_curr != NULL);                                         \
-		type *_next	    = (_curr->prefix##next);                   \
-		_node->prefix##next = _next;                                   \
-		_node->prefix##prev = _curr;                                   \
-		_curr->prefix##next = _node;                                   \
-		if (_next != NULL) {                                           \
-			_next->prefix##prev = _node;                           \
+		assert((curr) != NULL);                                        \
+		type *c__next	     = (curr)->prefix##next;                   \
+		(node)->prefix##next = c__next;                                \
+		(node)->prefix##prev = (curr);                                 \
+		(curr)->prefix##next = (node);                                 \
+		if (c__next != NULL) {                                         \
+			c__next->prefix##prev = (node);                        \
 		}                                                              \
-		if (curr == (*_headp)->prefix##prev) {                         \
-			(*_headp)->prefix##prev = _node;                       \
+		if ((curr) == (*(headp))->prefix##prev) {                      \
+			(*(headp))->prefix##prev = (node);                     \
 		}                                                              \
 	} while (0)
 
 // remove specified node from the list
 #define list_remove(type, headp, node, prefix)                                 \
 	do {                                                                   \
-		type **_headp = (headp);                                       \
-		type  *_node  = (node);                                        \
-		type  *_next  = _node->prefix##next;                           \
-		type  *_prev  = _node->prefix##prev;                           \
-		if (_next) {                                                   \
-			_next->prefix##prev = _prev;                           \
+		type *n__next = (node)->prefix##next;                          \
+		type *n__prev = (node)->prefix##prev;                          \
+		assert(*(headp) != NULL);                                      \
+		assert(n__prev != NULL);                                       \
+		if (n__next != NULL) {                                         \
+			n__next->prefix##prev = n__prev;                       \
 		}                                                              \
-		if (_prev && (*_headp != _node)) {                             \
-			_prev->prefix##next = _next;                           \
-		}                                                              \
-		if (*_headp == _node) {                                        \
-			*_headp = (_prev == _node) ? NULL : _next;             \
-		} else if ((*_headp)->prefix##prev == _node) {                 \
-			(*_headp)->prefix##prev = _prev;                       \
+		if (*(headp) == (node)) {                                      \
+			*(headp) = (n__prev == (node)) ? NULL : n__next;       \
+		} else {                                                       \
+			n__prev->prefix##next = n__next;                       \
+			if ((*(headp))->prefix##prev == (node)) {              \
+				(*(headp))->prefix##prev = n__prev;            \
+			}                                                      \
 		}                                                              \
 	} while (0)
 
 // loop list
 #define loop_list(node, headp, prefix)                                         \
-	for (node = *headp; node != NULL; node = node->prefix##next)
+	for ((node) = *(headp); (node) != NULL; (node) = (node)->prefix##next)
 
 // loop list, allowed deletion in the loop
 #define loop_list_safe(node, next_node, headp, prefix)                         \
-	for (node		= *headp,                                      \
-	    next_node		= (node != NULL) ? node->prefix##next : NULL;  \
-	     node != NULL; node = next_node,                                   \
-	    next_node		= (node != NULL) ? node->prefix##next : NULL)
+	(node)	    = *(headp);                                                \
+	(next_node) = ((node) != NULL) ? (node)->prefix##next : NULL;          \
+	for (; (node) != NULL;                                                 \
+	     (node)	 = (next_node),                                        \
+	     (next_node) = ((node) != NULL) ? (node)->prefix##next : NULL)
 
 // check if list is empty
 #define is_empty(head)		     ((head) == NULL)
 #define is_first(node, head, prefix) ((node) == (head))
-#define is_last(node, prefix)	     (node->prefix##next == NULL)
+#define is_last(node, prefix)	     ((node)->prefix##next == NULL)
 #define list_tail(head, prefix)	     ((head)->prefix##prev)
 #define list_prev(node, head, prefix)                                          \
-	(is_first(node, head, prefix) ? NULL : node->prefix##prev)
+	(is_first((node), (head), (prefix)) ? NULL : (node)->prefix##prev)
+
+#else
+
+#error multiple include of utils/list.h
+
+#endif

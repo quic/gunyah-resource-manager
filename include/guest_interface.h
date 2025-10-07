@@ -77,6 +77,15 @@ typedef struct gunyah_hyp_partition_create_msgqueue_result {
 gunyah_hyp_partition_create_msgqueue_result_t
 gunyah_hyp_partition_create_msgqueue(cap_id_t src_partition, cap_id_t cspace);
 
+typedef struct gunyah_hyp_partition_create_watchdog_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_watchdog_result_t;
+
+gunyah_hyp_partition_create_watchdog_result_t
+gunyah_hyp_partition_create_watchdog(cap_id_t src_partition, cap_id_t cspace);
+
 typedef struct gunyah_hyp_partition_create_vic_result {
 	error_t _Alignas(register_t) error;
 	uint8_t _pad0[4]; // Pad for struct static zero initialization
@@ -211,10 +220,11 @@ error_t
 gunyah_hyp_cspace_configure(cap_id_t cspace, count_t max_caps);
 
 error_t
-gunyah_hyp_hwirq_bind_virq(cap_id_t hwirq, cap_id_t vic, virq_t virq);
+gunyah_hyp_vic_bind_virq(cap_id_t irq_obj, cap_id_t vic, virq_t virq,
+			 index_t index);
 
 error_t
-gunyah_hyp_hwirq_unbind_virq(cap_id_t hwirq);
+gunyah_hyp_vic_unbind_virq(cap_id_t irq_obj, index_t index);
 
 error_t
 gunyah_hyp_vic_configure(cap_id_t vic, count_t max_vcpus, count_t max_virqs,
@@ -286,7 +296,8 @@ gunyah_hyp_vpm_group_attach_vcpu(cap_id_t vpm_group, cap_id_t vcpu,
 				 index_t index);
 
 error_t
-gunyah_hyp_vcpu_set_affinity(cap_id_t cap_id, cpu_index_t affinity);
+gunyah_hyp_vcpu_set_affinity(cap_id_t cap_id, uint64_t arg1,
+			     vcpu_affinity_type_t type);
 
 error_t
 gunyah_hyp_cspace_attach_thread(cap_id_t cspace, cap_id_t thread);
@@ -299,6 +310,17 @@ typedef struct gunyah_hyp_trace_update_class_flags_result {
 
 gunyah_hyp_trace_update_class_flags_result_t
 gunyah_hyp_trace_update_class_flags(uint64_t set_flags, uint64_t clear_flags);
+
+error_t
+gunyah_hyp_watchdog_attach_vcpu(cap_id_t watchdog, cap_id_t vcpu);
+
+error_t
+gunyah_hyp_watchdog_bind_virq(cap_id_t watchdog, cap_id_t vic, virq_t virq,
+			      watchdog_bind_option_flags_t bind_options);
+
+error_t
+gunyah_hyp_watchdog_unbind_virq(cap_id_t		     watchdog,
+				watchdog_bind_option_flags_t unbind_options);
 
 error_t
 gunyah_hyp_vpm_group_bind_virq(cap_id_t vpm_group, cap_id_t vic, virq_t virq);
@@ -321,92 +343,93 @@ gunyah_hyp_vcpu_set_priority(cap_id_t cap_id, priority_t priority);
 error_t
 gunyah_hyp_vcpu_set_timeslice(cap_id_t cap_id, nanoseconds_t timeslice);
 
-typedef struct gunyah_hyp_partition_create_virtio_mmio_result {
+typedef struct gunyah_hyp_partition_create_virtio_backend_result {
 	error_t _Alignas(register_t) error;
 	uint8_t _pad0[4]; // Pad for struct static zero initialization
 	cap_id_t _Alignas(register_t) new_cap;
-} gunyah_hyp_partition_create_virtio_mmio_result_t;
+} gunyah_hyp_partition_create_virtio_backend_result_t;
 
-gunyah_hyp_partition_create_virtio_mmio_result_t
-gunyah_hyp_partition_create_virtio_mmio(cap_id_t src_partition,
-					cap_id_t cspace);
-
-error_t
-gunyah_hyp_virtio_mmio_configure(cap_id_t virtio_mmio, cap_id_t memextent,
-				 count_t vqs_num, virtio_option_flags_t flags,
-				 virtio_device_type_t device_type);
+gunyah_hyp_partition_create_virtio_backend_result_t
+gunyah_hyp_partition_create_virtio_backend(cap_id_t src_partition,
+					   cap_id_t cspace);
 
 error_t
-gunyah_hyp_virtio_mmio_backend_bind_virq(cap_id_t virtio_mmio, cap_id_t vic,
-					 virq_t virq);
+gunyah_hyp_virtio_mmio_configure(cap_id_t virtio_backend, cap_id_t memextent,
+				 count_t		       vqs_num,
+				 virtio_backend_option_flags_t flags,
+				 virtio_device_type_t	       device_type);
 
 error_t
-gunyah_hyp_virtio_mmio_backend_unbind_virq(cap_id_t virtio_mmio);
-
-error_t
-gunyah_hyp_virtio_mmio_frontend_bind_virq(cap_id_t virtio_mmio, cap_id_t vic,
+gunyah_hyp_virtio_mmio_frontend_bind_virq(cap_id_t virtio_backend, cap_id_t vic,
 					  virq_t virq);
 
 error_t
-gunyah_hyp_virtio_mmio_frontend_unbind_virq(cap_id_t virtio_mmio);
+gunyah_hyp_virtio_mmio_frontend_unbind_virq(cap_id_t virtio_backend);
 
 error_t
-gunyah_hyp_virtio_mmio_backend_assert_virq(cap_id_t virtio_mmio,
-					   uint32_t interrupt_status);
+gunyah_hyp_virtio_backend_bind_virq(cap_id_t virtio_backend, cap_id_t vic,
+				    virq_t virq);
 
 error_t
-gunyah_hyp_virtio_mmio_backend_set_dev_features(cap_id_t virtio_mmio,
-						uint32_t sel,
-						uint32_t dev_feat);
+gunyah_hyp_virtio_backend_unbind_virq(cap_id_t virtio_backend);
 
 error_t
-gunyah_hyp_virtio_mmio_backend_set_queue_num_max(cap_id_t virtio_mmio,
-						 uint32_t sel,
-						 uint32_t queue_num_max);
+gunyah_hyp_virtio_backend_notify(cap_id_t virtio_backend,
+				 uint32_t interrupt_status);
 
-typedef struct gunyah_hyp_virtio_mmio_backend_get_drv_features_result {
+error_t
+gunyah_hyp_virtio_backend_set_dev_features(cap_id_t virtio_backend,
+					   uint32_t feature_sel,
+					   uint32_t dev_feat);
+
+error_t
+gunyah_hyp_virtio_backend_set_queue_size_max(cap_id_t virtio_backend,
+					     uint32_t queue_sel,
+					     uint32_t queue_size_max);
+
+typedef struct gunyah_hyp_virtio_backend_get_drv_features_result {
 	error_t _Alignas(register_t) error;
 	uint8_t _pad0[4]; // Pad for struct static zero initialization
 	uint32_t _Alignas(register_t) drv_feat;
 	uint8_t _pad1[4]; // Pad for struct static zero initialization
-} gunyah_hyp_virtio_mmio_backend_get_drv_features_result_t;
+} gunyah_hyp_virtio_backend_get_drv_features_result_t;
 
-gunyah_hyp_virtio_mmio_backend_get_drv_features_result_t
-gunyah_hyp_virtio_mmio_backend_get_drv_features(cap_id_t virtio_mmio,
-						uint32_t sel);
+gunyah_hyp_virtio_backend_get_drv_features_result_t
+gunyah_hyp_virtio_backend_get_drv_features(cap_id_t virtio_backend,
+					   uint32_t feature_sel);
 
-typedef struct gunyah_hyp_virtio_mmio_backend_get_queue_info_result {
+typedef struct gunyah_hyp_virtio_backend_get_queue_info_result {
 	error_t _Alignas(register_t) error;
 	uint8_t _pad0[4]; // Pad for struct static zero initialization
-	uint32_t _Alignas(register_t) queue_num;
-	uint8_t _pad1[4]; // Pad for struct static zero initialization
-	uint32_t _Alignas(register_t) queue_ready;
-	uint8_t _pad2[4]; // Pad for struct static zero initialization
+	uint16_t _Alignas(register_t) queue_size;
+	uint8_t _pad1[6]; // Pad for struct static zero initialization
+	bool _Alignas(register_t) queue_ready;
+	uint8_t _pad2[7]; // Pad for struct static zero initialization
 	uint64_t _Alignas(register_t) queue_desc;
 	uint64_t _Alignas(register_t) queue_drv;
 	uint64_t _Alignas(register_t) queue_dev;
-} gunyah_hyp_virtio_mmio_backend_get_queue_info_result_t;
+} gunyah_hyp_virtio_backend_get_queue_info_result_t;
 
-gunyah_hyp_virtio_mmio_backend_get_queue_info_result_t
-gunyah_hyp_virtio_mmio_backend_get_queue_info(cap_id_t virtio_mmio,
-					      uint32_t sel);
+gunyah_hyp_virtio_backend_get_queue_info_result_t
+gunyah_hyp_virtio_backend_get_queue_info(cap_id_t virtio_backend,
+					 uint32_t queue_sel);
 
-typedef struct gunyah_hyp_virtio_mmio_backend_get_notification_result {
+typedef struct gunyah_hyp_virtio_backend_get_notification_result {
 	error_t _Alignas(register_t) error;
 	uint8_t _pad0[4]; // Pad for struct static zero initialization
 	register_t _Alignas(register_t) vqs_bitmap;
-	virtio_mmio_notify_reason_t _Alignas(register_t) reason;
-} gunyah_hyp_virtio_mmio_backend_get_notification_result_t;
+	virtio_backend_notify_reason_t _Alignas(register_t) reason;
+} gunyah_hyp_virtio_backend_get_notification_result_t;
 
-gunyah_hyp_virtio_mmio_backend_get_notification_result_t
-gunyah_hyp_virtio_mmio_backend_get_notification(cap_id_t virtio_mmio);
-
-error_t
-gunyah_hyp_virtio_mmio_backend_acknowledge_reset(cap_id_t virtio_mmio);
+gunyah_hyp_virtio_backend_get_notification_result_t
+gunyah_hyp_virtio_backend_get_notification(cap_id_t virtio_backend);
 
 error_t
-gunyah_hyp_virtio_mmio_backend_update_status(cap_id_t virtio_mmio,
-					     uint32_t val);
+gunyah_hyp_virtio_backend_acknowledge_reset(cap_id_t virtio_backend);
+
+error_t
+gunyah_hyp_virtio_backend_update_status(cap_id_t	virtio_backend,
+					virtio_status_t status);
 
 error_t
 gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source);
@@ -426,6 +449,10 @@ typedef struct gunyah_hyp_prng_get_entropy_result {
 
 gunyah_hyp_prng_get_entropy_result_t
 gunyah_hyp_prng_get_entropy(count_t num_bytes);
+
+error_t
+gunyah_hyp_watchdog_configure(cap_id_t		      watchdog,
+			      watchdog_option_flags_t watchdog_options);
 
 error_t
 gunyah_hyp_cspace_revoke_caps_from(cap_id_t src_cspace, cap_id_t master_cap);
@@ -455,18 +482,9 @@ error_t
 gunyah_hyp_vcpu_unbind_virq(cap_id_t vcpu, vcpu_virq_type_t virq_type);
 
 error_t
-gunyah_hyp_virtio_input_configure(cap_id_t virtio_mmio_cap, uint64_t devids,
-				  uint32_t prop_bits, uint32_t num_evtypes,
-				  uint32_t num_absaxes);
-
-error_t
-gunyah_hyp_virtio_input_set_data(cap_id_t virtio_mmio_cap, uint32_t sel,
-				 uint32_t subsel, uint32_t size, vmaddr_t data);
-
-error_t
-gunyah_hyp_addrspace_configure_vmmio(cap_id_t addrspace, vmaddr_t vbase,
+gunyah_hyp_addrspace_configure_range(cap_id_t addrspace, vmaddr_t vbase,
 				     size_t			    size,
-				     addrspace_vmmio_configure_op_t op);
+				     addrspace_range_configure_op_t op);
 
 error_t
 gunyah_hyp_memextent_donate(memextent_donate_options_t options, cap_id_t from,
@@ -476,6 +494,9 @@ error_t
 gunyah_hyp_addrspace_attach_vdevice(cap_id_t addrspace, cap_id_t vdevice,
 				    index_t index, vmaddr_t vbase, size_t size,
 				    addrspace_attach_vdevice_flags_t flags);
+
+error_t
+gunyah_hyp_watchdog_manage(cap_id_t watchdog, watchdog_manage_op_t operation);
 
 error_t
 gunyah_hyp_vcpu_register_write(cap_id_t vcpu, vcpu_register_set_t register_set,
@@ -492,7 +513,7 @@ typedef struct gunyah_hyp_vcpu_run_result {
 } gunyah_hyp_vcpu_run_result_t;
 
 gunyah_hyp_vcpu_run_result_t
-gunyah_hyp_vcpu_run(cap_id_t cap_id, register_t resume_data_0,
+gunyah_hyp_vcpu_run(cap_id_t vcpu, register_t resume_data_0,
 		    register_t resume_data_1, register_t resume_data_2);
 
 error_t
@@ -516,4 +537,36 @@ typedef struct gunyah_hyp_vcpu_run_check_result {
 } gunyah_hyp_vcpu_run_check_result_t;
 
 gunyah_hyp_vcpu_run_check_result_t
-gunyah_hyp_vcpu_run_check(cap_id_t cap_id);
+gunyah_hyp_vcpu_run_check(cap_id_t vcpu);
+
+typedef struct gunyah_hyp_addrspace_modify_pages_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	size_t _Alignas(register_t) size_remaining;
+} gunyah_hyp_addrspace_modify_pages_result_t;
+
+gunyah_hyp_addrspace_modify_pages_result_t
+gunyah_hyp_addrspace_modify_pages(cap_id_t addrspace, vmaddr_t vbase,
+				  size_t			 size,
+				  addrspace_modify_pages_flags_t flags);
+
+typedef struct gunyah_hyp_addrspace_find_info_area_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	vmaddr_t _Alignas(register_t) base;
+	size_t _Alignas(register_t) size;
+} gunyah_hyp_addrspace_find_info_area_result_t;
+
+gunyah_hyp_addrspace_find_info_area_result_t
+gunyah_hyp_addrspace_find_info_area(void);
+
+typedef struct gunyah_hyp_addrspace_info_area_add_entry_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	vmaddr_t _Alignas(register_t) ipa;
+} gunyah_hyp_addrspace_info_area_add_entry_result_t;
+
+gunyah_hyp_addrspace_info_area_add_entry_result_t
+gunyah_hyp_addrspace_info_area_add_entry(
+	cap_id_t addrspace, addrspace_info_area_entry_type_t type,
+	user_ptr_t data, addrspace_info_area_entry_data_info_t data_info);

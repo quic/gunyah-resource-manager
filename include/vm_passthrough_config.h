@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_PASSTHROUGH_CONFIG_H_
+#define INCLUDE_VM_PASSTHROUGH_CONFIG_H_
+
 RM_PADDED(struct vm_device_descriptor_s {
 	vmid_t				  vmid;
 	count_t				  num_irqs;
@@ -26,7 +29,8 @@ vm_passthrough_config_deinit(const rm_env_data_t *env_data);
 
 bool
 vm_passthrough_config_is_addr_in_range(vmid_t vmid, vmaddr_t ipa, size_t size,
-				       pgtable_access_t access);
+				       pgtable_access_t access,
+				       bool		check_access);
 
 count_t
 vm_passthrough_get_num_devices(void);
@@ -39,3 +43,9 @@ vm_passthrough_get_device_mmio_ranges(index_t dev_id);
 
 vmid_t
 vm_passthrough_device_get_vmid(index_t dev_id);
+
+#else
+
+#error multiple include of vm_passthrough_config.h
+
+#endif

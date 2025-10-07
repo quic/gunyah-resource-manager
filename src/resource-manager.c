@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,6 @@
 
 #include <rm_types.h>
 #include <util.h>
-#include <utils/vector.h>
 
 #include <compiler.h>
 #include <errno.h>
@@ -22,8 +22,10 @@
 #include <guest_interface.h>
 #include <irq_manager.h>
 #include <log.h>
+#include <mem_region.h>
 #include <memextent.h>
 #include <memparcel.h>
+#include <memparcel_msg.h>
 #include <platform.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
@@ -43,8 +45,9 @@
 #include <vm_resources.h>
 
 #include "rmversion.h"
-
-extern gunyah_hyp_hypervisor_identify_result_t hyp_id;
+#ifdef HYPVM_WITH_COVERAGE
+#include "cpptest.h"
+#endif
 
 static rm_env_data_t *priv_env_data;
 
@@ -88,6 +91,9 @@ msg_callback(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, uint8_t msg_type,
 	if (!handled) {
 		handled = vm_firmware_msg_handler(vm_id, msg_id, seq_num, buf,
 						  len);
+	}
+	if (!handled) {
+		handled = log_msg_handler(vm_id, msg_id, seq_num, buf, len);
 	}
 
 	if (!handled) {
@@ -139,7 +145,9 @@ int
 main(int argc, char *argv[])
 {
 	(void)argc;
-
+#ifdef HYPVM_WITH_COVERAGE
+	CppTest_InitializeRuntime();
+#endif
 	int		   ret = 0;
 	error_t		   err;
 	rm_error_t	   rm_err;
@@ -161,7 +169,8 @@ main(int argc, char *argv[])
 	rm_err = register_exit();
 	assert(rm_err == RM_OK);
 
-	platform_uart_map(priv_env_data);
+	err = platform_uart_init();
+	assert(err == OK);
 
 	log_buf_size = LOG_AREA_SIZE;
 	rm_err	     = log_reconfigure(&log_buf, log_buf_size);
@@ -193,6 +202,9 @@ main(int argc, char *argv[])
 
 	err = irq_manager_init(priv_env_data);
 	assert(err == OK);
+
+	free(priv_env_data->irq_env->vic_hwirq);
+	priv_env_data->irq_env->vic_hwirq = NULL;
 
 	vm_passthrough_config_deinit(priv_env_data);
 
@@ -308,18 +320,21 @@ rm_get_device_me_cap(void)
 	return priv_env_data->device_me_capid;
 }
 
-paddr_t
-rm_get_device_me_base(void)
+count_t
+rm_get_device_ranges_count(void)
 {
 	assert(priv_env_data != NULL);
-	return priv_env_data->device_me_base;
+	return priv_env_data->device_ranges_count;
 }
 
-size_t
-rm_get_device_me_size(void)
+void
+rm_get_device_ranges(index_t i, paddr_t *base, size_t *size)
 {
 	assert(priv_env_data != NULL);
-	return priv_env_data->device_me_size;
+	assert(i < priv_env_data->device_ranges_count);
+
+	*base = priv_env_data->device_ranges[i].base;
+	*size = priv_env_data->device_ranges[i].size;
 }
 
 cap_id_t
@@ -334,6 +349,13 @@ rm_get_rm_vic(void)
 {
 	assert(priv_env_data != NULL);
 	return priv_env_data->vic;
+}
+
+count_t
+rm_get_vic_max_virqs(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->vic_max_virqs;
 }
 
 vmaddr_t
@@ -370,11 +392,10 @@ rm_get_watchdog_address(void)
 count_t
 rm_get_platform_max_cores(void)
 {
-	return ((count_t)sizeof(priv_env_data->usable_cores) * 8U) -
-	       compiler_clz(priv_env_data->usable_cores);
+	return priv_env_data->max_cores;
 }
 
-index_t
+cpu_index_t
 rm_get_platform_root_vcpu_index(void)
 {
 	return priv_env_data->boot_core;
@@ -383,8 +404,25 @@ rm_get_platform_root_vcpu_index(void)
 bool
 rm_is_core_usable(cpu_index_t i)
 {
-	return (i <= rm_get_platform_max_cores()) &&
-	       ((util_bit(i) & priv_env_data->usable_cores) != 0U);
+	assert(priv_env_data->max_cores <
+	       (sizeof(priv_env_data->usable_cores[0]) * (size_t)CHAR_BIT));
+
+	return (i < rm_get_platform_max_cores()) &&
+	       ((util_bit(i) & priv_env_data->usable_cores[0]) != 0U);
+}
+
+const uint64_t *
+rm_get_usable_cores(count_t *array_size)
+{
+	assert(array_size != NULL);
+
+	// We're currently limited to supporting cpu ids 0..63.
+	// FIXME:
+	static_assert(util_array_size(priv_env_data->usable_cores) >= 1U,
+		      "invalid config");
+	*array_size = 1U;
+
+	return priv_env_data->usable_cores;
 }
 
 vmaddr_t
@@ -447,6 +485,13 @@ rm_error_from_hyp(error_t err)
 #pragma clang diagnostic pop
 
 	return ret;
+}
+
+paddr_t
+rm_get_uart_address(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->uart_address;
 }
 
 cap_id_t

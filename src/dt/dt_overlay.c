@@ -15,11 +15,6 @@
 #include <util.h>
 #include <utils/list.h>
 
-#include <dt_linux.h>
-#include <dt_overlay.h>
-#include <resource-manager.h>
-#include <rm-rpc.h>
-
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-length-array"
 #pragma clang diagnostic ignored "-Wbad-function-cast"
@@ -27,11 +22,16 @@
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
 #pragma clang diagnostic ignored "-Wpadded"
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
-#define MAX_PATH  (512)
-#define MAX_LEVEL (15)
+#include <dt_linux.h>
+#include <dt_overlay.h>
+#include <dtb_parser.h>
+
+#define MAX_PATH  (512U)
+#define MAX_LEVEL (15U)
 #define MAX_RETRY (3)
 
 #define DTB_START_SZ	 (PAGE_SIZE)
@@ -82,6 +82,13 @@ typedef struct fixup_s {
 	char *who;
 } fixup_t;
 
+typedef struct dto_ctx_s {
+	struct dto_ctx_s *ctx_prev;
+	struct dto_ctx_s *ctx_next;
+
+	ctx_t ctx;
+} dto_ctx_t;
+
 struct dto_s {
 	// root pointer to device tree, may be update after resize.
 	void *fdt;
@@ -98,6 +105,12 @@ struct dto_s {
 
 	// fragment count
 	index_t fragment_count;
+
+	// optional pointer to base device tree
+	const void *base_fdt;
+
+	// List of registered DTO contexts.
+	dto_ctx_t *dto_ctx_list;
 };
 
 #ifdef DTBO_DEBUG
@@ -147,7 +160,7 @@ expand(dto_t *dto)
 			goto out;
 		}
 
-		(void)memcpy(expanded_fdt, dto->fdt, dto->fdt_sz);
+		(void)memscpy(expanded_fdt, expanded_sz, dto->fdt, dto->fdt_sz);
 
 		free(dto->fdt);
 
@@ -167,7 +180,7 @@ out:
 }
 
 dto_t *
-dto_init(void *external_memory, size_t memory_size)
+dto_init(void *external_memory, size_t memory_size, const void *base_fdt)
 {
 	error_t e = OK;
 
@@ -176,6 +189,8 @@ dto_init(void *external_memory, size_t memory_size)
 		e = ERROR_NOMEM;
 		goto err;
 	}
+
+	dto->base_fdt = base_fdt;
 
 	if (external_memory == NULL) {
 		dto->fdt = malloc(DTB_START_SZ);
@@ -208,7 +223,8 @@ dto_init(void *external_memory, size_t memory_size)
 	dto->local_fixup_list = NULL;
 	dto->fixup_list	      = NULL;
 
-	(void)snprintf(dto->pwd, PWD_SZ, "/");
+	int32_t pwdsz_ret = (int32_t)strlcpy(dto->pwd, "/", PWD_SZ);
+	assert(pwdsz_ret == 1);
 
 	dto->fragment_count = 0;
 
@@ -240,6 +256,113 @@ out:
 	return dto;
 }
 
+error_t
+dto_get_path_ctx(const dto_t *dto, const char *target, ctx_t *context,
+		 bool parent)
+{
+	error_t ret;
+
+	if (dto->base_fdt == NULL) {
+		ret = ERROR_FAILURE;
+		goto out;
+	}
+
+	size_t namelen;
+
+	if (parent) {
+		const char *last_sep = strrchr(target, (int)'/');
+		if (last_sep == NULL) {
+			ret = ERROR_ARGUMENT_INVALID;
+			goto out;
+		} else if (last_sep == target) {
+			namelen = 1U;
+		} else {
+			ptrdiff_t ptrdiff = last_sep - target;
+			assert(ptrdiff >= 0);
+			namelen = (size_t)ptrdiff;
+		}
+	} else {
+		namelen = strlen(target);
+	}
+
+	if (namelen == 0U) {
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	int path_ofs =
+		fdt_path_offset_namelen(dto->base_fdt, target, (int)namelen);
+	if (path_ofs >= 0) {
+		*context = dtb_parser_get_ctx(dto->base_fdt, path_ofs);
+		ret	 = OK;
+		goto out;
+	}
+
+	dto_ctx_t *curr = NULL;
+	loop_list(curr, &dto->dto_ctx_list, ctx_)
+	{
+		if (strncmp(curr->ctx.node_path, target, namelen) == 0) {
+			*context = curr->ctx;
+			ret	 = OK;
+			goto out;
+		}
+	}
+
+	ret = ERROR_ARGUMENT_INVALID;
+
+out:
+	return ret;
+}
+
+error_t
+dto_register_path_ctx(dto_t *dto, const char *target, count_t addr_cells,
+		      count_t size_cells, bool addr_is_phys)
+{
+	error_t ret;
+	ctx_t	parent_ctx;
+
+	// Get the parent context for the node. The parent must already exist in
+	// the base DTB or be registered for the DTO.
+	ret = dto_get_path_ctx(dto, target, &parent_ctx, true);
+	if (ret != OK) {
+		goto out;
+	}
+
+	// If the parent's children aren't physical, this node's children can't
+	// be either.
+	if (!parent_ctx.child_addr_is_phys && addr_is_phys) {
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	dto_ctx_t *dto_ctx = calloc(1U, sizeof(*dto_ctx));
+	if (dto_ctx == NULL) {
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	char *node_path = strdup(target);
+	if (node_path == NULL) {
+		free(dto_ctx);
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	dto_ctx->ctx.node_path	  = node_path;
+	dto_ctx->ctx.addr_cells	  = parent_ctx.child_addr_cells;
+	dto_ctx->ctx.size_cells	  = parent_ctx.child_size_cells;
+	dto_ctx->ctx.addr_is_phys = parent_ctx.child_addr_is_phys;
+
+	dto_ctx->ctx.child_addr_cells	= addr_cells;
+	dto_ctx->ctx.child_size_cells	= size_cells;
+	dto_ctx->ctx.child_addr_is_phys = addr_is_phys;
+
+	list_append(dto_ctx_t, &dto->dto_ctx_list, dto_ctx, ctx_);
+
+out:
+	return ret;
+}
+
 static error_t
 dto_modify_do_start_fragment(dto_t *dto)
 {
@@ -249,8 +372,7 @@ dto_modify_do_start_fragment(dto_t *dto)
 	int32_t sz_ret = snprintf(fragment_name, FRAGMENT_NAME_SZ,
 				  "fragment@%u", dto->fragment_count);
 
-	(void)sz_ret;
-	assert(sz_ret <= FRAGMENT_NAME_SZ);
+	assert((sz_ret >= 0) || (sz_ret <= FRAGMENT_NAME_SZ));
 
 	error_t e = OK;
 
@@ -515,7 +637,16 @@ dto_property_add_stringlist(dto_t *dto, const char *name, const char *vals[],
 	}
 
 	for (index_t i = 0; i < cnt; ++i) {
-		vals_sz[i] = strlen(vals[i]) + 1U;
+		if (vals[i] == NULL) {
+			e = ERROR_ARGUMENT_INVALID;
+			goto err1;
+		}
+		size_t len = strnlen(vals[i], 64);
+		if ((len == 0U) || (len == 64U)) {
+			e = ERROR_ARGUMENT_SIZE;
+			goto err1;
+		}
+		vals_sz[i] = len + 1U;
 		total_sz += vals_sz[i];
 	}
 
@@ -525,10 +656,10 @@ dto_property_add_stringlist(dto_t *dto, const char *name, const char *vals[],
 		goto err1;
 	}
 
-	char *cur = val;
+	size_t offset = 0U;
 	for (index_t i = 0; i < cnt; ++i) {
-		(void)memcpy(cur, vals[i], vals_sz[i]);
-		cur += vals_sz[i];
+		offset += memscpy(&val[offset], total_sz - offset, vals[i],
+				  vals_sz[i]);
 	}
 
 	ASSERT_RUN(fdt_property(dto->fdt, name, val, (int)total_sz), e);
@@ -588,6 +719,10 @@ dto_property_add_addrrange_array(dto_t *dto, const char *name,
 		if (addr_cells == 2U) {
 			fdt64_st(data, ranges[i].addr);
 		} else if (addr_cells == 1U) {
+			if (ranges[i].addr > UINT32_MAX) {
+				e = ERROR_ADDR_OVERFLOW;
+				goto err;
+			}
 			fdt32_st(data, (uint32_t)ranges[i].addr);
 		} else {
 			// addr_cells is 0, nothing to store
@@ -597,6 +732,10 @@ dto_property_add_addrrange_array(dto_t *dto, const char *name,
 		if (size_cells == 2U) {
 			fdt64_st(data, ranges[i].size);
 		} else if (size_cells == 1U) {
+			if (ranges[i].size > UINT32_MAX) {
+				e = ERROR_ARGUMENT_SIZE;
+				goto err;
+			}
 			fdt32_st(data, (uint32_t)ranges[i].size);
 		} else {
 			// size_cells is 0, nothing to store
@@ -723,18 +862,34 @@ dto_property_ref_external(dto_t *dto, const char *property_name,
 	char path[MAX_PATH];
 
 	// remove the last '/'
-	size_t len = strlen(dto->pwd) - 1U;
-	(void)memcpy(path, dto->pwd, len);
+	size_t len = strnlen(dto->pwd, PWD_SZ);
+	if (len == 0U) {
+		e = ERROR_STRING_TRUNCATED;
+		goto err3;
+	}
+
+	if (len >= util_array_size(path)) {
+		e = ERROR_STRING_REACHED_END;
+		goto err3;
+	}
+
+	(void)strlcpy(path, dto->pwd, util_array_size(path));
 	path[len] = '\0';
 
 	int32_t fmt_ret = snprintf(who, who_sz, "%s:%s:0", path, property_name);
-	(void)fmt_ret;
-	assert(fmt_ret < (int32_t)who_sz);
+
+	if (fmt_ret >= (int32_t)who_sz) {
+		e = ERROR_STRING_REACHED_END;
+		goto err3;
+	}
+
 	fixup->who = who;
 
 	list_append(fixup_t, &dto->fixup_list, fixup, fixup_);
 
 	goto out;
+err3:
+	free(who);
 err2:
 	free(fixup->label);
 err1:
@@ -798,6 +953,18 @@ err:
 	return e;
 }
 
+static void
+free_dto_ctx_list(dto_t *dto)
+{
+	dto_ctx_t *curr_ctx, *next_ctx;
+	loop_list_safe(curr_ctx, next_ctx, &dto->dto_ctx_list, ctx_)
+	{
+		list_remove(dto_ctx_t, &dto->dto_ctx_list, curr_ctx, ctx_);
+		free(curr_ctx->ctx.node_path);
+		free(curr_ctx);
+	}
+}
+
 void
 dto_deinit(dto_t *dto)
 {
@@ -819,6 +986,9 @@ dto_deinit(dto_t *dto)
 
 	// free all local fixups
 	free_local_fixups(dto);
+
+	// free all registered contexts
+	free_dto_ctx_list(dto);
 
 	if (dto->fdt != NULL) {
 		if (!dto->use_external_memory) {
@@ -842,8 +1012,8 @@ enter_node(dto_t *dto, const char *node_name)
 
 	int32_t fmt_ret = snprintf(dto->pwd + strlen(dto->pwd), node_len + 1U,
 				   "%s/", node_name);
-	(void)fmt_ret;
-	assert((size_t)fmt_ret == node_len);
+
+	assert((fmt_ret >= 0) || ((size_t)fmt_ret == node_len));
 }
 
 static void
@@ -1023,7 +1193,7 @@ static error_t
 dtbo_create_fixup_nodes(dto_t *dto)
 {
 	index_t		    cur_level = 0;
-	local_fixup_node_t *stack[MAX_LEVEL + 1], *cur_node;
+	local_fixup_node_t *stack[MAX_LEVEL + 1U], *cur_node;
 
 	error_t e = OK;
 	cur_node  = dto->local_fixup_list;
@@ -1060,7 +1230,7 @@ dtbo_create_fixup_nodes(dto_t *dto)
 				goto err;
 			}
 
-			assert(cur_level != 0);
+			assert(cur_level != 0U);
 			cur_level--;
 			cur_node = stack[cur_level];
 		}
@@ -1103,7 +1273,7 @@ free_local_fixups(dto_t *dto)
 	struct {
 		local_fixup_node_t *cur;
 		local_fixup_node_t *next;
-	} stack[MAX_LEVEL + 1];
+	} stack[MAX_LEVEL + 1U];
 
 	// NOTE: dodgy code to remove recursive call
 	cur  = dto->local_fixup_list;
@@ -1138,10 +1308,10 @@ free_local_fixups(dto_t *dto)
 		}
 
 		// pop to an upper node which still has next node to free
-		while (is_last(cur, local_fixup_node_) && cur_level != 0) {
+		while (is_last(cur, local_fixup_node_) && (cur_level != 0U)) {
 			free(cur);
 
-			assert(cur_level != 0);
+			assert(cur_level != 0U);
 			cur_level--;
 			cur  = stack[cur_level].cur;
 			next = stack[cur_level].next;

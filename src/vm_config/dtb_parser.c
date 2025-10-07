@@ -5,6 +5,7 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,22 +15,24 @@
 #include <util.h>
 #include <utils/vector.h>
 
-#include <regex.h>
-#include <resource-manager.h>
-#include <rm-rpc.h>
-#include <rm_env_data.h>
-#include <vm_config.h>
-
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-length-array"
 #pragma clang diagnostic ignored "-Wbad-function-cast"
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
 #include <dtb_parser.h>
+#include <dtb_parser_listener.h>
+#include <guest_interface.h>
+#include <platform.h>
+#include <resource-manager.h>
+#include <rm-rpc.h>
+#include <rm_env_data.h>
+#include <vm_config.h>
 
 #define MAX_DEPTH    (16)
 #define MAX_PATH_LEN (256)
@@ -37,19 +40,20 @@
 #define DEFAULT_ADDR_CELLS (2)
 #define DEFAULT_SIZE_CELLS (1)
 
-static void
-push_ctx(ctx_t ctxs[], int next_depth, const void *fdt, int node_ofs);
+static error_t
+push_ctx(ctx_t ctxs[], int next_depth, const void *fdt, int node_ofs,
+	 const char *parent_name);
 
 static void
 pop_ctx(ctx_t ctxs[], int prev_depth, int cur_depth);
 
 static listener_return_t
-check_listeners(dtb_parser_data_t *data, const dtb_listener_t *listeners,
+check_listeners(dtb_parser_data_t *data, dtb_listener_t *listeners,
 		size_t listener_cnt, const void *fdt, int node_ofs,
-		const ctx_t *ctx);
+		const ctx_t *ctx, const char *path);
 
 static listener_return_t
-check_path_listener(dtb_parser_data_t *data, const dtb_listener_t *listener,
+check_path_listener(dtb_parser_data_t *data, dtb_listener_t *listener,
 		    const void *fdt, int node_ofs, const ctx_t *ctx,
 		    const char *path);
 
@@ -62,6 +66,112 @@ static listener_return_t
 check_compatible_listener(dtb_parser_data_t    *data,
 			  const dtb_listener_t *listener, const void *fdt,
 			  int node_ofs, const ctx_t *ctx);
+
+static char *
+make_new_path(const char *path, const char *node, bool append_path_sep);
+
+static char *
+make_new_path(const char *path, const char *node, bool append_path_sep)
+{
+	char  *out_path;
+	size_t name_size, str_size;
+
+	out_path = NULL;
+	str_size = strnlen(path, MAX_PATH_LEN);
+	if (str_size == (size_t)MAX_PATH_LEN) {
+		goto out;
+	}
+	name_size = str_size;
+
+	str_size = strnlen(node, MAX_PATH_LEN);
+	if (str_size == (size_t)MAX_PATH_LEN) {
+		goto out;
+	}
+	name_size += str_size;
+
+	if (append_path_sep) {
+		name_size += (size_t)2;
+	} else {
+		name_size += (size_t)1;
+	}
+
+	out_path = calloc(1, name_size);
+	if (out_path == NULL) {
+		goto out;
+	}
+
+	(void)strlcpy(out_path, path, name_size);
+	(void)strlcat(out_path, node, name_size);
+	if (append_path_sep) {
+		(void)strlcat(out_path, "/", name_size);
+	}
+out:
+	return out_path;
+}
+
+RM_PADDED(typedef struct {
+	error_t err;
+	bool	done;
+} skip_to_next_node_ret_t)
+
+static skip_to_next_node_ret_t
+move_to_next_node(const void *fdt, int *cur_ofs_ptr, ctx_t ctxs[],
+		  int *cur_depth_ptr, const char *node_name,
+		  bool skip_child_nodes, int skip_to_depth)
+{
+	skip_to_next_node_ret_t ret	    = { .err = OK };
+	bool			done	    = false;
+	const char	       *parent_name = node_name;
+	int			cur_ofs;
+	int			cur_depth;
+	int			next_depth;
+
+	assert(cur_ofs_ptr != NULL);
+	assert(cur_depth_ptr != NULL);
+
+	cur_ofs	   = *cur_ofs_ptr;
+	cur_depth  = *cur_depth_ptr;
+	next_depth = cur_depth;
+
+	do {
+		cur_ofs = fdt_next_node(fdt, cur_ofs, &next_depth);
+		if (cur_ofs < 0) {
+			ret.err = ERROR_DENIED;
+			done	= true;
+		} else if (next_depth < 0) {
+			done = true;
+		} else {
+			if (!skip_child_nodes) {
+				error_t perr = OK;
+				if (next_depth == (cur_depth + 1)) {
+					perr = push_ctx(ctxs, next_depth, fdt,
+							cur_ofs, parent_name);
+				} else if (next_depth < cur_depth) {
+					pop_ctx(ctxs, cur_depth, next_depth);
+				} else {
+					assert(next_depth == cur_depth);
+				}
+
+				if (perr != OK) {
+					pop_ctx(ctxs, cur_depth, 0);
+					ret.err = ERROR_FAILURE;
+					goto out;
+				}
+			}
+		}
+		cur_depth = next_depth;
+
+		if (skip_child_nodes && (next_depth <= skip_to_depth)) {
+			break;
+		}
+
+	} while (!done && skip_child_nodes);
+out:
+	*cur_ofs_ptr   = cur_ofs;
+	*cur_depth_ptr = cur_depth;
+	ret.done       = done;
+	return ret;
+}
 
 // FIXME: might define it in configuration
 const char *gunyah_api_version = "1-0";
@@ -85,30 +195,59 @@ dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
 
 	ret.r = data;
 
-	ctx_t ctxs[MAX_DEPTH];
+	ctx_t ctxs[MAX_DEPTH], *cur_ctxt;
 	(void)memset(ctxs, 0, sizeof(ctxs));
 
 	// start from vm_config, loop all subnodes
 	int cur_depth = 0;
 
-	int cur_ofs = 0;
+	int  cur_ofs	      = 0;
+	bool skip_child_nodes = false;
+	int  skip_to_depth    = 0;
 
 	// init ctx for root node
-	push_ctx(ctxs, cur_depth, fdt, cur_ofs);
+	error_t perr = push_ctx(ctxs, cur_depth, fdt, cur_ofs, "");
+	if (perr != OK) {
+		ret.err = ERROR_FAILURE;
+		goto out;
+	}
 
 	// NOTE: the parsing order is the same as device node defined, so if a
 	// device node is used before definition, we will get undefined issue.
 	bool done = false;
 	while (!done) {
+		const char *node_name;
+		char	   *node_path;
+
+		cur_ctxt  = &ctxs[cur_depth];
+		node_name = fdt_get_name(fdt, cur_ofs, NULL);
+
+		node_path =
+			make_new_path(cur_ctxt->parent_path, node_name, false);
+		if (node_path == NULL) {
+			ret.err = ERROR_FAILURE;
+			done	= true;
+			goto out;
+		}
+
+		skip_child_nodes    = false;
+		cur_ctxt->node_path = node_path;
 		listener_return_t listener_ret =
 			check_listeners(data, ops->listeners, ops->listener_cnt,
-					fdt, cur_ofs, &ctxs[cur_depth]);
+					fdt, cur_ofs, cur_ctxt, node_path);
+
+		if (listener_ret == RET_SKIP_CHILD_NODES) {
+			skip_child_nodes = true;
+			skip_to_depth	 = cur_depth;
+		}
+		free(node_path);
+
 		if (listener_ret == RET_ERROR) {
 			char path[MAX_PATH_LEN];
-			int  path_ret =
-				fdt_get_path(fdt, cur_ofs, path, sizeof(path));
+			int  path_ret = fdt_get_path(fdt, cur_ofs, path,
+						     (int32_t)sizeof(path));
 			if (path_ret != 0) {
-				strlcpy(path, "<unknown>", sizeof(path));
+				(void)strlcpy(path, "<unknown>", sizeof(path));
 			}
 			(void)printf("Fatal error in DTB parsing at node %s\n",
 				     path);
@@ -117,26 +256,13 @@ dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
 		} else if (listener_ret == RET_STOP) {
 			done = true;
 		} else {
-			int next_depth = cur_depth;
-
-			cur_ofs = fdt_next_node(fdt, cur_ofs, &next_depth);
-			if (cur_ofs < 0) {
-				ret.err = ERROR_DENIED;
-				done	= true;
-			} else if (next_depth < 0) {
-				done = true;
-			} else {
-				if (next_depth == cur_depth + 1) {
-					push_ctx(ctxs, next_depth, fdt,
-						 cur_ofs);
-				} else if (next_depth < cur_depth) {
-					pop_ctx(ctxs, cur_depth, next_depth);
-				} else {
-					assert(next_depth == cur_depth);
-				}
-
-				cur_depth = next_depth;
-			}
+			skip_to_next_node_ret_t skip_ret;
+			skip_ret = move_to_next_node(fdt, &cur_ofs, ctxs,
+						     &cur_depth, node_name,
+						     skip_child_nodes,
+						     skip_to_depth);
+			ret.err	 = skip_ret.err;
+			done	 = skip_ret.done;
 		}
 	}
 out:
@@ -172,11 +298,13 @@ ranges_are_direct(const void *fdt, int node_ofs, const ctx_t *ctx)
 			range_cells;
 
 		if ((size_t)ranges_len !=
-		    (ranges_count * range_cells * sizeof(uint32_t))) {
+		    ((size_t)ranges_count * (size_t)range_cells *
+		     sizeof(uint32_t))) {
 			char path[MAX_PATH_LEN];
-			if (fdt_get_path(fdt, node_ofs, path, sizeof(path)) !=
-			    0) {
-				strlcpy(path, "<unknown path>", sizeof(path));
+			if (fdt_get_path(fdt, node_ofs, path,
+					 (int32_t)sizeof(path)) != 0) {
+				(void)strlcpy(path, "<unknown path>",
+					      sizeof(path));
 			}
 			(void)printf(
 				"Warning: ignoring extra data in ranges property of node %s\n",
@@ -267,8 +395,9 @@ ctx_t
 dtb_parser_get_ctx(const void *fdt, int node_ofs)
 {
 	struct {
-		int   ofs;
-		ctx_t ctx;
+		int	ofs;
+		uint8_t padding[4];
+		ctx_t	ctx;
 	} stack[8] = { 0 };
 
 	stack[0].ofs = node_ofs;
@@ -301,9 +430,12 @@ out:
 	return stack[0].ctx;
 }
 
-static void
-push_ctx(ctx_t ctxs[], int next_depth, const void *fdt, int node_ofs)
+static error_t
+push_ctx(ctx_t ctxs[], int next_depth, const void *fdt, int node_ofs,
+	 const char *parent_name)
 {
+	error_t ret = OK;
+
 	assert(next_depth < MAX_DEPTH);
 	assert(next_depth >= 0);
 
@@ -314,8 +446,34 @@ push_ctx(ctx_t ctxs[], int next_depth, const void *fdt, int node_ofs)
 		parent = &ctxs[next_depth - 1];
 	}
 
+	char *parent_path = "";
+
+	if (parent == NULL) {
+		child->parent_path = calloc(1, 1);
+		if (child->parent_path == NULL) {
+			ret = ERROR_ARGUMENT_SIZE;
+			goto out;
+		}
+	} else {
+		char *node_path;
+
+		parent_path = parent->parent_path;
+
+		node_path = make_new_path(parent_path, parent_name, true);
+		if (node_path == NULL) {
+			(void)printf("Path construction failed\n");
+			child->parent_path = NULL;
+			ret		   = ERROR_ARGUMENT_SIZE;
+			goto out;
+		} else {
+			child->parent_path = node_path;
+		}
+	}
+
 	// parse/update context if there's any
 	dtb_parser_update_ctx(fdt, node_ofs, parent, child);
+out:
+	return ret;
 }
 
 static void
@@ -326,27 +484,23 @@ pop_ctx(ctx_t ctxs[], int prev_depth, int cur_depth)
 
 	int d = prev_depth;
 	while (d > cur_depth) {
+		if (ctxs[d].parent_path != NULL) {
+			free(ctxs[d].parent_path);
+		}
 		(void)memset(&ctxs[d], 0, sizeof(ctxs[d]));
 		d--;
 	}
 }
 
 static listener_return_t
-check_listeners(dtb_parser_data_t *data, const dtb_listener_t *listeners,
+check_listeners(dtb_parser_data_t *data, dtb_listener_t *listeners,
 		size_t listener_cnt, const void *fdt, int node_ofs,
-		const ctx_t *ctx)
+		const ctx_t *ctx, const char *path)
 {
 	listener_return_t act = RET_CONTINUE;
 
-	char path[MAX_PATH_LEN];
-	int  path_ret = fdt_get_path(fdt, node_ofs, path, MAX_PATH_LEN);
-	if (path_ret != 0) {
-		act = RET_ERROR;
-		goto out_get_path_failure;
-	}
-
 	for (index_t i = 0; i < listener_cnt; ++i) {
-		const dtb_listener_t *cur_listener = listeners + i;
+		dtb_listener_t *cur_listener = listeners + i;
 
 		if (cur_listener->type == BY_PATH) {
 			act = check_path_listener(data, cur_listener, fdt,
@@ -365,26 +519,34 @@ check_listeners(dtb_parser_data_t *data, const dtb_listener_t *listeners,
 		}
 	}
 
-out_get_path_failure:
 	return act;
 }
 
 static listener_return_t
-check_path_listener(dtb_parser_data_t *data, const dtb_listener_t *listener,
+check_path_listener(dtb_parser_data_t *data, dtb_listener_t *listener,
 		    const void *fdt, int node_ofs, const ctx_t *ctx,
 		    const char *path)
 {
 	listener_return_t ret = RET_CONTINUE;
+	int		  reg_ret;
 
-	regex_t regex;
-	int	reg_ret = regcomp(&regex, listener->expected_path,
-				  REG_NOSUB | REG_EXTENDED);
-	if (reg_ret != 0) {
-		ret = RET_ERROR;
-		goto out_regcomp_failure;
+	if (listener->ctxt == NULL) {
+		listener->ctxt = calloc(1, sizeof(*listener->ctxt));
+		if (listener->ctxt == NULL) {
+			ret = RET_ERROR;
+			goto out_regcomp_failure;
+		}
+
+		reg_ret = regcomp(listener->ctxt, listener->expected_path,
+				  (int)((uint32_t)REG_NOSUB |
+					(uint32_t)REG_EXTENDED));
+		if (reg_ret != 0) {
+			ret = RET_ERROR;
+			goto out_regcomp_failure;
+		}
 	}
 
-	reg_ret = regexec(&regex, path, 0, NULL, 0);
+	reg_ret = regexec(listener->ctxt, path, 0, NULL, 0);
 	if (reg_ret == 0) {
 		// match
 		ret = listener->action(data, fdt, node_ofs, ctx);
@@ -393,8 +555,6 @@ check_path_listener(dtb_parser_data_t *data, const dtb_listener_t *listener,
 	} else {
 		ret = RET_ERROR;
 	}
-
-	regfree(&regex);
 
 out_regcomp_failure:
 	return ret;
@@ -439,7 +599,7 @@ uint64_t
 fdt_read_num(const fdt32_t *data, size_t cell_cnt)
 {
 	// only support 32 or 64 bits num
-	assert(cell_cnt <= 2);
+	assert(cell_cnt <= 2U);
 
 	uint64_t ret = 0;
 	for (index_t i = 0; i < cell_cnt; ++i) {
@@ -529,7 +689,7 @@ fdt_getprop_u32_array(const void *fdt, int node_ofs, const char *propname,
 			"Error: array property \"%s\" length %zd exceeds expected size %zd\n",
 			propname, (size_t)len, array_size);
 		ret = ERROR_ARGUMENT_SIZE;
-	} else if ((size_t)len % sizeof(fdt32_t) != 0U) {
+	} else if (((size_t)len % sizeof(fdt32_t)) != 0U) {
 		(void)printf(
 			"Error: array property \"%s\" has misaligned size %zd\n",
 			propname, (size_t)len);

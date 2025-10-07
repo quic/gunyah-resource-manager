@@ -15,7 +15,6 @@
 #include <uapi/console.h>
 #include <uart.h>
 #include <unistd.h>
-#include <vm_console.h>
 
 static bool uart_registered;
 
@@ -94,3 +93,52 @@ deregister_uart(void)
 err:
 	return e;
 }
+
+#ifdef HYPVM_WITH_COVERAGE
+#define TIOCGETCOV 0x548f
+
+// Our non-standard buffer control message
+struct tty_cov_buffer_req {
+	uintptr_t buffer;
+	uint32_t  size;
+};
+
+rm_error_t
+uart_get_coverage_to_buf(char *data_buf, uint32_t size)
+{
+	struct tty_cov_buffer_req req = { (uintptr_t)data_buf, size };
+	int result = ioctl(STDOUT_FILENO, TIOCGETCOV, (uint64_t)&req);
+	if (result != 0) {
+		goto err;
+	}
+	return req.size;
+err:
+	return RM_ERROR_NORESOURCE;
+}
+
+rm_error_t
+uart_send_coverage(void)
+{
+	const char *dev = "/dev/console";
+
+	rm_error_t e = RM_OK;
+
+	// simple solution to open it multiple times
+	int fd = open(dev, O_RDWR);
+	if (fd == -1) {
+		e = RM_ERROR_DENIED;
+		goto err;
+	}
+
+	int ret = ioctl(fd, (int)IOCTL_SEND_COVERAGE_CONSOLE, 0);
+	if (ret != 0) {
+		e = RM_ERROR_DENIED;
+	}
+
+	uart_registered = false;
+
+	(void)close(fd);
+err:
+	return e;
+}
+#endif

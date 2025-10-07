@@ -2,8 +2,18 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_PLATFORM_H_
+#define INCLUDE_PLATFORM_H_
+
 struct dtb_parser_data_s;
 typedef struct dtb_parser_data_s vm_config_parser_data_t;
+
+RM_PADDED(typedef struct smmu_v2_data_s {
+	char	*patch;
+	uint32_t smmu_handle;
+	uint32_t num_cbs;
+	uint32_t num_smrs;
+} smmu_v2_data_t)
 
 error_t
 platform_env_init(platform_env_data_t **platform_env);
@@ -70,6 +80,10 @@ platform_vm_exit(const vm_t *vm);
 error_t
 platform_vm_destroy(vm_t *vm, bool hlos);
 
+void
+platform_handle_teardown_vdevice(vm_config_t	      *vmcfg,
+				 struct vdevice_node **node);
+
 error_t
 platform_handle_destroy_vdevices(const vm_t *vm);
 
@@ -105,12 +119,18 @@ platform_vrtc_attach_addrspace(cap_id_t rtc_cap, cap_id_t addrspace_cap);
 bool
 platform_has_vrtc_support(void);
 
-bool
-platform_has_vsmmu_v2_support(void);
-
 cap_id_result_t
 platform_vrtc_create_and_configure(cap_id_t p_cap, cap_id_t cs_cap,
 				   vmaddr_t ipa);
 
 error_t
 platform_pre_hlos_vm_init(const rm_env_data_t *env_data);
+
+uint64_t
+platform_timestamp(void);
+
+#else
+
+#error multiple include of platform.h
+
+#endif

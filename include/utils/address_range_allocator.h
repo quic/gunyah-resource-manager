@@ -8,14 +8,11 @@
 // Tagged regions must be allocated from explicitly, and will not be allocated
 // from when requesting any free range.
 
+#ifndef UTILS_ADDRESS_RANGE_ALLOCATOR_H_
+#define UTILS_ADDRESS_RANGE_ALLOCATOR_H_
+
 #define ADDRESS_RANGE_LIMIT	   (1UL << 52)
 #define ADDRESS_RANGE_NO_ALIGNMENT 0UL
-
-struct address_range_allocator;
-typedef struct address_range_allocator address_range_allocator_t;
-
-typedef uint32_t address_range_tag_t;
-#define ADDRESS_RANGE_NO_TAG (address_range_tag_t)0UL
 
 typedef struct {
 	uint64_t base_address;
@@ -96,4 +93,10 @@ address_range_allocator_deinit(address_range_allocator_t *allocator);
 #ifndef NDEBUG
 void
 address_range_allocator_dump(address_range_allocator_t *allocator);
+#endif
+
+#else
+
+#error multiple include of utils/address_range_allocator.h
+
 #endif

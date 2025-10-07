@@ -2,25 +2,24 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_EVENT_H_
+#define INCLUDE_EVENT_H_
+
 #define EVENT_FD_READ  (1 << 0)
 #define EVENT_FD_WRITE (1 << 1)
 
 typedef struct event_s event_t;
 typedef void (*event_callback_t)(event_t *event, void *data);
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpadded"
-
 struct event_s {
 	event_t		*next;
 	event_t		*prev;
 	event_callback_t callback;
-	bool		 pending;
 	void		*data;
 	int		 fd;
+	bool		 pending;
+	uint8_t		 pad_to_end[3];
 };
-
-#pragma clang diagnostic pop
 
 error_t
 event_init(void);
@@ -57,3 +56,12 @@ event_deregister(event_t *event);
 
 bool
 event_trigger(event_t *event);
+
+bool
+event_untrigger(event_t *event);
+
+#else
+
+#error multiple include of event.h
+
+#endif

@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-struct vm_console;
-typedef struct vm_console vm_console_t;
+#ifndef INCLUDE_VM_CONSOLE_H_
+#define INCLUDE_VM_CONSOLE_H_
 
 rm_error_t
 vm_console_init(void);
@@ -20,3 +20,9 @@ vm_console_destroy(vm_console_t *console);
 
 void
 vm_console_deinit(void);
+
+#else
+
+#error multiple include of vm_console.h
+
+#endif

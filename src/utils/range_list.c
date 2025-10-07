@@ -18,6 +18,7 @@
 #include <utils/list.h>
 #include <utils/range_list.h>
 
+#include <guest_interface.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>
 
@@ -286,10 +287,10 @@ can_merge(range_t *left, range_t *cur_range, uintptr_t range_data,
 	assert(cur_range != NULL);
 
 	if (left != NULL) {
-		assert(cur_range->base_address >
-		       left->base_address - 1 + left->size);
-
 		assert(!util_add_overflows(left->base_address, left->size));
+
+		assert(cur_range->base_address >=
+		       left->base_address + left->size);
 
 		*out_merge_left = ((left->base_address + left->size) ==
 				   cur_range->base_address) &&
@@ -300,12 +301,12 @@ can_merge(range_t *left, range_t *cur_range, uintptr_t range_data,
 
 	// check if can merge to right
 	if (right != NULL) {
-		assert(cur_range->base_address - 1 + cur_range->size <
-		       right->base_address);
-
 		// shouldn't have overflow
 		assert(!util_add_overflows(cur_range->base_address,
 					   cur_range->size));
+
+		assert((cur_range->base_address + cur_range->size) <=
+		       right->base_address);
 
 		*out_merge_right = ((cur_range->base_address +
 				     cur_range->size) == right->base_address) &&
@@ -460,7 +461,7 @@ range_list_find_range_by_region(range_list_t *list, uint64_t region_base,
 
 		// if the current free region doesn't overlaps with the address
 		// region
-		if ((cur->base_address + cur->size <= region_base) ||
+		if (((cur->base_address + cur->size) <= region_base) ||
 		    ((region_base + region_size) <= cur->base_address)) {
 			continue;
 		}
@@ -468,8 +469,8 @@ range_list_find_range_by_region(range_list_t *list, uint64_t region_base,
 		uint64_t intersection_start_address =
 			util_max(cur->base_address, region_base);
 		uint64_t intersection_end_address =
-			util_min(cur->base_address + (cur->size - 1),
-				 region_base + (region_size - 1));
+			util_min(cur->base_address + (cur->size - 1U),
+				 region_base + (region_size - 1U));
 
 		uint64_t base_address =
 			util_balign_up(intersection_start_address, alignment);
@@ -521,9 +522,9 @@ range_list_find_range(range_list_t *allocator, uint64_t base_address,
 			uint64_t ret_address =
 				util_balign_up(cur->base_address, alignment);
 			size_t remaining_size =
-				cur->size >= (ret_address - cur->base_address)
-					? cur->size - (ret_address -
-						       cur->base_address)
+				(cur->size >= (ret_address - cur->base_address))
+					? (cur->size -
+					   (ret_address - cur->base_address))
 					: 0UL;
 			if ((size <= remaining_size) &&
 			    (cur->data == INVALID_DATA)) {
@@ -565,7 +566,7 @@ find_neighbor_ranges(range_list_t *list, uint64_t address, range_t **left,
 
 	// assert address is in initial range
 	assert(address >= list->base_address);
-	assert(address <= (list->base_address + list->size - 1));
+	assert(address <= (list->base_address + list->size - 1U));
 
 	loop_list_safe(cur, next, &list->range_list, range_)
 	{
@@ -601,7 +602,7 @@ range_list_update(range_list_t *list, uint64_t base_address, size_t size,
 	assert(base_address != INVALID_ADDRESS);
 	assert(size != 0UL);
 	assert(selected_range != NULL);
-	assert(!util_add_overflows(base_address, size - 1));
+	assert(!util_add_overflows(base_address, size - 1U));
 
 	if (selected_range->data == data) {
 		ret = OK;

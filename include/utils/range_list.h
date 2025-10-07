@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef UTILS_RANGE_LIST_H_
+#define UTILS_RANGE_LIST_H_
+
 #define INVALID_DATA (0UL)
 
 struct range_s;
@@ -96,7 +99,7 @@ typedef struct {
 // Returns the based address of the range, and the range node contains such
 // range. Or err if failed.
 range_list_find_ret_t
-range_list_find_range_by_region(range_list_t *allocator, uint64_t region_base,
+range_list_find_range_by_region(range_list_t *list, uint64_t region_base,
 				size_t region_size, size_t range_size,
 				size_t alignment, uintptr_t data);
 
@@ -121,4 +124,10 @@ range_list_has_data(range_list_t *list, uintptr_t data);
 #ifndef NDEBUG
 void
 range_list_dump(range_list_t *list, const char *prefix);
+#endif
+
+#else
+
+#error multiple include of utils/range_list.h
+
 #endif

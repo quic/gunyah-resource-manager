@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <rm_types.h>
 #include <util.h>
 #include <utils/vector.h>
 
@@ -124,7 +125,8 @@ vector_push_back_internal(vector_t *vector, const void *element)
 
 	uintptr_t base	 = (uintptr_t)vector->data;
 	size_t	  offset = vector->elements * vector->element_sz;
-	(void)memcpy((void *)(base + offset), element, vector->element_sz);
+	(void)memscpy((void *)(base + offset), vector->element_sz, element,
+		      vector->element_sz);
 	vector->elements++;
 
 err:
@@ -155,7 +157,7 @@ vector_pop_back_threadsafe_internal(vector_t *vector, void *tmp)
 	size_t	  offset = vector->elements * vector->element_sz;
 
 	void *ret = (void *)(base + offset);
-	(void)memcpy(tmp, ret, vector->element_sz);
+	(void)memscpy(tmp, vector->element_sz, ret, vector->element_sz);
 
 	(void)vector_resize(vector);
 
@@ -181,8 +183,8 @@ vector_delete_keep_order(vector_t *vector, index_t idx)
 	size_t	  offset_dst = idx * vector->element_sz;
 
 	if (sz != 0U) {
-		(void)memcpy((void *)(base + offset_dst),
-			     (void *)(base + offset_src), sz);
+		(void)memscpy((void *)(base + offset_dst), sz,
+			      (void *)(base + offset_src), sz);
 	}
 	vector->elements--;
 
@@ -246,10 +248,10 @@ vector_size(const vector_t *vector)
 static error_t
 vector_resize(vector_t *vector)
 {
-	error_t e = OK;
+	error_t ret;
 
 	if (vector->data == NULL) {
-		e = ERROR_NOMEM;
+		ret = ERROR_NOMEM;
 		goto out;
 	}
 
@@ -257,6 +259,7 @@ vector_resize(vector_t *vector)
 	count_t step_sz	 = vector->capacity_step_sz;
 
 	assert(capacity >= vector->elements);
+	assert(step_sz > 0U);
 
 	if ((capacity - vector->elements) >= step_sz) {
 		if (capacity > vector->min_capacity) {
@@ -264,26 +267,32 @@ vector_resize(vector_t *vector)
 		}
 	} else if (capacity == vector->elements) {
 		if (util_add_overflows(capacity, step_sz)) {
-			e = ERROR_DENIED;
+			ret = ERROR_DENIED;
 			goto out;
 		}
 		capacity += step_sz;
 	} else {
+		ret = OK;
 		goto out;
 	}
 
-	if ((capacity > 0U) && (capacity != vector->capacity)) {
-		size_t sz    = capacity * vector->element_sz;
-		vector->data = realloc(vector->data, sz);
-		if (vector->data == NULL) {
-			e = ERROR_NOMEM;
+	// If the capacity changed
+	if (capacity != vector->capacity) {
+		size_t sz = capacity * vector->element_sz;
+		assert(sz != 0U);
+		void *tmp_data = realloc(vector->data, sz);
+		if (tmp_data == NULL) {
+			ret = ERROR_NOMEM;
 			goto out;
+		} else {
+			vector->data = tmp_data;
 		}
 
 		vector->capacity = capacity;
 	}
+	ret = OK;
 out:
-	return e;
+	return ret;
 }
 
 void *

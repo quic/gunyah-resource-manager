@@ -39,7 +39,7 @@ create_rpc_header(uint8_t msg_type, size_t num_fragments, uint16_t seq_num,
 {
 	rm_rpc_header_t hdr;
 
-	assert(num_fragments < 0x63);
+	assert(num_fragments < 0x63U);
 
 	hdr.api_version	  = RM_RPC_API_VERSION;
 	hdr.header_words  = RM_RPC_HEADER_WORDS;
@@ -117,9 +117,10 @@ do_xmit(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 
 	while (tx_data->rem > 0U) {
 		size_t	size;
-		uint8_t msg_type = (tx_data->rem == tx_data->num_fragments + 1U)
-					   ? tx_data->msg_type
-					   : RM_RPC_MSG_TYPE_CONTINUED;
+		uint8_t msg_type =
+			(tx_data->rem == ((size_t)tx_data->num_fragments + 1U))
+				? tx_data->msg_type
+				: RM_RPC_MSG_TYPE_CONTINUED;
 
 		rm_rpc_header_t hdr =
 			create_rpc_header(msg_type, tx_data->num_fragments,
@@ -131,8 +132,9 @@ do_xmit(vmid_t vm_id, rm_rpc_tx_data_t *tx_data)
 			size = (RM_RPC_MAX_CONTENT > rem_len)
 				       ? rem_len
 				       : RM_RPC_MAX_CONTENT;
-			(void)memcpy(transport_buf + RM_RPC_HEADER_SIZE,
-				     tx_data->buf + tx_data->pos, size);
+			(void)memscpy(transport_buf + RM_RPC_HEADER_SIZE,
+				      RM_RPC_MAX_CONTENT,
+				      tx_data->buf + tx_data->pos, size);
 		} else {
 			size = 0;
 		}
@@ -205,6 +207,31 @@ out:
 	return err;
 }
 
+static void
+try_xmit_err_reply(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num,
+		   uint8_t msg_type, rm_error_t err)
+{
+	rm_rpc_tx_data_t *tx_data = rm_rpc_get_tx_data(vm_id);
+
+	// We only need to reply to RPC request messages.
+	if ((msg_type == RM_RPC_MSG_TYPE_REQUEST) && (tx_data != NULL)) {
+		rm_rpc_header_t hdr = create_rpc_header(RM_RPC_MSG_TYPE_REPLY,
+							0U, seq_num, msg_id);
+		write_rpc_header(transport_buf, hdr);
+
+		(void)memcpy(transport_buf + RM_RPC_HEADER_SIZE,
+			     (const uint8_t *)&err, sizeof(err));
+
+		// This function only uses tx_data to get the transport info, so
+		// it is safe to provide it without setting up the tx_data
+		// parameters. If it fails, we assume the VM isn't correctly
+		// receiving messages sent from RM, so there is no point in
+		// retrying the reply later on.
+		(void)rm_rpc_send_packet(tx_data, transport_buf,
+					 sizeof(err) + RM_RPC_HEADER_SIZE);
+	}
+}
+
 static rm_error_t
 do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 {
@@ -259,16 +286,18 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 		if (alloc_size > 0U) {
 			data_buf = malloc(alloc_size);
 			if (data_buf == NULL) {
+				// RM is OOM; receive any remaining fragments
+				// before returning error.
 				(void)printf(
 					"rm-rpc: Failed to allocate recv buffer "
 					"for VM %d, message ID %lx\n",
 					(uint32_t)vm_id, (unsigned long)msg_id);
-				err = RM_OK;
-				goto do_recv_return;
+				len = 0U;
 			}
 
 			if (len != 0U) {
-				(void)memcpy(data_buf, recv_buf, len);
+				(void)memscpy(data_buf, alloc_size, recv_buf,
+					      len);
 			}
 		}
 
@@ -303,12 +332,16 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 			goto do_recv_return;
 		}
 
-		assert((rx_data->len + len) <= rx_data->alloc_size);
+		if (rx_data->buf != NULL) {
+			assert((rx_data->len + len) <= rx_data->alloc_size);
 
-		uint8_t *data_buf = rx_data->buf + rx_data->len;
-		(void)memcpy(data_buf, recv_buf, len);
+			uint8_t *data_buf = rx_data->buf + rx_data->len;
+			(void)memscpy(data_buf, RM_RPC_MESSAGE_SIZE, recv_buf,
+				      len);
+			rx_data->len += len;
+		}
+
 		rx_data->rem_fragments--;
-		rx_data->len += len;
 
 		if (rx_data->rem_fragments == 0U) {
 			do_callback	 = true;
@@ -319,7 +352,12 @@ do_recv(vmid_t vm_id, rm_rpc_rx_data_t *rx_data)
 	if (do_callback) {
 		assert(!rx_data->partial);
 
-		if (rx_data->msg_type == RM_RPC_MSG_TYPE_NOTIFICATION) {
+		if ((rx_data->buf == NULL) && (rx_data->alloc_size != 0U)) {
+			// Failed to allocate RX buffer earlier; attempt to send
+			// back a NOMEM error.
+			try_xmit_err_reply(vm_id, msg_id, seq_num,
+					   rx_data->msg_type, RM_ERROR_NOMEM);
+		} else if (rx_data->msg_type == RM_RPC_MSG_TYPE_NOTIFICATION) {
 			if (notif_cb != NULL) {
 				notif_cb(vm_id, rx_data->msg_id, rx_data->buf,
 					 rx_data->len);
@@ -436,7 +474,7 @@ rm_rpc_read_list(uint8_t *buf, size_t len, uint16_t *entries,
 	assert(buf != NULL);
 	assert(entries != NULL);
 	assert(list != NULL);
-	assert(entry_size != 0);
+	assert(entry_size != 0U);
 	assert(next_buf != NULL);
 
 	assert(!util_add_overflows((uintptr_t)buf, len));

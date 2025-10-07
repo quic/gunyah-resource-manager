@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_MEMEXTENT_H_
+#define INCLUDE_MEMEXTENT_H_
+
 // When creating an extent from a parent, the phys_base should really be the
 // offset of the (base address to be used - base address of parent extent).
 cap_id_result_t
@@ -23,12 +26,13 @@ memextent_donate_sibling(cap_id_t from, cap_id_t to, size_t offset,
 
 error_t
 memextent_map(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
-	      pgtable_access_t access, pgtable_vm_memtype_t memtype_map);
+	      pgtable_access_t access, pgtable_vm_memtype_t memtype_map,
+	      bool protected);
 
 error_t
 memextent_map_partial(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 		      size_t offset, size_t size, pgtable_access_t access,
-		      pgtable_vm_memtype_t memtype_map);
+		      pgtable_vm_memtype_t memtype_map, bool protected);
 
 error_t
 memextent_unmap(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase);
@@ -74,3 +78,12 @@ memextent_cache_flush_range(cap_id_t me, size_t offset, size_t size);
 // This applies to all extents, regardless of the extent given.
 void
 memextent_sync_all(cap_id_t me);
+
+error_t
+memextent_set_sanitise_on_reset(cap_id_t me);
+
+#else
+
+#error multiple include of memextent.h
+
+#endif

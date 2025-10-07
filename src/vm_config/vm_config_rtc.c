@@ -18,11 +18,11 @@
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
 #include <util.h>
-#include <utils/address_range_allocator.h>
 #include <utils/list.h>
 #include <utils/vector.h>
 
@@ -30,8 +30,7 @@
 #include <event.h>
 #include <guest_interface.h>
 #include <irq_manager.h>
-#include <memextent.h>
-#include <memparcel_msg.h>
+#include <panic.h>
 #include <platform.h>
 #include <platform_vm_config.h>
 #include <resource-manager.h>
@@ -99,7 +98,7 @@ add_rtc_dev_node(vm_config_t *vmcfg, vmaddr_t ipa)
 	cfg->ipa      = ipa;
 	cfg->ipa_size = RTC_IPA_SIZE;
 
-	node->config = cfg;
+	node->config.rtc = cfg;
 
 	list_append(vdevice_node_t, &vmcfg->vdevice_nodes, node, vdevice_);
 
@@ -107,10 +106,10 @@ add_rtc_dev_node(vm_config_t *vmcfg, vmaddr_t ipa)
 
 out:
 	if (err != OK) {
-		if (node && node->generate) {
+		if ((node != NULL) && (node->generate != NULL)) {
 			free(node->generate);
 		}
-		if (node) {
+		if (node != NULL) {
 			free(node);
 		}
 	}
@@ -224,7 +223,7 @@ handle_rtc_teardown(vm_config_t *vmcfg, vdevice_node_t **node)
 		goto out;
 	}
 
-	struct vdevice_rtc *vrtc = (struct vdevice_rtc *)(*node)->config;
+	struct vdevice_rtc *vrtc = (*node)->config.rtc;
 
 	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_PLATFORM_VDEVICE,
 				    vrtc->ipa, RTC_IPA_SIZE);

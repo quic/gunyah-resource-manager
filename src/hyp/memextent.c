@@ -105,7 +105,8 @@ memextent_donate_sibling(cap_id_t from, cap_id_t to, size_t offset, size_t size)
 static error_t
 memextent_map_internal(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 		       size_t offset, size_t size, pgtable_access_t access,
-		       pgtable_vm_memtype_t memtype_map, bool partial)
+		       pgtable_vm_memtype_t memtype_map, bool protected,
+		       bool		    partial)
 {
 	memextent_mapping_attrs_t map_attrs = memextent_mapping_attrs_default();
 	memextent_mapping_attrs_set_user_access(&map_attrs, access);
@@ -115,6 +116,7 @@ memextent_map_internal(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 	addrspace_map_flags_t map_flags = addrspace_map_flags_default();
 	addrspace_map_flags_set_partial(&map_flags, partial);
 	addrspace_map_flags_set_no_sync(&map_flags, true);
+	addrspace_map_flags_set_private(&map_flags, protected);
 
 	return gunyah_hyp_addrspace_map(addrspace_cap, me_cap, vbase, map_attrs,
 					map_flags, offset, size);
@@ -122,19 +124,21 @@ memextent_map_internal(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 
 error_t
 memextent_map(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
-	      pgtable_access_t access, pgtable_vm_memtype_t memtype_map)
+	      pgtable_access_t access, pgtable_vm_memtype_t memtype_map,
+	      bool protected)
 {
 	return memextent_map_internal(me_cap, addrspace_cap, vbase, 0U, 0U,
-				      access, memtype_map, false);
+				      access, memtype_map, protected, false);
 }
 
 error_t
 memextent_map_partial(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 		      size_t offset, size_t size, pgtable_access_t access,
-		      pgtable_vm_memtype_t memtype_map)
+		      pgtable_vm_memtype_t memtype_map, bool protected)
 {
 	return memextent_map_internal(me_cap, addrspace_cap, vbase, offset,
-				      size, access, memtype_map, true);
+				      size, access, memtype_map, protected,
+				      true);
 }
 
 static error_t
@@ -221,7 +225,7 @@ memextent_create_and_map(cap_id_t addrspace_cap, paddr_t phy_base,
 	}
 
 	error_t ret = memextent_map(cap_ret.r, addrspace_cap, vbase, access,
-				    memtype_map);
+				    memtype_map, false);
 	if (ret != OK) {
 		cap_ret = cap_id_result_error(ret);
 	}
@@ -287,4 +291,15 @@ memextent_sync_all(cap_id_t me)
 
 	error_t err = gunyah_hyp_memextent_modify(me, flags, 0U, 0U);
 	assert(err == OK);
+}
+
+error_t
+memextent_set_sanitise_on_reset(cap_id_t me)
+{
+	memextent_modify_flags_t flags = memextent_modify_flags_default();
+	memextent_modify_flags_set_op(&flags,
+				      MEMEXTENT_MODIFY_OP_SANITISE_ON_RESET);
+	memextent_modify_flags_set_no_sync(&flags, true);
+
+	return gunyah_hyp_memextent_modify(me, flags, 0U, 0U);
 }

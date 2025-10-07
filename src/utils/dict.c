@@ -60,7 +60,8 @@ dict_init(dict_key_t key_min, dict_key_t key_max)
 	assert(!util_add_overflows((key_max - key_min), 1U));
 
 	dict_key_t key_num = (key_max - key_min) + 1U;
-	count_t key_bits = (sizeof(key_num) * 8U) - compiler_clz(key_num - 1U);
+	count_t	   key_bits =
+		(count_t)(sizeof(key_num) * 8U) - compiler_clz(key_num - 1U);
 
 	count_t depth = 1U;
 	while (key_bits > TABLE_SHIFT) {
@@ -76,7 +77,7 @@ dict_init(dict_key_t key_min, dict_key_t key_max)
 	}
 
 	// Allocate dict with top-level tables contiguously
-	static_assert(sizeof(dict_t) % sizeof(void *) == 0U,
+	static_assert((sizeof(dict_t) % sizeof(void *)) == 0U,
 		      "dict_t not aligned");
 	size_t top_size =
 		sizeof(dict_t) + (sizeof(dict_table_t *) * top_levels);
@@ -178,6 +179,23 @@ dict_get_first_free_key_from(dict_t *dict, dict_key_t from)
 			// Table is full ?
 			if (table->children == util_bit(shift)) {
 				// Skip the subtree
+				// If level_index was for last index in table,
+				// move up levels until we get to table where
+				// level_index is not the last index
+				while (level_index == (TABLE_ENTRIES - 1U)) {
+					depth = depth + 1U;
+					shift = shift + TABLE_SHIFT;
+					if (depth == dict->depth) {
+						goto end_iter;
+					} else {
+						tables =
+							stack_tables[depth - 1U];
+						level_index =
+							(key_index >> shift) &
+							(TABLE_ENTRIES - 1U);
+					}
+				}
+				// Adjust key_index
 				key_index =
 					key_index + (dict_key_t)util_bit(shift);
 				// Align since initial key_index not aligned
@@ -572,7 +590,8 @@ end_iter:
 	depth = 1U;
 
 	dict_key_t key_num = (dict->key_max + 1U) - dict->key_min;
-	count_t key_bits = (sizeof(key_num) * 8U) - compiler_clz(key_num - 1U);
+	count_t	   key_bits =
+		(count_t)(sizeof(key_num) * 8U) - compiler_clz(key_num - 1U);
 
 	while (key_bits > TABLE_SHIFT) {
 		depth	 = depth + 1U;

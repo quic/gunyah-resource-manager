@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_VCPU_H_
+#define INCLUDE_VM_VCPU_H_
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 
@@ -18,6 +21,7 @@ struct vcpu_s {
 	interrupt_data_t proxy_virq;
 
 	bool  boot_vcpu;
+	bool  defective;
 	char *patch;
 
 	vmid_t vmid;
@@ -30,3 +34,9 @@ struct vcpu_s {
 typedef struct vcpu_s vcpu_t;
 
 #pragma clang diagnostic pop
+
+#else
+
+#error multiple include of vm_vcpu.h
+
+#endif

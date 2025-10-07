@@ -21,21 +21,20 @@
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 
 #pragma clang diagnostic pop
 
 #include <util.h>
-#include <utils/address_range_allocator.h>
 #include <utils/list.h>
-#include <utils/vector.h>
 
 #include <dtb_parser.h>
 #include <event.h>
 #include <guest_interface.h>
 #include <irq_manager.h>
 #include <log.h>
-#include <memextent.h>
+#include <mem_region.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
 #include <platform.h>
@@ -47,11 +46,10 @@
 #include <vm_client.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
-#include <vm_console.h>
 #include <vm_creation.h>
+#include <vm_firmware.h>
 #include <vm_memory.h>
 #include <vm_mgnt.h>
-#include <vm_vcpu.h>
 
 rm_error_t
 vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
@@ -77,28 +75,35 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 		rm_err = RM_ERROR_MEM_INVALID;
 		goto out;
 	}
+
+	// The image parcel must be owned by the same VM that owns the new VM.
+	if (memparcel_get_owner(image_mp) != vm->owner) {
+		(void)printf(
+			"Error: VM %d image parcel %d owned by VM %d, not %d\n",
+			vm->vmid, image_mp_handle,
+			memparcel_get_owner(image_mp), vm->owner);
+		rm_err = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	// RM will be accessing the image memparcel's memory on behalf of the
+	// owner. For this to be safe, the parcel must either be shared (so the
+	// owner will retain access to it after the VM starts) or exclusive to
+	// the new VM (so the owner could reclaim it immediately at this point,
+	// because the new VM hasn't accepted it yet).
+	if ((memparcel_get_trans_type(image_mp) != TRANS_TYPE_SHARE) &&
+	    !memparcel_is_exclusive(image_mp, vm->vmid)) {
+		(void)printf(
+			"Error: VM %d image parcel %d is neither shared nor exclusive\n",
+			vm->vmid, image_mp_handle);
+		rm_err = RM_ERROR_DENIED;
+		goto out;
+	}
+
 	vm->mem_mp_handle = image_mp_handle;
 	vm->mem_size	  = memparcel_get_size(image_mp);
 	vm->mem_base_tag  = ADDRESS_RANGE_NO_TAG;
-
-	count_t num_regions = memparcel_get_num_regions(image_mp);
-	for (index_t i = 0U; i < num_regions; i++) {
-		paddr_result_t pret = memparcel_get_phys(image_mp, i);
-		assert(pret.e == OK);
-		size_result_t sret = memparcel_get_region_size(image_mp, i);
-		assert(sret.e == OK);
-
-		address_range_tag_t tag =
-			vm_memory_get_phys_address_tag(pret.r, sret.r);
-		vm->mem_base_tag = (i == 0U) ? tag : (tag & vm->mem_base_tag);
-	}
-
-	if (vm->mem_base_tag == ADDRESS_RANGE_NO_TAG) {
-		(void)printf("Error: invalid base tag for vm %d mp %d\n",
-			     vm->vmid, image_mp_handle);
-		rm_err = RM_ERROR_MEM_INVALID;
-		goto out;
-	}
+	vm->mem_private	  = memparcel_is_exclusive(image_mp, vm->vmid);
 
 	if (util_add_overflows(image_offset, image_size) ||
 	    ((image_offset + image_size) > vm->mem_size) ||
@@ -183,8 +188,14 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 		rm_err = RM_ERROR_ARGUMENT_INVALID;
 		break;
 	}
-
 	if (rm_err != RM_OK) {
+		goto out_destroy_cspace;
+	}
+
+	// Memory must be private if it is required to be sanitised.
+	if (!vm->mem_private && !vm->vm_config->mem_unsanitized) {
+		(void)printf("Error: vm %d memory must be private\n", vm->vmid);
+		rm_err = RM_ERROR_DENIED;
 		goto out_destroy_cspace;
 	}
 
@@ -301,13 +312,18 @@ vm_creation_init(vm_t *vm)
 	    vm->vm_config->guestdump_allowed) {
 		// disable sanitization of Guest VM region
 		vm->vm_config->mem_unsanitized = true;
-		printf("GUEST_RAM_DUMP: Sanitization disabled for VM %d region.\n",
-		       vm->vmid);
+		(void)printf(
+			"GUEST_RAM_DUMP: Sanitization disabled for VM %d region.\n",
+			vm->vmid);
 	}
 #endif // GUEST_RAM_DUMP_ENABLE
 
 	err = platform_vm_init(vm);
+	if (err != RM_OK) {
+		goto out;
+	}
 
+	err = vm_firmware_init_boot_context(vm);
 out:
 	return err;
 }

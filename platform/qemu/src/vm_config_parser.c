@@ -5,10 +5,12 @@
 #include <guest_types.h>
 
 #include <assert.h>
+#include <regex.h>
 #include <stdio.h>
 
 #include <rm_types.h>
 
+#include <guest_interface.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
@@ -22,11 +24,12 @@
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
-#include <utils/vector.h>
-
 #include <dtb_parser.h>
+#include <dtb_parser_listener.h>
 #include <event.h>
-#include <guest_interface.h>
+#include <mem_region.h>
+#include <memparcel.h>
+#include <memparcel_msg.h>
 #include <platform_dt_parser.h>
 #include <platform_vm_config.h>
 #include <vm_config.h>

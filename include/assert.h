@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_ASSERT_H_
+#define INCLUDE_ASSERT_H_
+
 typedef int line_number_t;
 
 #if defined(CONFIG_DEBUG)
@@ -19,3 +22,9 @@ rm_assert_fail(const char *file, line_number_t line);
 #endif
 
 #define static_assert _Static_assert
+
+#else
+
+#error multiple include of assert.h
+
+#endif

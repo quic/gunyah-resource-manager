@@ -20,11 +20,12 @@
 #include <utils/range_list.h>
 #include <utils/vector.h>
 
+#include <guest_interface.h>
 #include <log.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>
 
-struct address_range_allocator {
+struct address_range_allocator_s {
 	range_list_t *ralloc;
 
 	vector_t *sub_allocators;

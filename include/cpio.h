@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_CPIO_H_
+#define INCLUDE_CPIO_H_
+
 #define CPIO_HEADER_MAGIC "070701"
 #define CPIO_FOOTER_MAGIC "TRAILER!!!"
 #define CPIO_CMDLINE	  ".cmdline"
@@ -24,3 +27,9 @@ struct cpio_header {
 	char c_namesize[8];
 	char c_check[8];
 };
+
+#else
+
+#error multiple include of cpio.h
+
+#endif

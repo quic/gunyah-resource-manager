@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_CONFIG_PARSER_H_
+#define INCLUDE_VM_CONFIG_PARSER_H_
+
 typedef enum {
 	// default
 	VM_CONFIG_VM_TYPE_AARCH64_GUEST,
@@ -11,14 +14,6 @@ typedef enum {
 	// default
 	VM_CONFIG_OS_TYPE_LINUX,
 } vm_config_os_type_t;
-
-typedef enum {
-	// default
-	VM_CONFIG_AFFINITY_STATIC,
-	VM_CONFIG_AFFINITY_STICKY,
-	VM_CONFIG_AFFINITY_PINNED,
-	VM_CONFIG_AFFINITY_PROXY,
-} vm_config_affinity_t;
 
 typedef struct general_data {
 	// it might be simpler to free it if string length is restricted
@@ -120,14 +115,15 @@ RM_PADDED(typedef struct virtio_mmio_data {
 
 	paddr_t	 mem_base_ipa;
 	uint64_t dma_base;
+	char	*patch;
 
 	vmid_t		     peer;
 	count_t		     vqs_num;
 	virtio_device_type_t device_type;
 	bool		     valid_device_type;
+	bool		     sync_reset;
 	bool		     need_allocate;
 	bool		     dma_coherent;
-	uint8_t		     need_allocate_padding[2];
 } virtio_mmio_data_t)
 
 RM_PADDED(typedef struct iomem_data {
@@ -182,13 +178,6 @@ typedef struct {
 	virq_t virq;
 } irq_range_data_t;
 
-RM_PADDED(typedef struct smmu_v2_data {
-	char	*patch;
-	uint32_t smmu_handle;
-	uint32_t num_cbs;
-	uint32_t num_smrs;
-} smmu_v2_data_t)
-
 typedef struct rtc_data {
 	vmaddr_t ipa_base;
 	bool	 allocate_base;
@@ -225,6 +214,7 @@ struct dtb_parser_data_s {
 	bool context_dump;
 	bool no_shutdown;
 	bool no_reset;
+	bool crash_restart;
 
 #if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
 	bool insecure_console;
@@ -246,11 +236,13 @@ struct dtb_parser_data_s {
 	size_t	 mem_size_min;
 	size_t	 mem_size_max;
 	bool	 mem_map_direct;
+	bool	 mem_base_set;
 	bool	 mem_base_constraints_set;
 	uint32_t mem_base_constraints[2];
 
 	paddr_t fw_base_ipa;
 	size_t	fw_size_max;
+	bool	fw_base_set;
 
 	vector_t *iomem_ranges;
 
@@ -285,4 +277,8 @@ struct dtb_parser_data_s {
 
 RM_PADDED_END
 
-typedef struct dtb_parser_data_s vm_config_parser_data_t;
+#else
+
+#error multiple include of vm_config_parser.h
+
+#endif

@@ -11,7 +11,7 @@
 bool
 virq_is_valid(interrupt_data_t virq)
 {
-	return virq.irq != VIRQ_NUM_INVALID;
+	return virq.irq != VIRQ_INVALID;
 }
 
 interrupt_data_t

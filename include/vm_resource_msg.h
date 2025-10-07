@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_RESOURCE_MSG_H_
+#define INCLUDE_VM_RESOURCE_MSG_H_
+
 typedef enum {
 	RSC_DOORBELL_SRC   = 0,
 	RSC_DOORBELL	   = 1,
@@ -12,6 +15,8 @@ typedef enum {
 	RSC_VIRTIO_MMIO	   = 6,
 	RSC_VRTC	   = 7,
 	RSC_WATCHDOG	   = 8,
+	RSC_MEMORY_EXTENT  = 9,
+	RSC_ADDRESS_SPACE  = 10,
 } resource_type_t;
 
 typedef uint32_t resource_label_t;
@@ -38,3 +43,9 @@ struct rm_hyp_resource_resp {
 };
 
 typedef struct rm_hyp_resource_resp rm_hyp_resource_resp_t;
+
+#else
+
+#error multiple include of vm_resource_msg.h
+
+#endif

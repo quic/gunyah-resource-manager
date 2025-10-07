@@ -13,6 +13,8 @@
 
 #include <dt_overlay.h>
 #include <event.h>
+#include <guest_interface.h>
+#include <mem_region.h>
 #include <memextent.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
@@ -86,12 +88,9 @@ platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data)
 		goto out;
 	}
 
-	mem_base = rm_get_device_me_base();
-	mem_size = rm_get_device_me_size();
-
 	err = memextent_map(rm_get_device_me_cap(), vm->vm_config->addrspace,
-			    mem_base, PGTABLE_ACCESS_RW,
-			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
+			    0U, PGTABLE_ACCESS_RW,
+			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE, false);
 	if (err != OK) {
 		(void)printf("Device addr Mapping failed");
 		goto out;
@@ -102,7 +101,7 @@ platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data)
 
 	err = memextent_map(rm_get_uart_me(), vm->vm_config->addrspace,
 			    mem_base, PGTABLE_ACCESS_RW,
-			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
+			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE, false);
 	if (err != OK) {
 		(void)printf("Device addr Mapping failed");
 		goto out;
@@ -315,19 +314,18 @@ platform_vm_destroy(vm_t *vm, bool hlos)
 	return OK;
 }
 
+void
+platform_handle_teardown_vdevice(vm_config_t *vmcfg, struct vdevice_node **node)
+{
+	(void)vmcfg;
+	(void)node;
+}
+
 error_t
 platform_handle_destroy_vdevices(const vm_t *vm)
 {
 	(void)vm;
 	return OK;
-}
-
-bool
-platform_has_vsmmu_v2_support(void)
-{
-	bool ret = false;
-
-	return ret;
 }
 
 error_t

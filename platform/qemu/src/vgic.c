@@ -9,6 +9,7 @@
 
 #include <rm_types.h>
 
+#include <guest_interface.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
@@ -28,7 +29,6 @@
 #include <dt_overlay.h>
 #include <dtb_parser.h>
 #include <event.h>
-#include <guest_interface.h>
 #include <irq_manager.h>
 #include <log.h>
 #include <platform_dt_parser.h>
@@ -62,13 +62,67 @@ vgic_init(const rm_env_data_t *env_data)
 	return OK;
 }
 
+static error_t
+vm_config_attach_gicr(const vm_t *vm, const count_t gicr_cnt)
+{
+	error_t err = OK;
+
+	index_t gicr_slot  = 0U;
+	size_t	vcpu_count = vector_size(vm->vm_config->vcpus);
+
+	for (index_t cpu_id = 0U; cpu_id < vcpu_count; cpu_id++) {
+		vcpu_t *vcpu =
+			vector_at(vcpu_t *, vm->vm_config->vcpus, cpu_id);
+		assert(vcpu != NULL);
+
+		if (vcpu->defective) {
+			continue;
+		}
+
+		vgic_gicr_attach_flags_t flags =
+			vgic_gicr_attach_flags_default();
+		vgic_gicr_attach_flags_set_last(&flags,
+						gicr_slot == (gicr_cnt - 1U));
+		vgic_gicr_attach_flags_set_last_valid(&flags, true);
+		err = gunyah_hyp_addrspace_attach_vdevice(
+			vm->vm_config->addrspace, vm->vm_config->vic,
+			cpu_id + 1U,
+			vm->vm_config->platform.vgic_gicr_base +
+				(gicr_slot *
+				 vm->vm_config->platform.vgic_gicr_stride),
+			vgic_gicr_size,
+			(addrspace_attach_vdevice_flags_t){ .vgic_gicr =
+								    flags });
+		if (err != OK) {
+			LOG_LOC("attach GICR");
+			goto out;
+		}
+		gicr_slot++;
+	}
+
+out:
+	return err;
+}
+
 error_t
 vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 {
 	error_t err;
 
-	vm_t	     *vm       = vmcfg->vm;
-	const count_t gicr_cnt = (count_t)vector_size(vm->vm_config->vcpus);
+	count_t gicr_cnt = 0U;
+
+	// Count the number of gicrs to create
+	size_t vcpu_count = vector_size(vmcfg->vcpus);
+	for (index_t i = 0U; i < vcpu_count; i++) {
+		vcpu_t *vcpu = vector_at(vcpu_t *, vmcfg->vcpus, i);
+		assert(vcpu != NULL);
+
+		if (!vcpu->defective) {
+			gicr_cnt++;
+		}
+	}
+	assert(gicr_cnt != 0U);
+
 	if (data == NULL) {
 		// This is the primary VM.
 
@@ -107,6 +161,8 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 	}
 
 	// Allocate and attach the GIC vdevice address ranges
+	vm_t *vm = vmcfg->vm;
+	assert(vm != NULL);
 
 	// GICD: 64K, attachment index 0
 	if ((vm->vm_config->platform.vgic_gicd_base != INVALID_ADDRESS) &&
@@ -182,36 +238,9 @@ vgic_vm_config_add(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 		goto out;
 	}
 
-	cpu_index_t cpu_id = 0;
-	for (index_t gicr_slot = 0; gicr_slot < gicr_cnt; gicr_slot++) {
-		while (!rm_is_core_usable(cpu_id)) {
-			cpu_id++;
-			if (cpu_id > rm_get_platform_max_cores()) {
-				err = ERROR_NORESOURCES;
-				LOG_LOC("GICR core ID range");
-				goto out;
-			}
-		}
-
-		vgic_gicr_attach_flags_t flags =
-			vgic_gicr_attach_flags_default();
-		vgic_gicr_attach_flags_set_last(&flags,
-						gicr_slot == (gicr_cnt - 1U));
-		vgic_gicr_attach_flags_set_last_valid(&flags, true);
-		err = gunyah_hyp_addrspace_attach_vdevice(
-			vm->vm_config->addrspace, vm->vm_config->vic,
-			cpu_id + 1U,
-			vm->vm_config->platform.vgic_gicr_base +
-				(gicr_slot *
-				 vm->vm_config->platform.vgic_gicr_stride),
-			vgic_gicr_size,
-			(addrspace_attach_vdevice_flags_t){ .vgic_gicr =
-								    flags });
-		if (err != OK) {
-			LOG_LOC("attach GICR");
-			goto out;
-		}
-		cpu_id++;
+	err = vm_config_attach_gicr(vm, gicr_cnt);
+	if (err != OK) {
+		goto out;
 	}
 
 out:

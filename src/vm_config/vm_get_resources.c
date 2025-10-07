@@ -9,19 +9,19 @@
 #include <string.h>
 
 #include <rm_types.h>
+#include <util.h>
 #include <utils/vector.h>
 
-#include <memparcel.h>
+#include <guest_interface.h>
+#include <platform.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
 #include <vm_config.h>
 #include <vm_mgnt_message.h>
-#include <vm_resources.h>
-// after vm_resources.h
-#include <vm_creation.h>
 #include <vm_resource_msg.h>
+#include <vm_resources.h>
 
 static void
 vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
@@ -36,7 +36,7 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	}
 
 	uint8_t *buf8 = (uint8_t *)buf;
-	vmid	      = (vmid_t)(buf8[0] | (buf8[1] << 8));
+	vmid	      = (vmid_t)buf8[0] | (vmid_t)((vmid_t)buf8[1] << 8);
 
 	// Lookup resources
 	uint32_t resource_entries = 0;
@@ -62,12 +62,13 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out_deinit;
 	}
 
-	memcpy(resp, &ret, sizeof(ret));
-	memcpy(resp + sizeof(uint32_t), &resource_entries,
-	       sizeof(resource_entries));
-	(void)memcpy((void *)(resp + (2U * sizeof(uint32_t))),
-		     vector_raw_data(descs),
-		     resource_entries * sizeof(rm_hyp_resource_resp_t));
+	(void)memscpy(resp, resp_size, (char *)&ret, sizeof(ret));
+	(void)memscpy(resp + sizeof(uint32_t), resp_size - sizeof(uint32_t),
+		      (char *)&resource_entries, sizeof(resource_entries));
+	(void)memscpy((void *)(resp + (2U * sizeof(uint32_t))),
+		      resp_size - (2U * sizeof(uint32_t)),
+		      vector_raw_data(descs),
+		      resource_entries * sizeof(rm_hyp_resource_resp_t));
 
 	rm_error_t rpc_err =
 		rm_rpc_fifo_reply(client_id, msg_id, seq_num, resp, resp_size);

@@ -13,6 +13,7 @@
 #include <rm_types.h>
 #include <util.h>
 #include <utils/dict.h>
+#include <utils/guid_parser.h>
 #include <utils/vector.h>
 
 #include <compiler.h>
@@ -20,6 +21,7 @@
 #include <guest_interface.h>
 #include <irq_manager.h>
 #include <log.h>
+#include <mem_region.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
 #include <panic.h>
@@ -34,9 +36,16 @@
 #include <vm_config_struct.h>
 #include <vm_creation.h>
 #include <vm_firmware.h>
+#include <vm_memory.h>
 #include <vm_mgnt.h>
+#include <vm_mgnt_arch.h>
 #include <vm_mgnt_message.h>
 #include <vm_vcpu.h>
+#ifdef HYPVM_WITH_COVERAGE
+#include <uart.h>
+
+#include "cpptest.h"
+#endif
 
 // Bitmap of secondary VM VMIDs. These are VMIDs which are managed by RM but
 // have specific roles in the platform, and should only be given to
@@ -56,16 +65,14 @@ static dict_t *all_vms;
 
 RM_PADDED(typedef struct peer_info {
 	uint16_t     id_len;
-	char	    *id_buf;
+	const char  *id_buf;
 	vm_id_type_t id_type;
 } peer_info_t)
 
 static error_t
-parse_guid(const char *guid_string, uint8_t guid[VM_GUID_LEN]);
-static error_t
-vm_mgnt_parse_peer_id(char *peer_id, peer_info_t *info);
+vm_mgnt_parse_peer_id(const char *peer_id, peer_info_t *info);
 
-rm_error_t
+void
 vm_mgnt_send_state(vm_t *vm)
 {
 	vmid_t owner = vm->owner;
@@ -93,61 +100,61 @@ vm_mgnt_send_state(vm_t *vm)
 		    vm->vmid, vm->vm_state, vm->os_state, vm->app_status);
 		rm_notify(peer_vm->vmid, NOTIFY_VM_STATUS, &msg, sizeof(msg));
 	}
-
-	return RM_OK;
 }
 
 bool
-vm_mgnt_state_change_valid(const vm_t *vm, vm_state_t vm_state)
+vm_mgnt_state_change_valid(const vm_t *vm, vm_state_t vm_new_state)
 {
-	bool valid;
+	bool	   valid;
+	vm_state_t vm_old_state = vm->vm_state;
 
-	switch (vm_state) {
+	switch (vm_new_state) {
 	case VM_STATE_INIT:
-		valid = (vm->vm_state == VM_STATE_LOAD) ||
-			(vm->vm_state == VM_STATE_AUTH) ||
-			(vm->vm_state == VM_STATE_RESET);
+		valid = (vm_old_state == VM_STATE_LOAD) ||
+			(vm_old_state == VM_STATE_AUTH) ||
+			(vm_old_state == VM_STATE_RESET);
 		break;
 	case VM_STATE_READY:
-		valid = vm->vm_state == VM_STATE_INIT;
+		valid = vm_old_state == VM_STATE_INIT;
 		break;
 	case VM_STATE_RUNNING:
-		valid = (vm->vm_state == VM_STATE_READY) ||
-			(vm->vm_state == VM_STATE_PAUSED);
+		valid = (vm_old_state == VM_STATE_READY) ||
+			(vm_old_state == VM_STATE_PAUSED);
 		break;
 	case VM_STATE_PAUSED:
-		valid = !vm->no_shutdown && (vm->vm_state == VM_STATE_RUNNING);
+		valid = !vm->no_shutdown && (vm_old_state == VM_STATE_RUNNING);
 		break;
 	case VM_STATE_LOAD:
-		valid = vm->vm_state == VM_STATE_NONE;
+		valid = vm_old_state == VM_STATE_NONE;
 		break;
 	case VM_STATE_AUTH:
-		valid = (vm->vm_state == VM_STATE_LOAD) ||
-			(vm->vm_state == VM_STATE_RESET);
+		valid = (vm_old_state == VM_STATE_LOAD) ||
+			(vm_old_state == VM_STATE_RESET);
 		break;
 	case VM_STATE_INIT_FAILED:
-		valid = (vm->vm_state == VM_STATE_INIT) ||
-			(vm->vm_state == VM_STATE_READY) ||
-			(vm->vm_state == VM_STATE_LOAD) ||
-			(vm->vm_state == VM_STATE_AUTH) ||
-			(vm->vm_state == VM_STATE_RESET);
+		valid = (vm_old_state == VM_STATE_INIT) ||
+			(vm_old_state == VM_STATE_READY) ||
+			(vm_old_state == VM_STATE_LOAD) ||
+			(vm_old_state == VM_STATE_AUTH) ||
+			(vm_old_state == VM_STATE_RESET);
 		break;
 	case VM_STATE_EXITED:
 		valid = (!vm->no_shutdown && !vm->crash_fatal) &&
-			((vm->vm_state == VM_STATE_RUNNING) ||
-			 (vm->vm_state == VM_STATE_PAUSED));
+			((vm_old_state == VM_STATE_RUNNING) ||
+			 (vm_old_state == VM_STATE_PAUSED));
 		break;
 	case VM_STATE_RESETTING:
 		valid = !vm->no_reset &&
-			((vm->vm_state == VM_STATE_EXITED) ||
-			 (vm->vm_state == VM_STATE_READY) ||
-			 (vm->vm_state == VM_STATE_INIT_FAILED));
+			((vm_old_state == VM_STATE_EXITED) ||
+			 (vm_old_state == VM_STATE_READY) ||
+			 (vm_old_state == VM_STATE_INIT_FAILED));
 		break;
 	case VM_STATE_RESET:
-		valid = vm->vm_state == VM_STATE_RESETTING;
+	case VM_STATE_DEFUNCT:
+		valid = vm_old_state == VM_STATE_RESETTING;
 		break;
 	case VM_STATE_NONE:
-		valid = vm->vm_state == VM_STATE_RESET;
+		valid = vm_old_state == VM_STATE_RESET;
 		break;
 	default:
 		valid = false;
@@ -157,7 +164,15 @@ vm_mgnt_state_change_valid(const vm_t *vm, vm_state_t vm_state)
 	return valid;
 }
 
-static rm_error_t
+static void
+vm_mgnt_set_exit_type(vm_t *vm, exit_type_t exit_type)
+{
+	assert(vm->vm_state == VM_STATE_EXITED);
+
+	vm->exit_type = exit_type;
+}
+
+static void
 vm_mgnt_update_vm_state(vm_t *vm, vm_state_t vm_state)
 {
 	// State transition should have already been validated.
@@ -166,13 +181,57 @@ vm_mgnt_update_vm_state(vm_t *vm, vm_state_t vm_state)
 	vm->vm_state = vm_state;
 
 	// XXX Only send state for certain transitions?
-	return vm_mgnt_send_state(vm);
+	vm_mgnt_send_state(vm);
+}
+
+static void
+vm_mgnt_set_cleanup_type(vm_t *vm, const uint32_t *extra_reason)
+{
+	assert(vm->vm_state == VM_STATE_EXITED);
+
+	switch (vm->exit_type) {
+	// arch specific
+	case EXIT_TYPE_PLATFORM_OFF:
+	case EXIT_TYPE_PLATFORM_RESET:
+	case EXIT_TYPE_PSCI_SYSTEM_RESET2:
+	case EXIT_TYPE_VM_EXIT:
+	case EXIT_TYPE_WATCHDOG_BITE:
+		vm_mgnt_arch_set_cleanup_type(vm, extra_reason);
+		break;
+	case EXIT_TYPE_SOFTWARE_ERROR:
+	case EXIT_TYPE_ASYNC_HW_ERROR:
+	case EXIT_TYPE_VM_STOP_FORCED:
+	default:
+		vm->clean_shutdown = false;
+		break;
+	}
+
+	// Ensure that IO memory borrowed from HLOS was released.
+	if (vm->clean_shutdown) {
+		// The VM directly controls the devices it has access to. For a
+		// clean shutdown, it has to guarantee that it only releases the
+		// IO memory after sanitizing the device at VM state RUNNING.
+		// Hypervisor should not check IO memory here, because 1) an IO
+		// memory might have never been zero, e.g., GIC register 2)
+		// reading a IO device might have side-effects, e.g., memcpy
+		// might raise external aborts due to incorrect access sizes.
+		// 3) no R/W access
+		if (memparcel_vm_has_accepted_io_memparcels(vm->vmid)) {
+			vm->clean_shutdown = false;
+			(void)printf(
+				"Warning: VM %d has unreleased IO memparcels\n",
+				vm->vmid);
+		}
+	}
+
+	(void)printf("VM %d clean shutdown %d\n", vm->vmid,
+		     vm->clean_shutdown ? 1 : 0);
 }
 
 static rm_error_t
-vm_mgnt_send_exited(const vm_t *vm, exit_type_t exit_type,
-		    uint16_t exit_reason_flags, exit_code_t exit_code,
-		    count_t extra_reason_words, const uint32_t *extra_reason)
+vm_mgnt_send_exited(const vm_t *vm, uint16_t exit_reason_flags,
+		    exit_code_t exit_code, count_t extra_reason_words,
+		    const uint32_t *extra_reason)
 {
 	rm_error_t err;
 
@@ -186,7 +245,7 @@ vm_mgnt_send_exited(const vm_t *vm, exit_type_t exit_type,
 	rm_notify_vm_exited_t msg = { 0 };
 
 	msg.vmid      = vm->vmid;
-	msg.exit_type = (uint16_t)exit_type;
+	msg.exit_type = (uint16_t)vm->exit_type;
 	msg.exit_reason_size =
 		((uint32_t)(sizeof(uint32_t))) * (extra_reason_words + 1U);
 
@@ -202,7 +261,7 @@ vm_mgnt_send_exited(const vm_t *vm, exit_type_t exit_type,
 
 	static_assert(sizeof(msg) == sizeof(uint64_t),
 		      "rm_notify_vm_exited_t size changed");
-	(void)memcpy((void *)&buf[0], (void *)&msg, sizeof(msg));
+	(void)memscpy((void *)&buf[0], len, (void *)&msg, sizeof(msg));
 	buf[2] = common_reason;
 	for (count_t i = 0U; i < extra_reason_words; i++) {
 		buf[3U + i] = extra_reason[i];
@@ -270,13 +329,25 @@ vm_reset_callback(event_t *event, void *data)
 		}
 		trigger = true;
 		break;
-	case VM_RESET_STAGE_COMPLETED:
-		if (vm_mgnt_update_vm_state(vm, VM_STATE_RESET) != RM_OK) {
-			(void)printf("VM_RESET: Failed to update vm state\n");
+	case VM_RESET_STAGE_COMPLETED: {
+		vm_state_t vm_state;
+
+		if (vm->restart_allowed) {
+			vm_state = VM_STATE_RESET;
 		} else {
-			vm_deregister_all_peers(vm);
+			// Do not allow VM restart, we don't support cleanup.
+			vm_state = VM_STATE_DEFUNCT;
+			(void)printf("Warning: VM %d is defunct\n", vm->vmid);
 		}
+		vm_mgnt_update_vm_state(vm, vm_state);
+		vm_deregister_all_peers(vm);
+#ifdef HYPVM_WITH_COVERAGE
+		CppTest_SendCoverage_fdx();
+		// c-runtime coverage ioctl
+		uart_send_coverage();
+#endif
 		break;
+	}
 	default:
 		(void)printf("VM_RESET: Invalid state: %d\n", vm->reset_stage);
 		break;
@@ -449,20 +520,21 @@ vm_lookup(vmid_t vmid)
 bool
 vm_is_secondary_vm(vmid_t vmid)
 {
-	return (vmid < 64U) && ((secondary_vmids & util_bit(vmid)) != 0);
+	return (vmid < 64U) && ((secondary_vmids & util_bit(vmid)) != 0U);
 }
 
 bool
 vm_is_peripheral_vm(vmid_t vmid)
 {
-	return (vmid < 64U) && ((peripheral_vmids & util_bit(vmid)) != 0);
+	return (vmid < 64U) && ((peripheral_vmids & util_bit(vmid)) != 0U);
 }
 
 bool
 vm_is_dynamic_vm(vmid_t vmid)
 {
 	return (vmid >= VMID_DYNAMIC_BASE) && (vmid < VMID_DYNAMIC_END) &&
-	       ((free_dynamic_vmids & util_bit(vmid - VMID_DYNAMIC_BASE)) == 0);
+	       ((free_dynamic_vmids & util_bit(vmid - VMID_DYNAMIC_BASE)) ==
+		0U);
 }
 
 static bool
@@ -517,9 +589,8 @@ vm_mgnt_handle_allocate(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	if (vmid == 0U) {
 		// Choose a free dynamic VMID
-		index_t fs = compiler_ffs(free_dynamic_vmids);
-		if (fs != 0U) {
-			index_t bit = fs - 1U;
+		if (free_dynamic_vmids != 0U) {
+			index_t bit = compiler_ctz(free_dynamic_vmids);
 			free_dynamic_vmids &= ~util_bit(bit);
 			vmid	  = (vmid_t)(bit + VMID_DYNAMIC_BASE);
 			allocated = true;
@@ -560,7 +631,7 @@ out:
 	LOG("VM_ALLOCATE: %d vmid=%d, ret=%d\n", client_id, vmid, ret);
 
 	if (ret != RM_OK) {
-		if (vmid != 0) {
+		if (vmid != 0U) {
 			// Deallocate vmid
 			if (allocated) {
 				assert(vmid >= VMID_DYNAMIC_BASE);
@@ -605,10 +676,10 @@ vm_mgnt_handle_deallocate(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	if (vmid >= VMID_DYNAMIC_BASE) {
 		vmid_t vmid_dynamic = vmid - VMID_DYNAMIC_BASE;
 		// A dynamic VMID can be 0.
-		assert((vmid_dynamic >= 0) && (vmid_dynamic < 64));
+		assert(vmid_dynamic < 64U);
 		free_dynamic_vmids |= util_bit(vmid_dynamic);
 	} else {
-		assert((vmid > 0) && (vmid < 64));
+		assert(vmid < 64U);
 		free_secondary_vmids |= util_bit(vmid);
 	}
 
@@ -658,7 +729,14 @@ vm_mgnt_handle_start(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	error_t hyp_ret = vm_creation_process_resource(vm);
+	error_t hyp_ret = vm_memory_vm_start(vm);
+	if (hyp_ret != OK) {
+		(void)printf("vm_memory_vm_start: ret %d\n", hyp_ret);
+		ret = RM_ERROR_NORESOURCE;
+		goto out_state_change;
+	}
+
+	hyp_ret = vm_creation_process_resource(vm);
 	if (hyp_ret != OK) {
 		(void)printf("vm_creation_process_resource: ret %d\n", hyp_ret);
 		ret = RM_ERROR_NORESOURCE;
@@ -675,9 +753,7 @@ vm_mgnt_handle_start(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 out_state_change:
 	vm_state = (ret == RM_OK) ? VM_STATE_RUNNING : VM_STATE_INIT_FAILED;
-	if (vm_mgnt_update_vm_state(vm, vm_state) != RM_OK) {
-		(void)printf("VM_START: Failed to update vm state\n");
-	}
+	vm_mgnt_update_vm_state(vm, vm_state);
 
 out:
 	LOG("VM_START: from:%d vmid:%d, ret=%d\n", client_id, vmid, ret);
@@ -715,26 +791,29 @@ vm_mgnt_handle_stop(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
-	// Freeze the watchdog to prevent a bark if the VM is proxy-scheduled.
-	gunyah_hyp_watchdog_manage(vm->vm_config->watchdog,
-				   WATCHDOG_MANAGE_OP_FREEZE);
-#endif
+	if (vm->vm_config->watchdog != CSPACE_CAP_INVALID) {
+		// Freeze the watchdog to prevent a bark if the VM is
+		// proxy-scheduled.
+		error_t e = gunyah_hyp_watchdog_manage(
+			vm->vm_config->watchdog, WATCHDOG_MANAGE_OP_FREEZE);
+		if (e != OK) {
+			panic("Hyp watchdog failed\n");
+		}
+	}
 
 	uint8_t flags = buf8[2];
 	if ((flags & VM_STOP_FLAG_FORCE) != 0U) {
 		vm_config_handle_exit(vm);
 
-		if (vm_mgnt_update_vm_state(vm, VM_STATE_EXITED) != RM_OK) {
-			(void)printf("VM_STOP: Failed to update vm state\n");
-		}
+		vm_mgnt_update_vm_state(vm, VM_STATE_EXITED);
+		vm_mgnt_set_exit_type(vm, EXIT_TYPE_VM_STOP_FORCED);
+		vm_mgnt_set_cleanup_type(vm, NULL);
 
-		ret = vm_mgnt_send_exited(vm, EXIT_TYPE_VM_STOP_FORCED, 0U,
-					  EXIT_CODE_NORMAL, 0U, NULL);
+		ret = vm_mgnt_send_exited(vm, 0U, EXIT_CODE_NORMAL, 0U, NULL);
 	} else {
 		uint32_t stop_reason;
-		(void)memcpy((uint8_t *)&stop_reason, &buf8[4],
-			     sizeof(stop_reason));
+		(void)memscpy((uint8_t *)&stop_reason, sizeof(stop_reason),
+			      &buf8[4], sizeof(uint8_t) * 4U);
 
 		rm_notify(vmid, NOTIFY_VM_SHUTDOWN, &stop_reason,
 			  sizeof(stop_reason));
@@ -751,7 +830,7 @@ vm_mgnt_handle_exit(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 {
 	rm_error_t err;
 
-	if (len != 4) {
+	if (len != 4U) {
 		err = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -770,7 +849,8 @@ vm_mgnt_handle_exit(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	uint8_t res0 = buf8[3];
 
 	uint16_t exit_flags;
-	(void)memcpy((uint8_t *)&exit_flags, &buf8[0], sizeof(exit_flags));
+	(void)memscpy((uint8_t *)&exit_flags, sizeof(exit_flags), &buf8[0],
+		      sizeof(uint8_t) * 4U);
 	uint8_t exit_code8 = buf8[2];
 
 	bool valid = res0 == 0U;
@@ -812,15 +892,11 @@ vm_mgnt_handle_exit(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	vm_config_handle_exit(vm);
 
-	err = vm_mgnt_update_vm_state(vm, VM_STATE_EXITED);
-	if (err != RM_OK) {
-		(void)printf("VM_EXIT: Failed to update VM %d state\n",
-			     vm->vmid);
-		goto out;
-	}
+	vm_mgnt_update_vm_state(vm, VM_STATE_EXITED);
+	vm_mgnt_set_exit_type(vm, EXIT_TYPE_VM_EXIT);
+	vm_mgnt_set_cleanup_type(vm, NULL);
 
-	err = vm_mgnt_send_exited(vm, EXIT_TYPE_VM_EXIT, exit_flags, exit_code,
-				  0U, NULL);
+	err = vm_mgnt_send_exited(vm, exit_flags, exit_code, 0U, NULL);
 	if (err != RM_OK) {
 		(void)printf("VM_EXIT: Failed to send exited notification\n");
 	}
@@ -866,7 +942,14 @@ vm_mgnt_handle_reset(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	vm_config_t *vmcfg = vm->vm_config;
 	if (vmcfg->trusted_config) {
+#if defined(PLATFORM_ENABLE_TRUSTEDVM_RESTART) &&                              \
+	PLATFORM_ENABLE_TRUSTEDVM_RESTART
 		(void)printf("VM_RESET: of trusted VM %d\n", vmid);
+#else
+		(void)printf("Error: reset of trusted VMs is not supported\n");
+		ret = RM_ERROR_DENIED;
+		goto out;
+#endif
 	}
 
 	if (!vm_mgnt_state_change_valid(vm, VM_STATE_RESETTING)) {
@@ -878,10 +961,7 @@ vm_mgnt_handle_reset(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		vm_config_handle_exit(vm);
 	}
 
-	ret = vm_mgnt_update_vm_state(vm, VM_STATE_RESETTING);
-	if (ret != RM_OK) {
-		goto out;
-	}
+	vm_mgnt_update_vm_state(vm, VM_STATE_RESETTING);
 
 	// Trigger cleanup of VM resources
 	(void)event_trigger(&vm->reset_event);
@@ -984,10 +1064,7 @@ vm_mgnt_handle_set_state(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		vm->os_state   = os_state;
 		vm->app_status = app_status;
 
-		ret = vm_mgnt_send_state(vm);
-		if (ret != RM_OK) {
-			(void)printf("error sending update\n");
-		}
+		vm_mgnt_send_state(vm);
 	} else {
 		ret = RM_ERROR_MSG_INVALID;
 	}
@@ -1023,7 +1100,7 @@ vm_mgnt_handle_get_crash_msg(vmid_t client_id, uint32_t msg_id,
 
 	uint16_t crash_msg_len = vm->crash_msg_len;
 
-	size_t	 out_len = 8 + util_balign_up(crash_msg_len, 4);
+	size_t	 out_len = (size_t)8 + util_balign_up(crash_msg_len, 4U);
 	uint8_t *out	 = calloc(1, out_len);
 	if (out == NULL) {
 		ret = RM_ERROR_NOMEM;
@@ -1031,10 +1108,12 @@ vm_mgnt_handle_get_crash_msg(vmid_t client_id, uint32_t msg_id,
 	}
 
 	ret = RM_OK;
-	(void)memcpy(&out[0], (uint8_t *)&ret, sizeof(ret));
-	(void)memcpy(&out[4], (uint8_t *)&crash_msg_len, sizeof(crash_msg_len));
+	(void)memscpy(&out[0], out_len, (uint8_t *)&ret, sizeof(ret));
+	(void)memscpy(&out[4], out_len - sizeof(uint32_t),
+		      (uint8_t *)&crash_msg_len, sizeof(crash_msg_len));
 	if (vm->crash_msg != NULL) {
-		(void)memcpy(&out[8], (uint8_t *)vm->crash_msg, crash_msg_len);
+		(void)memscpy(&out[8], out_len - sizeof(uint64_t),
+			      (uint8_t *)vm->crash_msg, crash_msg_len);
 	}
 
 	ret = rm_rpc_fifo_reply(client_id, msg_id, seq_num, out, out_len);
@@ -1082,7 +1161,7 @@ vm_mgnt_handle_set_crash_msg(vmid_t client_id, uint32_t msg_id,
 	uint8_t *buf8	 = (uint8_t *)buf;
 	uint16_t msg_len = buf8[0] | (uint16_t)((uint16_t)buf8[1] << 8);
 
-	size_t msg_align_len = util_balign_up(msg_len, 4);
+	size_t msg_align_len = util_balign_up(msg_len, 4U);
 	if (((msg_align_len + 4U)) != len) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
@@ -1111,7 +1190,7 @@ vm_mgnt_handle_set_crash_msg(vmid_t client_id, uint32_t msg_id,
 		free(vm->crash_msg);
 	}
 
-	(void)memcpy((uint8_t *)crash_msg, msg_buf, msg_len);
+	(void)memscpy((uint8_t *)crash_msg, msg_len, msg_buf, msg_len);
 
 	vm->crash_msg	  = crash_msg;
 	vm->crash_msg_len = msg_len;
@@ -1187,14 +1266,14 @@ vm_mgnt_handle_get_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	uint16_t id_size;
 
 	size_t name_len	      = vm->name_len;
-	size_t name_align_len = util_balign_up(name_len, 4);
+	size_t name_align_len = util_balign_up(name_len, 4U);
 	if (name_len != 0U) {
 		id_entries++;
 		id_msg_size += 4U + name_align_len;
 	}
 
 	size_t uri_len	     = vm->uri_len;
-	size_t uri_align_len = util_balign_up(uri_len, 4);
+	size_t uri_align_len = util_balign_up(uri_len, 4U);
 	if (uri_len != 0U) {
 		id_entries++;
 		id_msg_size += 4U + uri_align_len;
@@ -1210,7 +1289,7 @@ vm_mgnt_handle_get_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	}
 
 	size_t sign_auth_len	   = strlen(sign_auth);
-	size_t sign_auth_align_len = util_balign_up(sign_auth_len, 4);
+	size_t sign_auth_align_len = util_balign_up(sign_auth_len, 4U);
 	id_entries++;
 	id_msg_size += 4U + sign_auth_align_len;
 
@@ -1220,49 +1299,52 @@ vm_mgnt_handle_get_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	buf8 = id_msg;
-	ret  = RM_OK;
-	(void)memcpy(buf8, (uint8_t *)&ret, sizeof(rm_error_t));
-	buf8 += 4U;
-	(void)memcpy(buf8, (uint8_t *)&id_entries, sizeof(uint32_t));
-	buf8 += 4U;
+	ret	      = RM_OK;
+	size_t offset = 0U;
+	offset += memscpy(&id_msg[offset], id_msg_size - offset,
+			  (uint8_t *)&ret, sizeof(rm_error_t));
+	offset += memscpy(&id_msg[offset], id_msg_size - offset,
+			  (uint8_t *)&id_entries, sizeof(id_entries));
 
-	*buf8 = VM_ID_TYPE_GUID;
-	buf8 += 2U;
+	id_msg[offset] = (uint8_t)VM_ID_TYPE_GUID;
+	offset += 2U;
 	id_size = VM_GUID_LEN;
-	(void)memcpy(buf8, (uint8_t *)&id_size, sizeof(uint16_t));
-	buf8 += 2U;
-	(void)memcpy(buf8, vm->guid, VM_GUID_LEN);
-	buf8 += VM_GUID_LEN;
+	offset += memscpy(&id_msg[offset], id_msg_size - offset,
+			  (uint8_t *)&id_size, sizeof(id_size));
+	offset += memscpy(&id_msg[offset], id_msg_size - offset, vm->guid,
+			  sizeof(vm->guid));
 
 	if (name_len != 0U) {
-		*buf8 = VM_ID_TYPE_NAME;
-		buf8 += 2U;
+		id_msg[offset] = (uint8_t)VM_ID_TYPE_NAME;
+		offset += 2U;
 		id_size = (uint16_t)name_len;
-		(void)memcpy(buf8, (uint8_t *)&id_size, sizeof(uint16_t));
-		buf8 += 2U;
-		(void)memcpy(buf8, (uint8_t *)vm->name, name_len);
-		buf8 += name_align_len;
+		offset += memscpy(&id_msg[offset], id_msg_size - offset,
+				  (uint8_t *)&id_size, sizeof(uint16_t));
+		offset += memscpy(&id_msg[offset], id_msg_size - offset,
+				  (uint8_t *)vm->name, name_len);
+		offset += (name_align_len - name_len);
 	}
 
 	if (uri_len != 0U) {
-		*buf8 = VM_ID_TYPE_URI;
-		buf8 += 2U;
+		id_msg[offset] = (uint8_t)VM_ID_TYPE_URI;
+		offset += 2U;
 		id_size = (uint16_t)uri_len;
-		(void)memcpy(buf8, (uint8_t *)&id_size, sizeof(uint16_t));
-		buf8 += 2U;
-		(void)memcpy(buf8, (uint8_t *)vm->uri, uri_len);
-		buf8 += uri_align_len;
+		offset += memscpy(&id_msg[offset], id_msg_size - offset,
+				  (uint8_t *)&id_size, sizeof(uint16_t));
+		offset += memscpy(&id_msg[offset], id_msg_size - offset,
+				  (uint8_t *)vm->uri, uri_len);
+		offset += (uri_align_len - uri_len);
 	}
 
-	*buf8 = VM_ID_TYPE_SIGN_AUTH;
-	buf8 += 2U;
-	(void)memcpy(buf8, (uint8_t *)&sign_auth_len, sizeof(uint16_t));
-	buf8 += 2U;
-	(void)memcpy(buf8, (const uint8_t *)sign_auth, sign_auth_len);
-	buf8 += sign_auth_align_len;
+	id_msg[offset] = (uint8_t)VM_ID_TYPE_SIGN_AUTH;
+	offset += 2U;
+	offset += memscpy(&id_msg[offset], id_msg_size - offset,
+			  (uint8_t *)&sign_auth_len, sizeof(uint16_t));
+	offset += memscpy(&id_msg[offset], id_msg_size - offset,
+			  (const uint8_t *)sign_auth, sign_auth_len);
+	offset += (sign_auth_align_len - sign_auth_len);
 
-	assert((id_msg + id_msg_size) == buf8);
+	assert(offset == id_msg_size);
 
 	ret = rm_rpc_fifo_reply(client_id, msg_id, seq_num, id_msg,
 				id_msg_size);
@@ -1281,7 +1363,7 @@ static bool
 cmp_uri(const vm_t *vm, const uint8_t *uri, size_t uri_len)
 {
 	return (vm->uri_len == uri_len) &&
-	       (memcmp(vm->uri, (const char *)uri, uri_len) == 0);
+	       (memcmp((const uint8_t *)(vm->uri), uri, uri_len) == 0);
 }
 
 static bool
@@ -1296,7 +1378,7 @@ static bool
 cmp_name(const vm_t *vm, const uint8_t *name, size_t name_len)
 {
 	return (vm->name_len == name_len) &&
-	       (memcmp(vm->name, (const char *)name, name_len) == 0);
+	       (memcmp((const uint8_t *)vm->name, name, name_len) == 0);
 }
 
 error_t
@@ -1315,14 +1397,14 @@ vm_register_peers(vm_t *vm1, vm_t *vm2)
 
 	ret = vector_push_back(vm1->peers, vm2);
 	if (ret != OK) {
-		ret = RM_ERROR_NOMEM;
+		ret = ERROR_NOMEM;
 		goto err_register;
 	}
 
 	ret = vector_push_back(vm2->peers, vm1);
 	if (ret != OK) {
 		(void)vector_pop_back(vm_t *, vm1->peers);
-		ret = RM_ERROR_NOMEM;
+		ret = ERROR_NOMEM;
 		goto err_register;
 	}
 
@@ -1383,12 +1465,12 @@ vm_deregister_peers(vm_t *vm1, vm_t *vm2)
 
 typedef bool (*id_cmp_t)(const vm_t *vm, const uint8_t *id_buf, size_t id_len);
 
-struct check_vm_data {
+RM_PADDED(struct check_vm_data {
 	vm_t	      *vm;
 	const uint8_t *id_buf;
-	size_t	       id_len;
 	id_cmp_t       id_cmp;
-};
+	uint16_t       id_len;
+})
 
 static bool
 check_vm_id(dict_key_t key, void *d, void *x)
@@ -1420,7 +1502,6 @@ vm_lookup_by_id(const char *peer_id)
 	assert(all_vms != NULL);
 
 	peer_info_t info;
-	char	   *copy_peer_id = NULL;
 
 	if (peer_id == NULL) {
 		(void)printf("Error: Null peer_id for vm_lookup_by_id\n");
@@ -1428,61 +1509,64 @@ vm_lookup_by_id(const char *peer_id)
 		goto out;
 	}
 
-	copy_peer_id = strdup(peer_id);
-	if (copy_peer_id == NULL) {
-		(void)printf("Error: failed to duplicate peer id for lookup\n");
-		ret = NULL;
-		goto out;
-	}
-
-	error_t parse_ret = vm_mgnt_parse_peer_id(copy_peer_id, &info);
+	error_t parse_ret = vm_mgnt_parse_peer_id(peer_id, &info);
 	if (parse_ret != OK) {
-		(void)printf("Error: failed to parse peer id %s\n",
-			     copy_peer_id);
+		// It may be dangerous to print peer_id here
+		size_t len = strnlen(peer_id, 80U);
+		(void)printf("Error: failed to parse peer id:\n");
+		if ((len > 0U) && (len < 80U)) {
+			(void)printf("%s\n", peer_id);
+		}
 		ret = NULL;
 		goto out;
 	}
 
 	uint8_t		     guid[VM_GUID_LEN];
 	struct check_vm_data c = { 0 };
+	bool		     valid;
 
 	switch (info.id_type) {
 	case VM_ID_TYPE_GUID: {
-		error_t parse_guid_ret = parse_guid(info.id_buf, guid);
-		if (parse_guid_ret != OK) {
+		error_t parse_guid_ret = parse_guid_string(info.id_buf, &guid);
+		if (parse_guid_ret == OK) {
+			c.id_cmp = cmp_guid;
+			c.id_buf = guid;
+			c.id_len = VM_GUID_LEN;
+			valid	 = true;
+		} else {
 			(void)printf("Error: failed to parse guid from %s\n",
 				     info.id_buf);
-			ret = NULL;
-			goto out;
+			valid = false;
 		}
-
-		c.id_cmp = cmp_guid;
-		c.id_buf = guid;
-		c.id_len = VM_GUID_LEN;
 		break;
 	}
 	case VM_ID_TYPE_URI:
 		c.id_cmp = cmp_uri;
-		c.id_buf = (uint8_t *)info.id_buf;
+		c.id_buf = (const uint8_t *)info.id_buf;
 		c.id_len = info.id_len;
+		valid	 = true;
 		break;
 	case VM_ID_TYPE_NAME:
 		c.id_cmp = cmp_name;
-		c.id_buf = (uint8_t *)info.id_buf;
+		c.id_buf = (const uint8_t *)info.id_buf;
 		c.id_len = info.id_len;
+		valid	 = true;
 		break;
 	case VM_ID_TYPE_SIGN_AUTH:
 	default:
 		(void)printf("Error: Invalid ID type %d\n", info.id_type);
+		valid = false;
+		break;
+	}
+	if (valid) {
+		c.vm = NULL;
+		(void)dict_iterate(all_vms, &check_vm_id, &c);
+		ret = c.vm;
+	} else {
 		ret = NULL;
-		goto out;
 	}
 
-	c.vm = NULL;
-	(void)dict_iterate(all_vms, check_vm_id, &c);
-	ret = c.vm;
 out:
-	free(copy_peer_id);
 	return ret;
 }
 
@@ -1522,9 +1606,10 @@ vm_mgnt_lookup_by_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	uint8_t *buf8 = ret_buf;
 	err	      = RM_OK;
-	(void)memcpy(buf8, (uint8_t *)&err, sizeof(rm_error_t));
+	(void)memscpy(buf8, ret_size, (uint8_t *)&err, sizeof(rm_error_t));
 	buf8 += 4;
-	(void)memcpy(buf8, (uint8_t *)&vm_count, sizeof(uint32_t));
+	(void)memscpy(buf8, ret_size - sizeof(uint32_t), (uint8_t *)&vm_count,
+		      sizeof(uint32_t));
 	buf8 += 4;
 
 	dict_foreach(vm, key, all_vms)
@@ -1534,7 +1619,8 @@ vm_mgnt_lookup_by_id(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			continue;
 		}
 
-		(void)memcpy(buf8, (uint8_t *)&vm->vmid, sizeof(vmid_t));
+		(void)memscpy(buf8, ret_size - sizeof(uint64_t),
+			      (uint8_t *)&vm->vmid, sizeof(vmid_t));
 		buf8 += 4;
 		assert(buf8 <= (ret_buf + ret_size));
 	}
@@ -1571,7 +1657,7 @@ vm_mgnt_handle_lookup_uri(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	size_t uri_align_len = util_balign_up(uri_len, 4);
+	size_t uri_align_len = util_balign_up(uri_len, 4U);
 	if ((uri_align_len + 4U) != len) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
@@ -1579,7 +1665,8 @@ vm_mgnt_handle_lookup_uri(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	uint8_t *uri = buf8 + 4;
 	uint32_t pad = 0;
-	if (memcmp(uri + uri_len, &pad, uri_align_len - uri_len) != 0) {
+	if (memcmp(uri + uri_len, (uint8_t *)&pad, uri_align_len - uri_len) !=
+	    0) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -1639,7 +1726,7 @@ vm_mgnt_handle_lookup_name(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	size_t name_align_len = util_balign_up(name_len, 4);
+	size_t name_align_len = util_balign_up(name_len, 4U);
 	if ((name_align_len + 4U) != len) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
@@ -1647,7 +1734,8 @@ vm_mgnt_handle_lookup_name(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	uint8_t *name = buf8 + 4;
 	uint32_t pad  = 0;
-	if (memcmp(name + name_len, &pad, name_align_len - name_len) != 0) {
+	if (memcmp(name + name_len, (uint8_t *)&pad,
+		   name_align_len - name_len) != 0) {
 		ret = RM_ERROR_MSG_INVALID;
 		goto out;
 	}
@@ -1718,8 +1806,7 @@ static void
 vm_mgnt_handle_set_firmware_mem(vmid_t client_id, uint32_t msg_id,
 				uint16_t seq_num, void *buf, size_t len)
 {
-	rm_error_t ret	   = RM_ERROR_MSG_INVALID;
-	error_t	   hvc_err = ERROR_ARGUMENT_INVALID;
+	rm_error_t ret;
 
 	if (len != sizeof(vm_set_firmware_mem_t)) {
 		ret = RM_ERROR_MSG_INVALID;
@@ -1752,11 +1839,189 @@ vm_mgnt_handle_set_firmware_mem(vmid_t client_id, uint32_t msg_id,
 				     msg->fw_size);
 
 out:
-	if (ret == RM_OK) {
-		rm_standard_reply(client_id, msg_id, seq_num, ret);
-	} else {
-		rm_reply_error(client_id, msg_id, seq_num, ret, &hvc_err, 4);
+	rm_standard_reply(client_id, msg_id, seq_num, ret);
+}
+
+static void
+vm_mgnt_handle_set_debug(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
+			 void *buf, size_t len)
+{
+	rm_error_t ret;
+
+	if (len != sizeof(vm_set_debug_t)) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
 	}
+
+	vm_set_debug_t *msg = (vm_set_debug_t *)buf;
+	if ((msg->res0 != 0U) || (msg->debug_enabled > 1U)) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	vm_t *vm = vm_lookup(msg->target);
+	if (vm == NULL) {
+		ret = RM_ERROR_NORESOURCE;
+		goto out;
+	}
+
+	if ((client_id != vm->vmid) && (client_id != vm->owner)) {
+		ret = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	if (vm->vm_state != VM_STATE_INIT) {
+		ret = RM_ERROR_VM_STATE;
+		goto out;
+	}
+
+	if (platform_get_security_state()) {
+		ret = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	vm->debug_enabled = msg->debug_enabled != 0U;
+	ret		  = RM_OK;
+
+out:
+	rm_standard_reply(client_id, msg_id, seq_num, ret);
+}
+
+static void
+vm_mgnt_handle_set_demand_paging(vmid_t client_id, uint32_t msg_id,
+				 uint16_t seq_num, void *buf, size_t len)
+{
+	rm_error_t ret = RM_ERROR_MSG_INVALID;
+
+	if (len < sizeof(vm_set_demand_paging_t)) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	vm_set_demand_paging_t *msg = (vm_set_demand_paging_t *)buf;
+	if (msg->res0_0 != 0U) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+	vm_set_demand_paging_range_t *ranges =
+		(vm_set_demand_paging_range_t *)(void *)(msg + 1U);
+
+	if (util_mult_integer_overflows(msg->range_count, sizeof(ranges[0])) ||
+	    util_add_overflows((size_t)msg->range_count * sizeof(ranges[0]),
+			       sizeof(*msg)) ||
+	    (len < ((msg->range_count * sizeof(ranges[0])) + sizeof(*msg)))) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	vm_t *vm = vm_lookup(msg->target);
+	if (vm == NULL) {
+		ret = RM_ERROR_NORESOURCE;
+		goto out;
+	}
+
+	if ((client_id != vm->owner) || (vm->vm_state != VM_STATE_INIT) ||
+	    (vm->auth_type == VM_AUTH_TYPE_PLATFORM)) {
+		ret = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	if (vm->vm_config->mem_demand_paging) {
+		// Can't enable dynamic paging twice
+		ret = RM_ERROR_BUSY;
+		goto out;
+	}
+
+	assert(vm->vm_config->mem_demand_paged_ranges == NULL);
+	vm->vm_config->mem_demand_paged_ranges =
+		vector_init(struct mem_range, msg->range_count, 1U);
+	if (vm->vm_config->mem_demand_paged_ranges == NULL) {
+		ret = RM_ERROR_NOMEM;
+		goto out;
+	}
+	for (index_t i = 0; i < msg->range_count; i++) {
+		struct mem_range r = { .base = ranges[i].paged_base,
+				       .size = ranges[i].paged_size };
+
+		if (!util_is_baligned(r.base, PAGE_SIZE) ||
+		    !util_is_baligned(r.size, PAGE_SIZE) || (r.size == 0U)) {
+			ret = RM_ERROR_ARGUMENT_INVALID;
+			goto out_vector_deinit;
+		}
+
+		error_t err = vector_push_back(
+			vm->vm_config->mem_demand_paged_ranges, r);
+		if (err != OK) {
+			ret = rm_error_from_hyp(err);
+			goto out_vector_deinit;
+		}
+	}
+
+	vm->vm_config->mem_demand_paging = true;
+	ret				 = RM_OK;
+	goto out;
+
+out_vector_deinit:
+	vector_deinit(vm->vm_config->mem_demand_paged_ranges);
+	vm->vm_config->mem_demand_paged_ranges = NULL;
+out:
+	rm_standard_reply(client_id, msg_id, seq_num, ret);
+}
+
+static void
+vm_mgnt_handle_set_address_layout(vmid_t client_id, uint32_t msg_id,
+				  uint16_t seq_num, void *buf, size_t len)
+{
+	rm_error_t ret = RM_ERROR_MSG_INVALID;
+
+	if (len != sizeof(vm_set_address_layout_t)) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	vm_set_address_layout_t *msg = (vm_set_address_layout_t *)buf;
+	if (msg->res0_0 != 0U) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	vm_t *vm = vm_lookup(msg->target);
+	if ((vm == NULL) || (vm->vm_config == NULL)) {
+		ret = RM_ERROR_NORESOURCE;
+		goto out;
+	}
+
+	if ((client_id != vm->owner) || (vm->vm_state != VM_STATE_INIT)) {
+		ret = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	if (!util_is_baligned(msg->range_base, PAGE_SIZE) ||
+	    !util_is_baligned(msg->range_size, PAGE_SIZE) ||
+	    (msg->range_size == 0U) ||
+	    util_add_overflows(msg->range_base, msg->range_size)) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	switch (msg->range_id) {
+	case (uint32_t)ADDRESS_LAYOUT_RANGE_IMAGE:
+		vm->vm_config->mem_ipa_base = msg->range_base;
+		vm->vm_config->mem_size_max = msg->range_size;
+		ret			    = RM_OK;
+		break;
+	case (uint32_t)ADDRESS_LAYOUT_RANGE_FIRMWARE:
+		vm->vm_config->fw_ipa_base = msg->range_base;
+		vm->vm_config->fw_size_max = msg->range_size;
+		ret			   = RM_OK;
+		break;
+	default:
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		break;
+	}
+
+out:
+	rm_standard_reply(client_id, msg_id, seq_num, ret);
 }
 
 static void
@@ -1940,6 +2205,20 @@ vm_mgnt_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 						len);
 		handled = true;
 		break;
+	case VM_SET_DEMAND_PAGING:
+		vm_mgnt_handle_set_demand_paging(client_id, msg_id, seq_num,
+						 buf, len);
+		handled = true;
+		break;
+	case VM_SET_ADDRESS_LAYOUT:
+		vm_mgnt_handle_set_address_layout(client_id, msg_id, seq_num,
+						  buf, len);
+		handled = true;
+		break;
+	case VM_SET_DEBUG:
+		vm_mgnt_handle_set_debug(client_id, msg_id, seq_num, buf, len);
+		handled = true;
+		break;
 	case VM_GET_VMID:
 		vm_mgnt_handle_get_vmid(client_id, msg_id, seq_num, buf, len);
 		handled = true;
@@ -1962,59 +2241,85 @@ out:
 }
 
 static error_t
-parse_guid(const char *guid_string, uint8_t guid[VM_GUID_LEN])
+vm_mgnt_parse_peer_id(const char *peer_id, peer_info_t *info)
 {
-	error_t ret = OK;
+	error_t	    ret;
+	const char *id_val = NULL;
 
-	unsigned int tmp[8];
+	assert((peer_id != NULL) && (info != NULL));
 
-	int num_in = sscanf(guid_string, "%04x%04x-%04x-%04x-%04x-%04x%04x%04x",
-			    &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4],
-			    &tmp[5], &tmp[6], &tmp[7]);
-	if (num_in != 8) {
-		ret = ERROR_ARGUMENT_SIZE;
+	// Sanity check, ID isn't be longer than 128
+#define ID_MAX 128U
+	size_t len = strnlen(peer_id, ID_MAX);
+	if ((len == 0U) || (len == ID_MAX)) {
+		ret = ERROR_FAILURE;
 		goto out;
 	}
 
-	for (int i = 0; i < 8; i++) {
-		uint16_t be16 = htobe16((uint16_t)tmp[i]);
-		(void)memcpy(guid + (i * 2), (uint8_t *)&be16, 2);
+	size_t prefix = 0U;
+
+	// Find the ':' separator for the id_type
+	for (index_t i = 0U; i < util_min(len, 8U); i++) {
+		if (peer_id[i] == ':') {
+			prefix = i;
+			break;
+		}
 	}
-out:
-	return ret;
-}
-
-static error_t
-vm_mgnt_parse_peer_id(char *peer_id, peer_info_t *info)
-{
-	error_t ret    = OK;
-	char   *id_val = NULL;
-
-	if (peer_id == NULL) {
-		(void)printf("Error: Null peer_id to parse\n");
-		ret = ERROR_ARGUMENT_INVALID;
+	if (prefix == 0U) {
+		// no ':' found
+		ret = ERROR_FAILURE;
 		goto out;
 	}
 
-	if (info == NULL) {
-		(void)printf("Error: Null info to parse peer id\n");
-		ret = ERROR_ARGUMENT_INVALID;
+	size_t id_len = len - prefix - 1U;
+	if (id_len == 0U) {
+		// No id string
+		ret = ERROR_FAILURE;
 		goto out;
 	}
 
-	// Check which lookup id has been specified (guid, name, or uri)
-	char *id = strtok_r(peer_id, ":", &id_val);
-	if (id == NULL) {
-		ret = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
+	id_val = &peer_id[prefix + 1U];
 
-	if (strcmp(id, "vm-guid") == 0) {
+	// Check for known prefixes
+	if (strncmp(peer_id, "vm-guid:", prefix) == 0) {
 		info->id_type = VM_ID_TYPE_GUID;
-	} else if (strcmp(id, "vm-name") == 0) {
+		ret	      = (id_len >= 32U) ? OK : ERROR_FAILURE;
+	} else if (strncmp(peer_id, "vm-name:", prefix) == 0) {
 		info->id_type = VM_ID_TYPE_NAME;
-	} else if (strcmp(id, "vm-uri") == 0) {
+		ret	      = (id_len >= 1U) ? OK : ERROR_FAILURE;
+	} else if (strncmp(peer_id, "vm-uri:", prefix) == 0) {
 		info->id_type = VM_ID_TYPE_URI;
+
+		// Very basic URI validation
+		index_t sep = 0U;
+
+		// Find the first '/' separator
+		for (index_t i = 0U; i < id_len; i++) {
+			if (id_val[i] == '/') {
+				sep = i;
+				break;
+			}
+		}
+		if ((sep == 0U) || (sep == id_len)) {
+			// Not a "domain/path"
+			ret = ERROR_FAILURE;
+			goto out;
+		}
+		index_t dot = 0U;
+		// Check domain has a dot, e.g.: "xyz.com"
+		for (index_t i = 0U; i < sep; i++) {
+			if (id_val[i] == '.') {
+				dot = i;
+				break;
+			}
+		}
+		if ((dot == 0U) || (dot == sep)) {
+			// Not a "domain.xyz"
+			ret = ERROR_FAILURE;
+			goto out;
+		}
+
+		ret = OK;
 	} else {
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
@@ -2022,7 +2327,7 @@ vm_mgnt_parse_peer_id(char *peer_id, peer_info_t *info)
 
 	assert(id_val != NULL);
 	info->id_buf = id_val;
-	info->id_len = (uint16_t)strlen(id_val);
+	info->id_len = (uint16_t)id_len;
 
 	ret = OK;
 
@@ -2071,11 +2376,8 @@ watchdog_bite_callback(event_t *event, void *data)
 
 	vm_config_handle_exit(vm);
 
-	if (vm_mgnt_update_vm_state(vm, VM_STATE_EXITED) != RM_OK) {
-		(void)printf("WDOG bite: Failed to update VM %d state\n",
-			     vm->vmid);
-		goto out;
-	}
+	vm_mgnt_update_vm_state(vm, VM_STATE_EXITED);
+	vm_mgnt_set_exit_type(vm, EXIT_TYPE_WATCHDOG_BITE);
 
 	exit_code_t exit_code = (vm->crash_msg != NULL)
 					? EXIT_CODE_SOFTWARE_ERROR
@@ -2084,8 +2386,8 @@ watchdog_bite_callback(event_t *event, void *data)
 	(void)printf("watchdog bite: VM %u, exit_code %d\n", vm->vmid,
 		     exit_code);
 
-	if (vm_mgnt_send_exited(vm, EXIT_TYPE_WATCHDOG_BITE, 0U, exit_code, 0U,
-				NULL) != RM_OK) {
+	vm_mgnt_set_cleanup_type(vm, NULL);
+	if (vm_mgnt_send_exited(vm, 0U, exit_code, 0U, NULL) != RM_OK) {
 		(void)printf("WDOG bite: Failed to send exited notification\n");
 	}
 
@@ -2150,7 +2452,7 @@ vcpu_halt_callback(event_t *event, void *data)
 			bool is_64bit = (res.state_data_0 & util_bit(62)) != 0U;
 
 			if (is_64bit) {
-				exit_flags |= util_bit(15);
+				exit_flags |= (uint16_t)util_bit(15);
 			} else {
 				cookie = cookie & 0xffffffffU;
 			}
@@ -2170,6 +2472,7 @@ vcpu_halt_callback(event_t *event, void *data)
 	case VCPU_RUN_STATE_BLOCKED:
 	case VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ:
 	case VCPU_RUN_STATE_ADDRSPACE_VMMIO_WRITE:
+	case VCPU_RUN_STATE_ADDRSPACE_PAGE_FAULT:
 	default:
 		(void)printf("unexpected run_stated %d\n", res.vcpu_state);
 		exit_type = EXIT_TYPE_SOFTWARE_ERROR;
@@ -2179,18 +2482,16 @@ vcpu_halt_callback(event_t *event, void *data)
 
 	vm_config_handle_exit(vm);
 
-	if (vm_mgnt_update_vm_state(vm, VM_STATE_EXITED) != RM_OK) {
-		(void)printf("VCPU halt: Failed to update VM %d state\n",
-			     vm->vmid);
-		goto out;
-	}
+	vm_mgnt_update_vm_state(vm, VM_STATE_EXITED);
+	vm_mgnt_set_exit_type(vm, exit_type);
 
 	(void)printf(
 		"VM exited: VM %d exit_type %d,exit_flags = %x, exit_code %d\n",
 		vm->vmid, exit_type, exit_flags, exit_code);
 
-	err = vm_mgnt_send_exited(vm, exit_type, exit_flags, exit_code,
-				  extra_size, extra_reason);
+	vm_mgnt_set_cleanup_type(vm, extra_reason);
+	err = vm_mgnt_send_exited(vm, exit_flags, exit_code, extra_size,
+				  extra_reason);
 	if (err != RM_OK) {
 		(void)printf("VCPU halt: Failed to send exited notification\n");
 	}

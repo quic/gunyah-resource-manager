@@ -2,16 +2,17 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef UTILS_VECTOR_H_
+#define UTILS_VECTOR_H_
+
 // A simple dynamic array. Memory may or maynot be contiguous.
 // It's not thread safe.
-
-typedef struct vector_s vector_t;
 
 // Initialize a vector, with min_capacity in units of items
 // and capacity_step_sz in units of items. If capacity_step_sz
 // or min_capacity are zero, defaults are used.
 #define vector_init(type, min_capacity, capacity_step_sz)                      \
-	vector_init_internal(min_capacity, capacity_step_sz, sizeof(type))
+	vector_init_internal((min_capacity), (capacity_step_sz), sizeof(type))
 
 vector_t *
 vector_init_internal(count_t init_capacity, count_t capacity_step_sz,
@@ -22,14 +23,15 @@ vector_deinit(vector_t *vector);
 
 #define vector_push_back_imm(type, vector, val, err)                           \
 	do {                                                                   \
-		type tmp = val;                                                \
-		err	 = vector_push_back_internal(vector, &tmp);            \
+		type tmp = (val);                                              \
+		(err)	 = vector_push_back_internal((vector), &tmp);          \
 	} while (0)
 
-#define vector_push_back(vector, val) vector_push_back_internal(vector, &val)
+#define vector_push_back(vector, val)                                          \
+	vector_push_back_internal((vector), &(val))
 
 error_t
-vector_push_back_internal(vector_t *vector, const void *val);
+vector_push_back_internal(vector_t *vector, const void *element);
 
 #define vector_pop_back(type, vector) ((type *)vector_pop_back_internal(vector))
 
@@ -50,10 +52,11 @@ vector_swap(vector_t *vector, index_t idx1, index_t idx2);
 count_t
 vector_size(const vector_t *vector);
 
-#define vector_at(type, vector, idx) (*(type *)vector_at_internal(vector, idx))
+#define vector_at(type, vector, idx)                                           \
+	(*(type *)vector_at_internal((vector), (idx)))
 
 #define vector_at_ptr(type, vector, idx)                                       \
-	((type *)vector_at_internal(vector, idx))
+	((type *)vector_at_internal((vector), (idx)))
 
 void *
 vector_at_internal(const vector_t *vector, index_t idx);
@@ -74,18 +77,25 @@ vector_find(const vector_t *vector, vector_find_check_t func, void *target,
 	    index_t *idx);
 
 #define foreach_vector_ptr(element_type, vector, idx, element_ptr)             \
-	for ((idx)	  = 0,                                                 \
-	    (element_ptr) = vector_at_ptr(element_type, (vector), (idx));      \
-	     (idx) < vector_size((vector)); ++(idx),                           \
-	    (element_ptr) = vector_at_ptr(element_type, (vector), (idx)))
+	(idx)	      = 0U;                                                    \
+	(element_ptr) = vector_at_ptr(element_type, (vector), (idx));          \
+	for (; (idx) < vector_size((vector));                                  \
+	     ++(idx),                                                          \
+	     (element_ptr) = vector_at_ptr(element_type, (vector), (idx)))
 
 #define foreach_vector(element_type, vector, idx, element)                     \
-	for ((idx)    = 0,                                                     \
-	    (element) = vector_size((vector)) == 0                             \
-				? (element_type){ 0 }                          \
-				: vector_at(element_type, (vector), (idx));    \
-	     (idx) < vector_size((vector));                                    \
+	(idx)	  = 0U;                                                        \
+	(element) = vector_size((vector)) == 0U                                \
+			    ? (element_type){ NULL }                           \
+			    : vector_at(element_type, (vector), (idx));        \
+	for (; (idx) < vector_size((vector));                                  \
 	     ++(idx),                                                          \
-	    (element) = (idx) < vector_size((vector))                          \
-				? vector_at(element_type, (vector), (idx))     \
-				: (element_type){ 0 })
+	     (element) = (idx) < vector_size((vector))                         \
+				 ? vector_at(element_type, (vector), (idx))    \
+				 : (element_type){ NULL })
+
+#else
+
+#error multiple include of utils/vector.h
+
+#endif

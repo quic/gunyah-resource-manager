@@ -16,11 +16,11 @@
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
 #include <util.h>
-#include <utils/address_range_allocator.h>
 #include <utils/list.h>
 #include <utils/vector.h>
 
@@ -32,7 +32,7 @@
 #include <event.h>
 #include <guest_interface.h>
 #include <log.h>
-#include <memextent.h>
+#include <mem_region.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
 #include <platform.h>
@@ -46,13 +46,12 @@
 #include <vm_config_struct.h>
 #include <vm_creation.h>
 #include <vm_creation_message.h>
+#include <vm_firmware.h>
 #include <vm_mgnt.h>
 #include <vm_mgnt_message.h>
 #include <vm_vcpu.h>
 
 #include <platform_vm_config_parser.h>
-
-// Late include
 #include <vm_config_parser.h>
 
 #include "dto_construct.h"
@@ -76,7 +75,7 @@ static create_dtbo_ret_t
 create_dtbo(vm_t *vm, const void *base_dtb);
 
 static error_t
-create_dt_nodes(dto_t *dto, vmid_t vmid);
+create_dt_nodes(const void *base_dtb, dto_t *dto, vmid_t vmid);
 
 static error_t
 create_iomem_nodes(dto_t *dto, vmid_t vmid);
@@ -167,8 +166,19 @@ vm_creation_handle_config(vmid_t client_id, void *buf, size_t len)
 		ret = RM_ERROR_VM_STATE;
 		goto out;
 	}
+	vm_auth_type_t auth;
+	if (req->auth_type == 0U) {
+		auth = VM_AUTH_TYPE_NONE;
+	} else if (req->auth_type == 1U) {
+		auth = VM_AUTH_TYPE_PLATFORM;
+	} else if (req->auth_type == 2U) {
+		auth = VM_AUTH_TYPE_ANDROID;
+	} else {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
 
-	ret = vm_creation_config_image(vm, req->auth_type, req->image_mp_handle,
+	ret = vm_creation_config_image(vm, auth, req->image_mp_handle,
 				       req->image_offset, req->image_size,
 				       req->dt_offset, req->dt_size);
 	if (ret != RM_OK) {
@@ -176,17 +186,17 @@ vm_creation_handle_config(vmid_t client_id, void *buf, size_t len)
 		goto out_send_state;
 	}
 
-	switch ((vm_auth_type_t)req->auth_type) {
-	case VM_AUTH_TYPE_NONE:
+	switch (req->auth_type) {
+	case (uint8_t)VM_AUTH_TYPE_NONE:
 		// Image is not authenticated at all.
 		vm->vm_state = VM_STATE_INIT;
 		break;
-	case VM_AUTH_TYPE_ANDROID:
+	case (uint8_t)VM_AUTH_TYPE_ANDROID:
 		// Authentication is done via DICE in the firmware image;
 		// nothing is needed from RM.
 		vm->vm_state = VM_STATE_INIT;
 		break;
-	case VM_AUTH_TYPE_PLATFORM:
+	case (uint8_t)VM_AUTH_TYPE_PLATFORM:
 		vm->vm_state = VM_STATE_AUTH;
 		break;
 	default:
@@ -239,8 +249,8 @@ vm_creation_handle_auth(vmid_t client_id, void *buf, size_t len)
 		goto out;
 	}
 
-	size_t auth_params_size =
-		req->num_auth_params * sizeof(req->auth_params[0]);
+	vm_auth_param_t *auth_params = (vm_auth_param_t *)(void *)(req + 1U);
+	size_t auth_params_size = req->num_auth_params * sizeof(auth_params[0]);
 	if (len != (sizeof(*req) + auth_params_size)) {
 		LOG("VM_AUTH_IMAGE: from:%d truncated, length %zd expected %zd (num %d)\n",
 		    client_id, len, sizeof(*req) + auth_params_size,
@@ -266,7 +276,7 @@ vm_creation_handle_auth(vmid_t client_id, void *buf, size_t len)
 		goto out;
 	}
 
-	ret = vm_creation_auth(vm, req->num_auth_params, req->auth_params);
+	ret = vm_creation_auth(vm, req->num_auth_params, auth_params);
 	if (ret != RM_OK) {
 		vm->vm_state = VM_STATE_INIT_FAILED;
 	} else {
@@ -322,6 +332,45 @@ vm_creation_handle_init(vmid_t client_id, void *buf, size_t len)
 	vm_mgnt_send_state(vm);
 
 out:
+	return ret;
+}
+
+static rm_error_t
+vm_creation_set_boot_context(vmid_t client_id, void *buf, size_t len)
+{
+	rm_error_t	   ret;
+	vm_boot_ctx_req_t *req = (vm_boot_ctx_req_t *)buf;
+
+	if ((len != sizeof(*req)) || (req->res0 != 0U)) {
+		ret = RM_ERROR_MSG_INVALID;
+		goto out;
+	}
+
+	LOG("VM_SET_CONTEXT: from:%d, vmid:%d, reg_set:%d, index:%d\n",
+	    client_id, req->target, req->arch_reg_set, req->reg_index);
+
+	vm_t *vm = vm_lookup(req->target);
+	if (vm == NULL) {
+		ret = RM_ERROR_VMID_INVALID;
+		goto out;
+	}
+
+	if (client_id != vm->owner) {
+		ret = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	if (vm->vm_state != VM_STATE_READY) {
+		ret = RM_ERROR_VM_STATE;
+		goto out;
+	}
+
+	ret = vm_firmware_set_boot_context(vm, req);
+out:
+	if (ret != RM_OK) {
+		LOG("VM_SET_CONTEXT: failed %d from:%d vmid:%d\n", ret,
+		    client_id, req->target);
+	}
 	return ret;
 }
 
@@ -401,6 +450,10 @@ vm_creation_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		err	= vm_creation_handle_init(client_id, buf, len);
 		handled = true;
 		break;
+	case VM_SET_CONTEXT:
+		err	= vm_creation_set_boot_context(client_id, buf, len);
+		handled = true;
+		break;
 	default:
 		// all VM creation msg_id handled
 		break;
@@ -418,7 +471,7 @@ map_dtb(size_t dtb_offset, size_t dtb_size, uint32_t mp_handle, size_t ipa_size)
 {
 	uintptr_result_t ret;
 
-	if (util_add_overflows(dtb_offset, dtb_size - 1)) {
+	if (util_add_overflows(dtb_offset, dtb_size - 1U)) {
 		ret = uintptr_result_error(ERROR_ADDR_OVERFLOW);
 		goto out;
 	}
@@ -438,7 +491,7 @@ map_dtb(size_t dtb_offset, size_t dtb_size, uint32_t mp_handle, size_t ipa_size)
 
 	// Flush the cache, to ensure that the VM loader can't change the DT
 	// structure underneath us by providing a deliberately cache-dirty DT
-	cache_flush_by_va(temp_dtb_ptr, dtb_size);
+	cache_flush_by_va(temp_dtb_ptr, fdt_header_size(temp_dtb_ptr));
 
 	if (fdt_check_header(temp_dtb_ptr) != 0) {
 		(void)printf("map_dtb: invalid dtb\n");
@@ -455,9 +508,14 @@ map_dtb(size_t dtb_offset, size_t dtb_size, uint32_t mp_handle, size_t ipa_size)
 		goto out_unmap;
 	}
 
+	cache_flush_by_va(temp_dtb_ptr, fdt_size);
+
 out_unmap:
 	if (ret.e != OK) {
-		(void)memparcel_unmap_rm(mp_handle);
+		error_t res = memparcel_unmap_rm(mp_handle);
+		if (res != OK) {
+			LOG_ERR(res);
+		}
 	}
 out:
 	if (ret.e != OK) {
@@ -562,16 +620,16 @@ process_dtb(vm_t *vm)
 	if (apply_ret != 0) {
 		(void)printf("Error: Failed to apply DT overlay, ret=(%d)\n",
 			     apply_ret);
-		ret = RM_ERROR_DENIED;
+		ret = ERROR_DENIED;
 		goto out;
 	}
 
-	fdt_pack(dtb_process_buf);
+	(void)fdt_pack(dtb_process_buf);
 
 	size_t total_size = fdt_totalsize(dtb_process_buf);
 	assert(total_size <= max_dtb_size);
 
-	memcpy(temp_dtb_ptr, dtb_process_buf, total_size);
+	(void)memscpy(temp_dtb_ptr, dt_size, dtb_process_buf, total_size);
 	cache_clean_by_va(temp_dtb_ptr, total_size);
 
 	if (dtb_buf_alloc) {
@@ -641,7 +699,7 @@ out:
 static error_t
 vdev_node_add_compatible_string(dto_t *dto, vmid_t vmid, label_t label)
 {
-	error_t ret = OK;
+	error_t ret;
 
 	vm_t *cur_vm = vm_lookup(vmid);
 	assert(cur_vm != NULL);
@@ -649,7 +707,7 @@ vdev_node_add_compatible_string(dto_t *dto, vmid_t vmid, label_t label)
 
 	count_t compatible_cnt = 0U;
 
-	const char *compatibles[VDEVICE_MAX_PUSH_COMPATIBLES];
+	const char *compatibles[VDEVICE_MAX_PUSH_COMPATIBLES] = { NULL };
 
 	vdevice_node_t *node = NULL;
 	loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
@@ -659,21 +717,22 @@ vdev_node_add_compatible_string(dto_t *dto, vmid_t vmid, label_t label)
 		}
 
 		if (node->type == VDEV_SHM) {
-			struct vdevice_shm *cfg =
-				(struct vdevice_shm *)node->config;
+			struct vdevice_shm *cfg = node->config.shm;
 			if (cfg->label == label) {
 				compatible_cnt = node->push_compatible_num;
-				memcpy(&compatibles, &node->push_compatible,
-				       sizeof(node->push_compatible));
+				(void)memscpy(&compatibles, sizeof(compatibles),
+					      &node->push_compatible,
+					      sizeof(node->push_compatible));
 				break;
 			}
 		} else if (node->type == VDEV_VIRTIO_MMIO) {
 			struct vdevice_virtio_mmio *cfg =
-				(struct vdevice_virtio_mmio *)node->config;
+				node->config.virtio_mmio;
 			if (cfg->label == label) {
 				compatible_cnt = node->push_compatible_num;
-				memcpy(&compatibles, &node->push_compatible,
-				       sizeof(node->push_compatible));
+				(void)memscpy(&compatibles, sizeof(compatibles),
+					      &node->push_compatible,
+					      sizeof(node->push_compatible));
 				break;
 			}
 		} else {
@@ -681,11 +740,14 @@ vdev_node_add_compatible_string(dto_t *dto, vmid_t vmid, label_t label)
 		}
 	}
 
-	if (compatible_cnt == 0U) {
-		(void)printf("No vdevice found with label %x\n", label);
+	if (compatible_cnt != 0U) {
+		assert(compatible_cnt <= VDEVICE_MAX_PUSH_COMPATIBLES);
+		ret = dto_property_add_stringlist(dto, "compatible",
+						  compatibles, compatible_cnt);
 	} else {
-		ret = dto_property_add_stringlist(dto, "compatible", compatibles,
-						  compatible_cnt);
+		(void)printf("warning: no vdevice found with label %x\n",
+			     label);
+		ret = OK;
 	}
 
 	return ret;
@@ -717,8 +779,15 @@ create_reserved_buffer_node(dto_t *dto, vmid_t vmid, memparcel_t *mp,
 	}
 
 	// create node now
-	char name[DTB_NODE_NAME_MAX];
-	(void)snprintf(name, DTB_NODE_NAME_MAX, "buffer@%lx", ipa_ret.r);
+	char	name[DTB_NODE_NAME_MAX];
+	int32_t snprintf_ret =
+		snprintf(name, DTB_NODE_NAME_MAX, "buffer@%lx", ipa_ret.r);
+
+	if ((snprintf_ret < 0) ||
+	    (snprintf_ret >= (int32_t)DTB_NODE_NAME_MAX)) {
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
 
 	vector_t *vmids = vector_init(vmid_t, 1, 8);
 	if (vmids == NULL) {
@@ -806,7 +875,11 @@ out_free_blob:
 	free(blob);
 out_node_end:
 	// no way to recover it
-	(void)dto_node_end(dto, name);
+	(void)0;
+	error_t dto_ret = dto_node_end(dto, name);
+	if (dto_ret != OK) {
+		LOG_ERR(dto_ret);
+	}
 out_vmids:
 	vector_deinit(vmids);
 out:
@@ -822,8 +895,15 @@ create_reserved_firmware_node(dto_t *dto, vm_t *vm, count_t root_addr_cells,
 	vmaddr_t fw_ipa = vm->vm_config->fw_ipa_base + vm->fw_offset;
 
 	// create node now
-	char name[DTB_NODE_NAME_MAX];
-	(void)snprintf(name, DTB_NODE_NAME_MAX, "firmware@%lx", fw_ipa);
+	char	name[DTB_NODE_NAME_MAX];
+	int32_t snprintf_ret =
+		snprintf(name, DTB_NODE_NAME_MAX, "firmware@%lx", fw_ipa);
+
+	if ((snprintf_ret < 0) ||
+	    (snprintf_ret >= (int32_t)DTB_NODE_NAME_MAX)) {
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
 
 	ret = dto_node_begin(dto, name);
 	if (ret != OK) {
@@ -842,12 +922,21 @@ create_reserved_firmware_node(dto_t *dto, vm_t *vm, count_t root_addr_cells,
 	}
 
 	const char *compatibles[] = { "qcom,vm-firmware" };
-	ret = dto_property_add_stringlist(dto, "compatible", compatibles,
-					  util_array_size(compatibles));
+
+	ret = dto_property_add_stringlist(
+		dto, "compatible", compatibles,
+		(count_t)util_array_size(compatibles));
+	if (ret != OK) {
+		LOG_ERR(ret);
+	}
 
 out_node_end:
 	// no way to recover it
-	(void)dto_node_end(dto, name);
+	(void)0;
+	error_t dto_ret = dto_node_end(dto, name);
+	if (dto_ret != OK) {
+		LOG_ERR(dto_ret);
+	}
 out:
 	return ret;
 }
@@ -856,7 +945,7 @@ static error_t
 create_resmem_nodes(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 		    count_t root_size_cells)
 {
-	error_t ret = OK;
+	error_t ret;
 
 	vm_t *cur_vm = vm_lookup(vmid);
 	assert(cur_vm != NULL);
@@ -879,8 +968,8 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 		// Note that this will never choose an address within the
 		// private memory IPA range.
 		if (!memparcel_is_shared(mp, vmid)) {
-			ret = accept_memparcel(vmid, mp);
-			if (ret != OK) {
+			error_t accept_err = accept_memparcel(vmid, mp);
+			if (accept_err != OK) {
 				continue;
 			}
 		}
@@ -891,8 +980,7 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 		loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
 		{
 			if (node->type == VDEV_IOMEM) {
-				struct vdevice_iomem *cfg =
-					(struct vdevice_iomem *)node->config;
+				struct vdevice_iomem *cfg = node->config.iomem;
 				if (memparcel_get_label(mp) == cfg->label) {
 					skip_iomem_mp = true;
 				}
@@ -915,7 +1003,7 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 			(void)printf("memparcel %#" PRIx32 " (%#" PRIx32 ")"
 				     " is private memory: %#zx (%#zx)\n",
 				     memparcel_get_handle(mp),
-				     memparcel_get_label(mp), ipa_r.r,
+				     memparcel_get_label(mp), ipa_ret.r,
 				     memparcel_get_size(mp));
 #endif
 			continue;
@@ -934,145 +1022,44 @@ create_resmem_nodes(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 		}
 
 		// create node
+		error_t create_err = create_reserved_buffer_node(
+			dto, vmid, mp, root_addr_cells, root_size_cells);
+		if (create_err != OK) {
+			ret = create_err;
+			goto out;
+		}
+
 #if VM_CREATION_VERBOSE_DEBUG
+		vmaddr_result_t ipa_ret =
+			memparcel_get_mapped_ipa(mp, vmid, 0U);
+		assert(ipa_ret.e == OK);
 		(void)printf("resmem: memparcel %#" PRIx32 " (%#" PRIx32 ")"
 			     " added: %#zx (%#zx)\n",
 			     memparcel_get_handle(mp), memparcel_get_label(mp),
-			     ipa_r.r, memparcel_get_size(mp));
+			     ipa_ret.r, memparcel_get_size(mp));
 #endif
-		ret = create_reserved_buffer_node(
-			dto, vmid, mp, root_addr_cells, root_size_cells);
-		if (ret != OK) {
-			break;
-		}
 	}
 
 	if (cur_vm->fw_size != 0U) {
-		ret = create_reserved_firmware_node(
+		error_t create_err = create_reserved_firmware_node(
 			dto, cur_vm, root_addr_cells, root_size_cells);
+		if (create_err != OK) {
+			ret = create_err;
+			goto out;
+		}
 	}
 
+	ret = OK;
+out:
 	return ret;
 }
 
 static error_t
-create_memory_node(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
-		   count_t root_size_cells)
+merged_memory_ranges(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
+		     count_t root_size_cells, const dto_addrrange_t *ranges,
+		     count_t range_count)
 {
 	error_t ret;
-	vm_t   *cur_vm = vm_lookup(vmid);
-	assert(cur_vm != NULL);
-	assert(cur_vm->vm_config != NULL);
-
-	count_t		 ranges_size = 16U;
-	dto_addrrange_t *ranges = calloc(sizeof(dto_addrrange_t), ranges_size);
-	if (ranges == NULL) {
-		ret = ERROR_NOMEM;
-		goto out_nomem;
-	}
-	count_t range_count = 0U;
-
-	memparcel_t *mp;
-	foreach_memparcel_by_target_vmid (mp, vmid) {
-		// Skip anything not already accepted
-		if (!memparcel_is_shared(mp, vmid)) {
-			continue;
-		}
-
-		// Skip the firmware memparcel if it is separate
-		if ((cur_vm->fw_mp_handle != cur_vm->mem_mp_handle) &&
-		    (memparcel_get_handle(mp) == cur_vm->fw_mp_handle)) {
-			continue;
-		}
-
-		// Skip any IO device memparcels
-		bool		skip_iomem_mp = false;
-		vdevice_node_t *node	      = NULL;
-		loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
-		{
-			if (node->type == VDEV_IOMEM) {
-				struct vdevice_iomem *cfg =
-					(struct vdevice_iomem *)node->config;
-				if (memparcel_get_label(mp) == cfg->label) {
-					skip_iomem_mp = true;
-				}
-			}
-		}
-		if (skip_iomem_mp) {
-			continue;
-		}
-
-		count_result_t map_count = memparcel_get_num_mappings(mp, vmid);
-		if (map_count.e != OK) {
-			ret = map_count.e;
-			goto out;
-		}
-
-		if (util_add_overflows(map_count.r, range_count)) {
-			// Should be impossible
-			ret = ERROR_FAILURE;
-			goto out;
-		}
-
-		// Enlarge the range array if necessary
-		if ((map_count.r + range_count) > ranges_size) {
-			count_t new_size = util_max(
-				ranges_size * 2U, (map_count.r + range_count));
-			if (util_mult_integer_overflows(
-				    new_size, sizeof(dto_addrrange_t))) {
-				ret = ERROR_NORESOURCES;
-				goto out;
-			}
-
-			dto_addrrange_t *new_ranges = realloc(
-				ranges, new_size * sizeof(dto_addrrange_t));
-			if (new_ranges == NULL) {
-				ret = ERROR_NOMEM;
-				goto out;
-			}
-			for (count_t i = ranges_size; i < new_size; i++) {
-				new_ranges[i] = (dto_addrrange_t){ 0 };
-			}
-			ranges_size = new_size;
-			ranges	    = new_ranges;
-		}
-
-		// Fill in the range array
-		for (count_t i = 0U; i < map_count.r; i++) {
-			vmaddr_result_t ipa_ret =
-				memparcel_get_mapped_ipa(mp, vmid, i);
-			if (ipa_ret.e != OK) {
-				ret = ipa_ret.e;
-				goto out;
-			}
-			ranges[range_count + i].addr = ipa_ret.r;
-
-			size_result_t size_ret =
-				memparcel_get_mapped_size(mp, vmid, i);
-			if (size_ret.e != OK) {
-				ret = size_ret.e;
-				goto out;
-			}
-			ranges[range_count + i].size = size_ret.r;
-		}
-		range_count += map_count.r;
-	}
-
-	// Sort the range array by address. The number of ranges should be
-	// relatively small, so we use a trivial bubble sort to keep the code
-	// simple while avoiding qsort() (prohibited by MISRA rule 21.9).
-	//
-	// The device tree specification does not require this, but some VMs
-	// rely on it, including the Android pVM firmware.
-	for (count_t i = range_count; i > 1U; i--) {
-		for (count_t j = 0U; j < (i - 1U); j++) {
-			if (ranges[j].addr > ranges[j + 1U].addr) {
-				dto_addrrange_t tmp = ranges[j];
-				ranges[j]	    = ranges[j + 1U];
-				ranges[j + 1U]	    = tmp;
-			}
-		}
-	}
 
 	// Merge contiguous or overlapping ranges into a single range.
 	//
@@ -1080,6 +1067,10 @@ create_memory_node(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 	// rely on it, including the Android pVM firmware.
 	dto_addrrange_t *merged_ranges =
 		calloc(sizeof(dto_addrrange_t), range_count);
+	if (merged_ranges == NULL) {
+		ret = ERROR_NOMEM;
+		goto out_merged;
+	}
 	count_t merged_range_count = 0U;
 
 	if (range_count > 0U) {
@@ -1100,8 +1091,10 @@ create_memory_node(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 		// ranges having been sorted above.
 		if ((merged_range->addr + merged_range->size) >=
 		    ranges[i].addr) {
-			merged_range->size = ranges[i].addr + ranges[i].size -
-					     merged_range->addr;
+			merged_range->size =
+				util_max(merged_range->size,
+					 ranges[i].addr + ranges[i].size -
+						 merged_range->addr);
 		} else {
 			merged_range++;
 			merged_range->addr = ranges[i].addr;
@@ -1143,6 +1136,164 @@ create_memory_node(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
 
 out_merged:
 	free(merged_ranges);
+	return ret;
+}
+
+static error_t
+update_range_array(vmid_t vmid, const memparcel_t *mp, count_t *range_count_ptr,
+		   count_t *ranges_size_ptr, dto_addrrange_t **ranges_ptr)
+{
+	error_t		 ret	     = OK;
+	count_t		 range_count = *range_count_ptr;
+	count_t		 ranges_size = *ranges_size_ptr;
+	dto_addrrange_t *ranges	     = *ranges_ptr;
+
+	count_result_t map_count = memparcel_get_num_mappings(mp, vmid);
+	if (map_count.e != OK) {
+		ret = map_count.e;
+		goto out;
+	}
+
+	if (util_add_overflows(map_count.r, range_count)) {
+		// Should be impossible
+		ret = ERROR_FAILURE;
+		goto out;
+	}
+
+	// Enlarge the range array if necessary
+	if ((map_count.r + range_count) > ranges_size) {
+		count_t new_size =
+			util_max(ranges_size * 2U, (map_count.r + range_count));
+		if (util_mult_integer_overflows(new_size,
+						sizeof(dto_addrrange_t))) {
+			ret = ERROR_NORESOURCES;
+			goto out;
+		}
+
+		dto_addrrange_t *new_ranges =
+			realloc(ranges, new_size * sizeof(dto_addrrange_t));
+		if (new_ranges == NULL) {
+			ret = ERROR_NOMEM;
+			goto out;
+		}
+		for (count_t i = ranges_size; i < new_size; i++) {
+			new_ranges[i] = (dto_addrrange_t){ 0 };
+		}
+		ranges_size = new_size;
+		ranges	    = new_ranges;
+	}
+
+	// Fill in the range array
+	for (count_t i = 0U; i < map_count.r; i++) {
+		vmaddr_result_t ipa_ret = memparcel_get_mapped_ipa(mp, vmid, i);
+		if (ipa_ret.e != OK) {
+			ret = ipa_ret.e;
+			goto out;
+		}
+		ranges[range_count + i].addr = ipa_ret.r;
+
+		size_result_t size_ret = memparcel_get_mapped_size(mp, vmid, i);
+		if (size_ret.e != OK) {
+			ret = size_ret.e;
+			goto out;
+		}
+		ranges[range_count + i].size = size_ret.r;
+	}
+	range_count += map_count.r;
+
+out:
+	*range_count_ptr = range_count;
+	*ranges_size_ptr = ranges_size;
+	*ranges_ptr	 = ranges;
+	return ret;
+}
+
+static error_t
+create_memory_node(dto_t *dto, vmid_t vmid, count_t root_addr_cells,
+		   count_t root_size_cells)
+{
+	error_t ret;
+	vm_t   *cur_vm = vm_lookup(vmid);
+	assert(cur_vm != NULL);
+	assert(cur_vm->vm_config != NULL);
+
+	size_t paged_ranges =
+		cur_vm->vm_config->mem_demand_paging
+			? vector_size(
+				  cur_vm->vm_config->mem_demand_paged_ranges)
+			: 0U;
+	count_t ranges_size = util_max((count_t)paged_ranges, 16U);
+
+	dto_addrrange_t *ranges = calloc(sizeof(dto_addrrange_t), ranges_size);
+	if (ranges == NULL) {
+		ret = ERROR_NOMEM;
+		goto out_nomem;
+	}
+
+	for (index_t i = 0U; i < paged_ranges; i++) {
+		struct mem_range *r = vector_at_ptr(
+			struct mem_range,
+			cur_vm->vm_config->mem_demand_paged_ranges, i);
+		ranges[i].addr = r->base;
+		ranges[i].size = r->size;
+	}
+	count_t range_count = (count_t)paged_ranges;
+
+	memparcel_t *mp;
+	foreach_memparcel_by_target_vmid (mp, vmid) {
+		// Skip anything not already accepted
+		if (!memparcel_is_shared(mp, vmid)) {
+			continue;
+		}
+
+		// Skip the firmware memparcel if it is separate
+		if ((cur_vm->fw_mp_handle != cur_vm->mem_mp_handle) &&
+		    (memparcel_get_handle(mp) == cur_vm->fw_mp_handle)) {
+			continue;
+		}
+
+		// Skip any IO device memparcels
+		bool		skip_iomem_mp = false;
+		vdevice_node_t *node	      = NULL;
+		loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
+		{
+			if (node->type == VDEV_IOMEM) {
+				struct vdevice_iomem *cfg = node->config.iomem;
+				if (memparcel_get_label(mp) == cfg->label) {
+					skip_iomem_mp = true;
+				}
+			}
+		}
+		if (skip_iomem_mp) {
+			continue;
+		}
+
+		ret = update_range_array(vmid, mp, &range_count, &ranges_size,
+					 &ranges);
+		if (ret != OK) {
+			goto out;
+		}
+	}
+
+	// Sort the range array by address. The number of ranges should be
+	// relatively small, so we use a trivial bubble sort to keep the code
+	// simple while avoiding qsort() (prohibited by MISRA rule 21.9).
+	//
+	// The device tree specification does not require this, but some VMs
+	// rely on it, including the Android pVM firmware.
+	for (count_t i = range_count; i > 1U; i--) {
+		for (count_t j = 0U; j < (i - 1U); j++) {
+			if (ranges[j].addr > ranges[j + 1U].addr) {
+				dto_addrrange_t tmp = ranges[j];
+				ranges[j]	    = ranges[j + 1U];
+				ranges[j + 1U]	    = tmp;
+			}
+		}
+	}
+
+	ret = merged_memory_ranges(dto, vmid, root_addr_cells, root_size_cells,
+				   ranges, range_count);
+
 out:
 	free(ranges);
 out_nomem:
@@ -1151,14 +1302,9 @@ out_nomem:
 
 static bool
 accept_memparcel_for_resmem_node(vmid_t vmid, memparcel_t *mp, const char *name,
-				 vmaddr_t base, size_t size)
+				 sgl_entry_t *sgl, uint16_t sgl_len)
 {
 	bool success;
-
-	acl_entry_t acl[1U] = { { .vmid = vmid, .rights = MEM_RIGHTS_RWX } };
-	sgl_entry_t sgl[1U];
-	sgl[0].ipa  = base;
-	sgl[0].size = size;
 
 	uint8_t flags = MEM_ACCEPT_FLAG_DONE;
 
@@ -1170,9 +1316,10 @@ accept_memparcel_for_resmem_node(vmid_t vmid, memparcel_t *mp, const char *name,
 
 	// owner doesn't need to access buffer if it's
 	// not in the ACL
-	bool owner_has_read = (owner_rights_ret.e == OK) ? (owner_rights_ret.r &
-							    MEM_RIGHTS_R) != 0U
-							 : false;
+	bool owner_has_read =
+		(owner_rights_ret.e == OK)
+			? ((owner_rights_ret.r & MEM_RIGHTS_R) != 0U)
+			: (bool)false;
 
 	uint8_result_t vm_rights_ret = memparcel_get_vm_rights(mp, vmid);
 	if (vm_rights_ret.e != OK) {
@@ -1191,9 +1338,9 @@ accept_memparcel_for_resmem_node(vmid_t vmid, memparcel_t *mp, const char *name,
 		flags |= MEM_ACCEPT_FLAG_SANITIZE;
 	}
 
-	rm_error_t rm_err = memparcel_accept(vmid, 1U, 1U, 0U, acl, sgl, NULL,
-					     0U, memparcel_get_handle(mp), 0U,
-					     memparcel_get_mem_type(mp),
+	rm_error_t rm_err = memparcel_accept(vmid, 0U, sgl_len, 0U, NULL, sgl,
+					     NULL, 0U, memparcel_get_handle(mp),
+					     0U, memparcel_get_mem_type(mp),
 					     memparcel_get_trans_type(mp),
 					     flags);
 	if (rm_err != RM_OK) {
@@ -1215,40 +1362,45 @@ find_memparcel_for_resmem_node_by_label(vmid_t vmid, const void *base_dtb,
 {
 	memparcel_t *ret = NULL;
 
-	// Read the address range
+	sgl_entry_t sgl[1]  = { 0 };
+	uint16_t    sgl_len = 0U;
+
+	// Read the address range. If not supplied, we allocate an address at
+	// memparcel accept time.
 	int	       len;
 	const fdt32_t *reg = fdt_getprop(base_dtb, region_node, "reg", &len);
-	if (reg == NULL) {
-		(void)printf("No \"reg\" property in /reserved-memory/%s\n",
-			     name);
-		goto out;
-	}
-	assert(len >= 0);
+	if (reg != NULL) {
+		assert(len >= 0);
 
-	count_t cells	     = ctx.child_addr_cells + ctx.child_size_cells;
-	size_t	expected_len = sizeof(fdt32_t) * cells;
-	if ((size_t)len != expected_len) {
-		// TODO: Support multiple-range reserved memory nodes
-		(void)printf(
-			"Bad \"reg\" in /reserved-memory/%s; len %zd != %zd\n",
-			name, (size_t)len, expected_len);
-		goto out;
+		count_t cells = ctx.child_addr_cells + ctx.child_size_cells;
+		size_t	expected_len = sizeof(fdt32_t) * cells;
+		if ((size_t)len != expected_len) {
+			// TODO: Support multiple-range reserved memory nodes
+			(void)printf(
+				"Bad \"reg\" in /reserved-memory/%s; len %zd != %zd\n",
+				name, (size_t)len, expected_len);
+			goto out;
+		}
+
+		// Reg property is valid. Parse the address and size.
+		vmaddr_t base =
+			(vmaddr_t)fdt_read_num(&reg[0], ctx.child_addr_cells);
+		size_t size = (size_t)fdt_read_num(&reg[ctx.child_addr_cells],
+						   ctx.child_size_cells);
+		if ((size == 0U) || util_add_overflows(base, size - 1U)) {
+			(void)printf(
+				"Bad \"reg\" in /reserved-memory/%s; size %#zx\n",
+				name, size);
+			goto out;
+		}
+
+		sgl[0].ipa  = base;
+		sgl[0].size = size;
+		sgl_len	    = 1U;
 	}
 
-	// Reg property is valid. Parse the address and size.
-	vmaddr_t base = (vmaddr_t)fdt_read_num(&reg[0], ctx.child_addr_cells);
-	size_t	 size = (size_t)fdt_read_num(&reg[ctx.child_addr_cells],
-					     ctx.child_size_cells);
-	if ((size == 0U) || util_add_overflows(base, size - 1U)) {
-		(void)printf("Bad \"reg\" in /reserved-memory/%s; size %#zx\n",
-			     name, size);
-		goto out;
-	}
-	vmaddr_t end = base + size - 1U;
-
-	(void)printf("Patching /reserved-memory/%s (label %#" PRIx32
-		     ", range %#zx-%#zx)\n",
-		     name, label, (size_t)base, (size_t)end);
+	(void)printf("Patching /reserved-memory/%s (label %#" PRIx32 ")\n",
+		     name, label);
 
 	// Search all memparcels by label
 	memparcel_t *mp;
@@ -1257,7 +1409,16 @@ find_memparcel_for_resmem_node_by_label(vmid_t vmid, const void *base_dtb,
 			continue;
 		}
 
-		if (memparcel_is_shared(mp, vmid)) {
+		if (!memparcel_is_shared(mp, vmid)) {
+			// Memparcel is not accepted yet; try to accept it with
+			// the resmem node's specified address, or allocate an
+			// address for it.
+			if (accept_memparcel_for_resmem_node(vmid, mp, name,
+							     sgl, sgl_len)) {
+				ret = mp;
+			}
+		} else if (sgl_len != 0U) {
+			// Ensure the memparcel was mapped at the given address.
 			// TODO: support non-contiguous mappings.
 			count_result_t map_count =
 				memparcel_get_num_mappings(mp, vmid);
@@ -1269,21 +1430,21 @@ find_memparcel_for_resmem_node_by_label(vmid_t vmid, const void *base_dtb,
 				memparcel_get_mapped_ipa(mp, vmid, 0U);
 			size_result_t size_ret =
 				memparcel_get_mapped_size(mp, vmid, 0U);
-			if ((ipa_ret.e == OK) && (ipa_ret.r == base) &&
-			    (size_ret.e == OK) && (size_ret.r == size)) {
+			if ((ipa_ret.e == OK) && (ipa_ret.r == sgl[0].ipa) &&
+			    (size_ret.e == OK) && (size_ret.r == sgl[0].size)) {
 				// Memparcel is mapped at the specified address.
 				ret = mp;
 			}
 		} else {
-			// Memparcel is not accepted yet; try to accept it with
-			// the resmem node's specified address.
-			if (accept_memparcel_for_resmem_node(vmid, mp, name,
-							     base, size)) {
-				ret = mp;
-			}
+			// Memparcel is mapped and no address was specified.
+			ret = mp;
 		}
 
 		break;
+	}
+
+	if (ret == NULL) {
+		(void)printf("No memparcel with a matching label!\n");
 	}
 
 out:
@@ -1291,43 +1452,11 @@ out:
 }
 
 static memparcel_t *
-find_memparcel_for_resmem_node_by_address(vmid_t vmid, const void *base_dtb,
-					  int region_node, const char *name,
-					  ctx_t ctx)
+find_memparcel_for_resmem_node_by_address(vmid_t vmid, const char *name,
+					  vmaddr_t base, size_t size)
 {
 	memparcel_t *ret = NULL;
 
-	(void)printf("Patching /reserved-memory/%s (no label)\n", name);
-
-	// Read the address range
-	int	       len;
-	const fdt32_t *reg = fdt_getprop(base_dtb, region_node, "reg", &len);
-	if (reg == NULL) {
-		(void)printf("No \"reg\" property in /reserved-memory/%s\n",
-			     name);
-		goto out;
-	}
-	assert(len >= 0);
-
-	count_t cells	     = ctx.child_addr_cells + ctx.child_size_cells;
-	size_t	expected_len = sizeof(fdt32_t) * cells;
-	if ((size_t)len != expected_len) {
-		// TODO: Support multiple-range reserved memory nodes
-		(void)printf(
-			"Bad \"reg\" in /reserved-memory/%s; len %zd != %zd\n",
-			name, (size_t)len, expected_len);
-		goto out;
-	}
-
-	// Reg property is valid. Parse the address and size.
-	vmaddr_t base = (vmaddr_t)fdt_read_num(&reg[0], ctx.child_addr_cells);
-	size_t	 size = (size_t)fdt_read_num(&reg[ctx.child_addr_cells],
-					     ctx.child_size_cells);
-	if ((size == 0U) || util_add_overflows(base, size - 1U)) {
-		(void)printf("Bad \"reg\" in /reserved-memory/%s; size %#zx\n",
-			     name, size);
-		goto out;
-	}
 	vmaddr_t end = base + size - 1U;
 
 	(void)printf(
@@ -1363,9 +1492,171 @@ out:
 	return ret;
 }
 
+RM_PADDED(typedef struct dt_addrrange_result_s {
+	vmaddr_t base;
+	size_t	 size;
+	error_t	 error;
+} dt_addrrange_result_t)
+
+static dt_addrrange_result_t
+parse_resmem_addrrange(const void *base_dtb, int region_node, const char *name,
+		       ctx_t ctx)
+{
+	dt_addrrange_result_t ret;
+
+	// Read the address range
+	int	       len;
+	const fdt32_t *reg = fdt_getprop(base_dtb, region_node, "reg", &len);
+	if (reg == NULL) {
+		(void)printf("No \"reg\" property in /reserved-memory/%s\n",
+			     name);
+		ret = (dt_addrrange_result_t){
+			.error = ERROR_ARGUMENT_INVALID,
+		};
+		goto out;
+	}
+	assert(len >= 0);
+
+	count_t cells	     = ctx.child_addr_cells + ctx.child_size_cells;
+	size_t	expected_len = sizeof(fdt32_t) * cells;
+	if ((size_t)len != expected_len) {
+		// TODO: Support multiple-range reserved memory nodes
+		(void)printf(
+			"Bad \"reg\" in /reserved-memory/%s; len %zd != %zd\n",
+			name, (size_t)len, expected_len);
+		ret = (dt_addrrange_result_t){
+			.error = ERROR_ARGUMENT_INVALID,
+		};
+		goto out;
+	}
+
+	// Reg property is valid. Parse the address and size.
+	vmaddr_t base = (vmaddr_t)fdt_read_num(&reg[0], ctx.child_addr_cells);
+	size_t	 size = (size_t)fdt_read_num(&reg[ctx.child_addr_cells],
+					     ctx.child_size_cells);
+	if ((size == 0U) || util_add_overflows(base, size - 1U)) {
+		(void)printf("Bad \"reg\" in /reserved-memory/%s; size %#zx\n",
+			     name, size);
+		ret = (dt_addrrange_result_t){
+			.error = ERROR_ARGUMENT_INVALID,
+		};
+		goto out;
+	}
+
+	ret = (dt_addrrange_result_t){
+		.error = OK,
+		.base  = base,
+		.size  = size,
+	};
+out:
+	return ret;
+}
+
 static error_t
-patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
-		   int resmem_node_ofs, ctx_t resmem_ctx)
+resmem_enable_demand_paging(const vm_t *vm, const void *base_dtb,
+			    int region_node, vmaddr_t base, size_t size)
+{
+	error_t ret;
+
+	assert((vm != NULL) && (vm->vm_config != NULL) &&
+	       vm->vm_config->mem_demand_paging);
+	assert(vm->vm_config->mem_demand_paged_ranges != NULL);
+
+	// If the VM is protected and the memory is marked reusable, it must
+	// be registered as a private range. Otherwise, it will be registered as
+	// VMMIO, so the host can emulate accesses or map shared memory.
+	bool is_private = vm->mem_private &&
+			  fdt_getprop_bool(base_dtb, region_node, "reusable");
+
+	ret = gunyah_hyp_addrspace_configure_range(
+		vm->vm_config->addrspace, base, size,
+		is_private ? ADDRSPACE_RANGE_CONFIGURE_OP_ADD_PRIVATE
+			   : ADDRSPACE_RANGE_CONFIGURE_OP_ADD_VMMIO);
+	if (ret == OK) {
+		// Reserved memory regions must be added to the /memory node.
+		struct mem_range range = { .base = base, .size = size };
+		vector_push_back(vm->vm_config->mem_demand_paged_ranges, range);
+	}
+
+	return ret;
+}
+
+RM_PADDED(typedef struct memparcel_ptr_result_s {
+	memparcel_t *r;
+	error_t	     e;
+} memparcel_ptr_result_t)
+
+static memparcel_ptr_result_t
+find_memparcel_for_resmem_node(const vm_t *vm, vmid_t vmid,
+			       const void *base_dtb, int region_node,
+			       const char *name, ctx_t resmem_ctx,
+			       bool have_reg)
+{
+	error_t	     ret;
+	memparcel_t *mp = NULL;
+
+	label_t label;
+	bool have_label = (fdt_getprop_u32(base_dtb, region_node, "qcom,label",
+					   &label) == OK);
+
+	if (have_label) {
+		mp = find_memparcel_for_resmem_node_by_label(
+			vmid, base_dtb, region_node, name, resmem_ctx, label);
+
+		if (mp == NULL) {
+			(void)printf("No memparcel with a matching label!\n");
+			ret = ERROR_DENIED;
+			goto out;
+		}
+		ret = OK;
+	} else if (fdt_getprop_bool(base_dtb, region_node, "size") &&
+		   !have_reg) {
+		// This region will be dynamically allocated by Linux
+		// after boot; we can ignore it
+		ret = OK;
+		goto out;
+	} else {
+		dt_addrrange_result_t range_r = parse_resmem_addrrange(
+			base_dtb, region_node, name, resmem_ctx);
+		if (range_r.error != OK) {
+			ret = range_r.error;
+			goto out;
+		}
+
+		mp = find_memparcel_for_resmem_node_by_address(
+			vmid, name, range_r.base, range_r.size);
+
+		if ((mp == NULL) && vm->vm_config->mem_demand_paging) {
+			ret = resmem_enable_demand_paging(vm, base_dtb,
+							  region_node,
+							  range_r.base,
+							  range_r.size);
+			if (ret != OK) {
+				(void)printf(
+					"Unable to enable demand paging: %" PRIu32
+					"\n",
+					ret);
+				goto out;
+			}
+			goto out;
+		}
+
+		if (mp == NULL) {
+			(void)printf("No memparcel with a matching address!\n");
+			ret = ERROR_DENIED;
+			goto out;
+		}
+		ret = OK;
+	}
+	assert(mp != NULL);
+
+out:
+	return (memparcel_ptr_result_t){ .r = mp, .e = ret };
+}
+
+static error_t
+patch_resmem_nodes(const vm_t *vm, dto_t *dto, vmid_t vmid,
+		   const void *base_dtb, int resmem_node_ofs, ctx_t resmem_ctx)
 {
 	int	region_node;
 	error_t ret = OK;
@@ -1374,34 +1665,21 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 		const char *name = fdt_get_name(base_dtb, region_node, NULL);
 		assert(name != NULL);
 
-		label_t label;
-		bool	have_label = (fdt_getprop_u32(base_dtb, region_node,
-						      "qcom,label", &label) == OK);
-		memparcel_t *mp;
-		if (have_label) {
-			mp = find_memparcel_for_resmem_node_by_label(
-				vmid, base_dtb, region_node, name, resmem_ctx,
-				label);
-		} else if (fdt_getprop_bool(base_dtb, region_node, "size") &&
-			   !fdt_getprop_bool(base_dtb, region_node, "reg")) {
-			// This region will be dynamically allocated by Linux
-			// after boot; we can ignore it
-			continue;
-		} else {
-			mp = find_memparcel_for_resmem_node_by_address(
-				vmid, base_dtb, region_node, name, resmem_ctx);
-		}
-
-		if (mp == NULL) {
-			(void)printf(
-				"No memparcel matching /reserved-memory/%s!\n ",
-				name);
-			ret = ERROR_DENIED;
+		bool have_reg = fdt_getprop_bool(base_dtb, region_node, "reg");
+		memparcel_ptr_result_t mp_r = find_memparcel_for_resmem_node(
+			vm, vmid, base_dtb, region_node, name, resmem_ctx,
+			have_reg);
+		if (mp_r.e != OK) {
+			ret = mp_r.e;
 			goto out;
 		}
+		if (mp_r.r == NULL) {
+			continue;
+		}
+		memparcel_t *mp = mp_r.r;
 
-		// If the memparcel is accessible to multiple VMs, the region
-		// must not be marked reusable.
+		// If the memparcel is accessible to multiple VMs, the
+		// region must not be marked reusable.
 		if (!memparcel_is_exclusive(mp, vmid) &&
 		    fdt_getprop_bool(base_dtb, region_node, "reusable")) {
 			(void)printf(
@@ -1412,12 +1690,18 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 		}
 
 		// Patch the region node with the memparcel's RM handle
-		char path[128];
-		(void)snprintf(path, sizeof(path), "/reserved-memory/%s", name);
-		dto_modify_begin_by_path(dto, path);
+		char	path[128];
+		int32_t snprintf_ret = snprintf(path, sizeof(path),
+						"/reserved-memory/%s", name);
 
-		dto_property_add_u32(dto, "qcom,rm-mem-handle",
-				     memparcel_get_handle(mp));
+		if ((snprintf_ret < 0) || (snprintf_ret >= 128)) {
+			ret = ERROR_ARGUMENT_INVALID;
+			goto out;
+		}
+		CHECK_DTO(ret, dto_modify_begin_by_path(dto, path));
+
+		CHECK_DTO(ret, dto_property_add_u32(dto, "qcom,rm-mem-handle",
+						    memparcel_get_handle(mp)));
 
 		// Find or add the region node's phandle
 		uint32_t phandle = fdt_get_phandle(base_dtb, region_node);
@@ -1426,11 +1710,21 @@ patch_resmem_nodes(dto_t *dto, vmid_t vmid, const void *base_dtb,
 			memparcel_set_phandle(mp, vmid, phandle, true);
 		} else {
 			// No existing phandle; add one in the overlay
-			dto_property_add_phandle(dto, &phandle);
+			CHECK_DTO(ret, dto_property_add_phandle(dto, &phandle));
 			memparcel_set_phandle(mp, vmid, phandle, false);
 		}
 
-		dto_modify_end_by_path(dto, path);
+		// Add the reg property if it wasn't already supplied.
+		if (!have_reg) {
+			ret = write_buffer_reg(dto, mp, vmid,
+					       resmem_ctx.child_addr_cells,
+					       resmem_ctx.child_size_cells);
+			if (ret != OK) {
+				goto out;
+			}
+		}
+
+		CHECK_DTO(ret, dto_modify_end_by_path(dto, path));
 	}
 
 out:
@@ -1447,12 +1741,12 @@ patch_cpus_nodes(vm_config_t *vmcfg, dto_t *dto, const void *base_dtb)
 	for (index_t i = 0; i < cnt; i++) {
 		vcpu_t *vcpu = vector_at(vcpu_t *, vmcfg->vcpus, i);
 		assert(vcpu != NULL);
-		if (vcpu->vm_cap == CSPACE_CAP_INVALID) {
-			continue;
-		} else if (vcpu->patch == NULL) {
+
+		if (vcpu->patch == NULL) {
 			ret = ERROR_ARGUMENT_INVALID;
 			goto out;
-		} else {
+		} else if ((vmcfg->vpm_group != CSPACE_CAP_INVALID) &&
+			   vcpu->defective) {
 			int node_ofs = fdt_path_offset(base_dtb, vcpu->patch);
 			if (node_ofs < 0) {
 				(void)printf(
@@ -1462,21 +1756,137 @@ patch_cpus_nodes(vm_config_t *vmcfg, dto_t *dto, const void *base_dtb)
 				goto out;
 			}
 
-			dto_modify_begin_by_path(dto, vcpu->patch);
+			CHECK_DTO(ret,
+				  dto_modify_begin_by_path(dto, vcpu->patch));
+
+			ret = dto_property_add_string(dto, "enable-method",
+						      "none");
+			if (ret != OK) {
+				(void)printf(
+					"Failed to modify enable-method property\n");
+				goto out;
+			}
+
+			// As per the DT specification, setting status to "fail"
+			// indicates the CPU is not operational or does not
+			// exist.
+			ret = dto_property_add_string(dto, "status", "fail");
+			if (ret != OK) {
+				(void)printf(
+					"Failed to modify status property\n");
+				goto out;
+			}
+
+			CHECK_DTO(ret,
+				  dto_modify_end_by_path(dto, vcpu->patch));
+		} else if ((vmcfg->vpm_group == CSPACE_CAP_INVALID) &&
+			   (!vcpu->defective)) {
+			int node_ofs = fdt_path_offset(base_dtb, vcpu->patch);
+			if (node_ofs < 0) {
+				(void)printf(
+					"CPUS: Can not find node %s in device tree",
+					vcpu->patch);
+				ret = ERROR_ARGUMENT_INVALID;
+				goto out;
+			}
+
+			CHECK_DTO(ret,
+				  dto_modify_begin_by_path(dto, vcpu->patch));
 			ret = dto_property_add_u64(
 				dto, "qcom,gunyah-capability", vcpu->vm_cap);
-			dto_modify_end_by_path(dto, vcpu->patch);
-
 			if (ret != OK) {
 				(void)printf(
 					"Failed to add vcpu-capability property\n");
 				goto out;
 			}
+			CHECK_DTO(ret,
+				  dto_modify_end_by_path(dto, vcpu->patch));
+		} else {
+			// No need to do anything
 		}
 	}
 
 out:
 	return ret;
+}
+
+static error_t
+create_vsoc_node(dto_t *dto, int32_t vsoc_node_ofs)
+{
+	error_t err = OK;
+	if (vsoc_node_ofs < 0) {
+		CHECK_DTO(err, dto_modify_begin_by_path(dto, "/"));
+		CHECK_DTO(err, dto_node_begin(dto, "vsoc"));
+		CHECK_DTO(err, dto_property_add_u32(dto, "#address-cells", 2));
+		CHECK_DTO(err, dto_property_add_u32(dto, "#size-cells", 2));
+		CHECK_DTO(err, dto_property_add_empty(dto, "ranges"));
+		CHECK_DTO(err, dto_register_path_ctx(dto, "/vsoc", 2, 2, true));
+		CHECK_DTO(err, dto_property_add_string(dto, "compatible",
+						       "simple-bus"));
+		CHECK_DTO(err, dto_node_end(dto, "vsoc"));
+		CHECK_DTO(err, dto_modify_end_by_path(dto, "/"));
+	}
+out:
+	return err;
+}
+
+static error_t
+create_reserved_memory_dtbo(dto_t *dto, vmid_t vmid, int32_t root_addr_cells,
+			    int32_t root_size_cells,
+			    int32_t reserved_memory_node_ofs)
+{
+	error_t err = OK;
+
+	if (reserved_memory_node_ofs < 0) {
+		// No /reserved-memory node exists; create a new one
+		CHECK_DTO(err, dto_node_begin(dto, "reserved-memory"));
+		CHECK_DTO(err, dto_property_add_u32(dto, "#address-cells",
+						    (count_t)root_addr_cells));
+		CHECK_DTO(err, dto_property_add_u32(dto, "#size-cells",
+						    (count_t)root_size_cells));
+		CHECK_DTO(err, dto_property_add_empty(dto, "ranges"));
+
+		// Accept any remaining memparcels and generate nodes for them
+		CHECK_DTO(err, create_resmem_nodes(dto, vmid,
+						   (count_t)root_addr_cells,
+						   (count_t)root_size_cells));
+		CHECK_DTO(err, dto_node_end(dto, "reserved-memory"));
+	}
+
+out:
+	return err;
+}
+
+static error_t
+modify_existing_reserved_memory_dtbo(const vm_t *vm, const void *base_dtb,
+				     dto_t *dto, vmid_t vmid,
+				     int32_t reserved_memory_node_ofs)
+{
+	error_t err = OK;
+
+	if (reserved_memory_node_ofs >= 0) {
+		ctx_t resmem_ctx =
+			dtb_parser_get_ctx(base_dtb, reserved_memory_node_ofs);
+
+		// For any existing reserved memory nodes accept based on the
+		// reserved memory ranges and patch with the correct RM handles
+		err = patch_resmem_nodes(vm, dto, vmid, base_dtb,
+					 reserved_memory_node_ofs, resmem_ctx);
+		if (err != OK) {
+			goto out;
+		}
+
+		// Accept any remaining memparcels and generate nodes for them
+		CHECK_DTO(err,
+			  dto_modify_begin_by_path(dto, "/reserved-memory"));
+		err = create_resmem_nodes(dto, vmid,
+					  resmem_ctx.child_addr_cells,
+					  resmem_ctx.child_size_cells);
+		CHECK_DTO(err, dto_modify_end_by_path(dto, "/reserved-memory"));
+	}
+
+out:
+	return err;
 }
 
 static create_dtbo_ret_t
@@ -1490,8 +1900,8 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 	vmid_t	 vmid	  = vm->vmid;
 	vmaddr_t ipa_base = vm->vm_config->mem_ipa_base;
 
-	int root_addr_cells = fdt_address_cells(base_dtb, 0);
-	int root_size_cells = fdt_size_cells(base_dtb, 0);
+	int32_t root_addr_cells = fdt_address_cells(base_dtb, 0);
+	int32_t root_size_cells = fdt_size_cells(base_dtb, 0);
 
 	(void)printf("DTB:IPA base address:0x%lx\n", (uint64_t)ipa_base);
 	if ((root_addr_cells < 0) || (root_size_cells < 0)) {
@@ -1499,7 +1909,7 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 		goto out_no_dt;
 	}
 
-	dto_t *dto = dto_init(NULL, 0UL);
+	dto_t *dto = dto_init(NULL, 0UL, base_dtb);
 	if (dto == NULL) {
 		ret.err = ERROR_NOMEM;
 		goto out_no_dt;
@@ -1513,31 +1923,12 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 
 	// If a /reserved-memory node exists, we must add to it rather than
 	// creating a new one
-	int reserved_memory_node_ofs =
+	int32_t reserved_memory_node_ofs =
 		fdt_path_offset(base_dtb, "/reserved-memory");
-	if (reserved_memory_node_ofs >= 0) {
-		ctx_t resmem_ctx =
-			dtb_parser_get_ctx(base_dtb, reserved_memory_node_ofs);
-
-		// For any existing reserved memory nodes accept based on the
-		// reserved memory ranges and patch with the correct RM handles
-		ret.err = patch_resmem_nodes(dto, vmid, base_dtb,
-					     reserved_memory_node_ofs,
-					     resmem_ctx);
-		if (ret.err != OK) {
-			goto out;
-		}
-
-		// Accept any remaining memparcels and generate nodes for them
-		dto_modify_begin_by_path(dto, "/reserved-memory");
-		ret.err = create_resmem_nodes(dto, vmid,
-					      resmem_ctx.child_addr_cells,
-					      resmem_ctx.child_size_cells);
-		dto_modify_end_by_path(dto, "/reserved-memory");
-
-		if (ret.err != OK) {
-			goto out;
-		}
+	ret.err = modify_existing_reserved_memory_dtbo(
+		vm, base_dtb, dto, vmid, reserved_memory_node_ofs);
+	if (ret.err != OK) {
+		goto out;
 	}
 
 	ret.err = create_iomem_nodes(dto, vmid);
@@ -1550,26 +1941,13 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 		goto out;
 	}
 
-	dto_modify_begin_by_path(dto, "/");
+	CHECK_DTO(ret.err, dto_modify_begin_by_path(dto, "/"));
 
-	if (reserved_memory_node_ofs < 0) {
-		// No /reserved-memory node exists; create a new one
-		dto_node_begin(dto, "reserved-memory");
-		dto_property_add_u32(dto, "#address-cells",
-				     (count_t)root_addr_cells);
-		dto_property_add_u32(dto, "#size-cells",
-				     (count_t)root_size_cells);
-		dto_property_add_empty(dto, "ranges");
-
-		// Accept any remaining memparcels and generate nodes for them
-		ret.err = create_resmem_nodes(dto, vmid,
-					      (count_t)root_addr_cells,
-					      (count_t)root_size_cells);
-		dto_node_end(dto, "reserved-memory");
-
-		if (ret.err != OK) {
-			goto out;
-		}
+	ret.err = create_reserved_memory_dtbo(dto, vmid, root_addr_cells,
+					      root_size_cells,
+					      reserved_memory_node_ofs);
+	if (ret.err != OK) {
+		goto out;
 	}
 
 	ret.err = create_memory_node(dto, vmid, (count_t)root_addr_cells,
@@ -1578,21 +1956,15 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 		goto out;
 	}
 
-	dto_modify_end_by_path(dto, "/");
+	CHECK_DTO(ret.err, dto_modify_end_by_path(dto, "/"));
 
 	// Add the vsoc devices
-	int vsoc_node_ofs = fdt_path_offset(base_dtb, "/vsoc");
+	int32_t vsoc_node_ofs = fdt_path_offset(base_dtb, "/vsoc");
 
 	// Create the vsoc node if it doesn't exist
-	if (vsoc_node_ofs < 0) {
-		dto_modify_begin_by_path(dto, "/");
-		dto_node_begin(dto, "vsoc");
-		dto_property_add_u32(dto, "#address-cells", 2);
-		dto_property_add_u32(dto, "#size-cells", 2);
-		dto_property_add_empty(dto, "ranges");
-		dto_property_add_string(dto, "compatible", "simple-bus");
-		dto_node_end(dto, "vsoc");
-		dto_modify_end_by_path(dto, "/");
+	ret.err = create_vsoc_node(dto, vsoc_node_ofs);
+	if (ret.err != OK) {
+		goto out;
 	}
 
 	vm_config_t *vmcfg = vm->vm_config;
@@ -1602,7 +1974,7 @@ create_dtbo(vm_t *vm, const void *base_dtb)
 		goto out;
 	}
 
-	ret.err = create_dt_nodes(dto, vmid);
+	ret.err = create_dt_nodes(base_dtb, dto, vmid);
 	if (ret.err != OK) {
 		goto out;
 	}
@@ -1636,7 +2008,7 @@ add_peers_id_list(dto_t *dto, vm_t *vm)
 {
 	error_t ret = OK;
 
-	count_t cnt = 0UL;
+	count_t cnt = 0U;
 
 	const char **peers_id = NULL;
 
@@ -1649,7 +2021,7 @@ add_peers_id_list(dto_t *dto, vm_t *vm)
 		}
 
 		struct vdevice_msg_queue_pair *cfg =
-			(struct vdevice_msg_queue_pair *)node->config;
+			node->config.msg_queue_pair;
 
 		if (!cfg->has_peer_vdevice) {
 			continue;
@@ -1682,7 +2054,7 @@ add_peers_id_list(dto_t *dto, vm_t *vm)
 		}
 
 		struct vdevice_msg_queue_pair *cfg =
-			(struct vdevice_msg_queue_pair *)node->config;
+			node->config.msg_queue_pair;
 
 		if (!cfg->has_peer_vdevice) {
 			continue;
@@ -1716,66 +2088,11 @@ out:
 }
 
 static error_t
-create_dt_nodes(dto_t *dto, vmid_t vmid)
+create_vdev_dt_nodes(const void *base_dtb, dto_t *dto, vmid_t vmid,
+		     const vm_t *cur_vm)
 {
-	vm_t *cur_vm = vm_lookup(vmid);
-	assert(cur_vm != NULL);
-	assert(cur_vm->vm_config != NULL);
-
 	error_t ret = OK;
 
-	dto_modify_begin_by_path(dto, "/");
-	dto_node_begin(dto, "hypervisor");
-	dto_property_add_u32(dto, "#address-cells", 2);
-	dto_property_add_u32(dto, "#size-cells", 0);
-	const char *hyp_compat[4] = { "gunyah-hypervisor",
-				      "qcom,gunyah-hypervisor-1.0",
-				      "qcom,gunyah-hypervisor", "simple-bus" };
-	dto_property_add_stringlist(dto, "compatible", hyp_compat,
-				    util_array_size(hyp_compat));
-
-	dto_node_begin(dto, "qcom,gunyah-vm");
-	const char *id_compat[2] = { "qcom,gunyah-vm-id-1.0",
-				     "qcom,gunyah-vm-id" };
-	dto_property_add_stringlist(dto, "compatible", id_compat, 2);
-	dto_property_add_u32(dto, "qcom,vmid", vmid);
-	dto_property_add_u32(dto, "qcom,owner-vmid", cur_vm->owner);
-	dto_property_add_string(dto, "qcom,vendor", "Qualcomm");
-
-	dto_property_add_string(dto, "qcom,image-name", cur_vm->name);
-
-	if (cur_vm->uri_len != 0U) {
-		dto_property_add_string(dto, "qcom,vm-uri", cur_vm->uri);
-	}
-
-	if (cur_vm->has_guid) {
-		char guid[VM_MAX_GUID_STRING_LEN];
-		ret = dto_guid_to_string(cur_vm->guid,
-					 util_array_size(cur_vm->guid), guid,
-					 util_array_size(guid));
-		if (ret != OK) {
-			(void)printf(
-				"Error: failed to convert guid to string\n");
-			goto out;
-		}
-
-		dto_property_add_string(dto, "qcom,vm-guid", guid);
-	}
-
-	ret = add_peers_id_list(dto, cur_vm);
-	if (ret != OK) {
-		(void)printf("Error: failed to generate peers id list\n");
-		goto out;
-	}
-
-	platform_dto_add_platform_props(dto, cur_vm);
-
-	dto_node_end(dto, "qcom,gunyah-vm");
-
-	dto_node_end(dto, "hypervisor");
-	dto_modify_end_by_path(dto, "/");
-
-	// Find the RM RPC node
 	vdevice_node_t *node = NULL;
 
 	error_t dto_err = OK;
@@ -1794,22 +2111,29 @@ create_dt_nodes(dto_t *dto, vmid_t vmid)
 			dto_err = dto_create_doorbell(node, dto, NULL);
 		} else if (node->type == VDEV_SHM) {
 			dto_err = dto_create_shm(node, dto, vmid);
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
 		} else if (node->type == VDEV_WATCHDOG) {
 			dto_err = dto_create_watchdog(node, dto);
-#endif
 		} else if (node->type == VDEV_VIRTIO_MMIO) {
-			dto_err = dto_create_virtio_mmio(node, dto, vmid);
+			dto_err = dto_create_virtio_mmio(base_dtb, node, dto,
+							 vmid);
 		} else if (node->type == VDEV_IOMEM) {
 			// no need to add IOMEM node under hypervisor node
 			continue;
+		} else if (node->type == VDEV_SMMU_V2) {
+			// Pass. Will be patched separately.
+			continue;
 		} else if (node->type == VDEV_RTC) {
 			dto_err = dto_create_vrtc(node, dto);
+		} else if (node->type == VDEV_MEMORY_EXTENT) {
+			// Not exported through the DT.
+			continue;
+		} else if (node->type == VDEV_ADDRESS_SPACE) {
+			dto_err = dto_create_addrspace(node, dto);
 		} else {
 			dto_err = platform_dto_create(node, dto, vmid);
 		}
 
-		if (dto_err) {
+		if (dto_err != OK) {
 			(void)printf(
 				"create_dt_nodes: vmid %d, %s (%d), error %d\n",
 				(int)vmid, node->generate, (int)node->type,
@@ -1817,6 +2141,110 @@ create_dt_nodes(dto_t *dto, vmid_t vmid)
 			ret = dto_err;
 		}
 	}
+
+	return ret;
+}
+
+static error_t
+add_root_properties(dto_t *dto, vmid_t vmid, vm_t *cur_vm)
+{
+	error_t ret = OK;
+
+	const char *id_compat[2] = { "qcom,gunyah-vm-id-1.0",
+				     "qcom,gunyah-vm-id" };
+	CHECK_DTO(ret,
+		  dto_property_add_stringlist(dto, "compatible", id_compat, 2));
+	CHECK_DTO(ret, dto_property_add_u32(dto, "qcom,vmid", vmid));
+	CHECK_DTO(ret,
+		  dto_property_add_u32(dto, "qcom,owner-vmid", cur_vm->owner));
+	CHECK_DTO(ret, dto_property_add_string(dto, "qcom,vendor", "Qualcomm"));
+
+	CHECK_DTO(ret, dto_property_add_string(dto, "qcom,image-name",
+					       cur_vm->name));
+
+	if (cur_vm->uri_len != 0U) {
+		CHECK_DTO(ret, dto_property_add_string(dto, "qcom,vm-uri",
+						       cur_vm->uri));
+	}
+
+	if (cur_vm->has_guid) {
+		char guid[VM_MAX_GUID_STRING_LEN];
+		ret = dto_guid_to_string(cur_vm->guid,
+					 util_array_size(cur_vm->guid), guid,
+					 util_array_size(guid));
+		if (ret != OK) {
+			(void)printf(
+				"Error: failed to convert guid to string\n");
+			goto out;
+		}
+
+		CHECK_DTO(ret,
+			  dto_property_add_string(dto, "qcom,vm-guid", guid));
+	}
+
+	ret = add_peers_id_list(dto, cur_vm);
+	if (ret != OK) {
+		(void)printf("Error: failed to generate peers id list\n");
+		goto out;
+	}
+
+	ret = platform_dto_add_platform_props(dto, cur_vm);
+	if (ret != OK) {
+		goto out;
+	}
+
+out:
+	return ret;
+}
+
+static error_t
+add_hyp_properties(dto_t *dto)
+{
+	error_t ret;
+
+	CHECK_DTO(ret, dto_property_add_u32(dto, "#address-cells", 2));
+	CHECK_DTO(ret, dto_property_add_u32(dto, "#size-cells", 0));
+	CHECK_DTO(ret, dto_register_path_ctx(dto, "/hypervisor", 2, 0, false));
+	const char *hyp_compat[4] = { "gunyah-hypervisor",
+				      "qcom,gunyah-hypervisor-1.0",
+				      "qcom,gunyah-hypervisor", "simple-bus" };
+	CHECK_DTO(ret, dto_property_add_stringlist(
+			       dto, "compatible", hyp_compat,
+			       (count_t)util_array_size(hyp_compat)));
+
+out:
+	return ret;
+}
+
+static error_t
+create_dt_nodes(const void *base_dtb, dto_t *dto, vmid_t vmid)
+{
+	vm_t *cur_vm = vm_lookup(vmid);
+	assert(cur_vm != NULL);
+	assert(cur_vm->vm_config != NULL);
+
+	error_t ret = OK;
+
+	CHECK_DTO(ret, dto_modify_begin_by_path(dto, "/"));
+	CHECK_DTO(ret, dto_node_begin(dto, "hypervisor"));
+
+	CHECK_DTO(ret, add_hyp_properties(dto));
+
+	CHECK_DTO(ret, dto_node_begin(dto, "qcom,gunyah-vm"));
+
+	ret = add_root_properties(dto, vmid, cur_vm);
+	if (ret != OK) {
+		goto out;
+	}
+
+	CHECK_DTO(ret, dto_node_end(dto, "qcom,gunyah-vm"));
+
+	CHECK_DTO(ret, dto_node_end(dto, "hypervisor"));
+
+	CHECK_DTO(ret, dto_modify_end_by_path(dto, "/"));
+
+	ret = create_vdev_dt_nodes(base_dtb, dto, vmid, cur_vm);
+
 out:
 	return ret;
 }
@@ -1844,16 +2272,14 @@ vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp)
 		vmaddr_t base_ipa      = 0U;
 
 		if (node->type == VDEV_SHM) {
-			struct vdevice_shm *cfg =
-				(struct vdevice_shm *)node->config;
-			vlabel	      = cfg->label;
-			need_allocate = cfg->need_allocate;
-			base_ipa      = cfg->base_ipa;
+			struct vdevice_shm *cfg = node->config.shm;
+			vlabel			= cfg->label;
+			need_allocate		= cfg->need_allocate;
+			base_ipa		= cfg->base_ipa;
 		} else if (node->type == VDEV_IOMEM) {
-			struct vdevice_iomem *cfg =
-				(struct vdevice_iomem *)node->config;
-			vlabel	      = cfg->label;
-			need_allocate = cfg->need_allocate;
+			struct vdevice_iomem *cfg = node->config.iomem;
+			vlabel			  = cfg->label;
+			need_allocate		  = cfg->need_allocate;
 			// FIXME: do we need to handle need allocate case?
 		} else {
 			continue;
@@ -1863,8 +2289,7 @@ vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp)
 			continue;
 		}
 
-		if ((node->type == VDEV_SHM) ||
-		    (node->type == VDEV_VIRTIO_MMIO)) {
+		if (node->type == VDEV_SHM) {
 			if (!need_allocate) {
 				if (!memparcel_is_shared(mp, vm->vmid)) {
 					ret = accept_memparcel_fixed(
@@ -1885,9 +2310,9 @@ vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp)
 				}
 			}
 			goto out;
-		} else if ((node != NULL) && (node->type == VDEV_IOMEM)) {
-			struct vdevice_iomem *cfg =
-				(struct vdevice_iomem *)node->config;
+		} else {
+			// node->type = VDEV_IOMEM
+			struct vdevice_iomem *cfg = node->config.iomem;
 			// here we ignore allocate-base option (assume it's
 			// always true)
 			ret = accept_iomem_memparcel(vm->vmid, mp, cfg);
@@ -1897,8 +2322,6 @@ vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp)
 					label, (int)ret);
 			}
 			goto out;
-		} else {
-			// no other vdevice types to be considered
 		}
 	}
 
@@ -1913,7 +2336,7 @@ process_image_memparcel(vm_t *vm)
 
 	sgl_entry_t sgl_accept[1U] = { { .ipa  = vm->vm_config->mem_ipa_base,
 					 .size = vm->mem_size } };
-	uint16_t    sgl_len	   = util_array_size(sgl_accept);
+	uint16_t    sgl_len	   = (uint16_t)util_array_size(sgl_accept);
 
 	acl_entry_t acl[1U]	 = { { .vmid   = vm->vmid,
 				       .rights = MEM_RIGHTS_RWX } };
@@ -1958,9 +2381,10 @@ process_image_memparcel(vm_t *vm)
 	}
 #endif
 
-	err = memparcel_accept(vm->vmid, util_array_size(acl), sgl_len, 0U, acl,
-			       sgl_accept, NULL, 0U, vm->mem_mp_handle, 0U,
-			       MEM_TYPE_NORMAL, trans_type, accept_flags);
+	err = memparcel_accept(vm->vmid, (uint16_t)util_array_size(acl),
+			       sgl_len, 0U, acl, sgl_accept, NULL, 0U,
+			       vm->mem_mp_handle, 0U, MEM_TYPE_NORMAL,
+			       trans_type, accept_flags);
 
 #if defined(CONFIG_DEBUG) && defined(PLATFORM_VM_DEBUG_ACCESS_ALLOWED) &&      \
 	PLATFORM_VM_DEBUG_ACCESS_ALLOWED
@@ -2018,10 +2442,11 @@ process_firmware_memparcel(vm_t *vm)
 		accept_flags |= MEM_ACCEPT_FLAG_MAP_CONTIGUOUS;
 	}
 
-	err = memparcel_accept(vm->vmid, util_array_size(acl_lend),
-			       util_array_size(sgl_accept), 0U, acl_lend,
-			       sgl_accept, NULL, 0U, vm->fw_mp_handle, 0U,
-			       MEM_TYPE_NORMAL, TRANS_TYPE_LEND, accept_flags);
+	err = memparcel_accept(vm->vmid, (uint16_t)util_array_size(acl_lend),
+			       (uint16_t)util_array_size(sgl_accept), 0U,
+			       acl_lend, sgl_accept, NULL, 0U, vm->fw_mp_handle,
+			       0U, MEM_TYPE_NORMAL, TRANS_TYPE_LEND,
+			       accept_flags);
 	if (err != RM_OK) {
 		(void)printf("Error: failed to accept firmware memparcel: %d\n",
 			     err);
@@ -2077,12 +2502,29 @@ process_memparcels(vm_t *vm)
 	foreach_memparcel_by_target_vmid (mp, vm->vmid) {
 		if (!memparcel_is_shared(mp, vm->vmid) &&
 		    memparcel_is_private(mp, vm->vmid)) {
+			// This will be part of the VM's normal memory, so make
+			// it a paged memparcel if the VM is demand-paged.
+			if (vm->vm_config->mem_demand_paging) {
+				rm_ret = memparcel_make_paged(
+					vm->vmid, vm->fw_mp_handle, false);
+				if (rm_ret != RM_OK) {
+					(void)printf(
+						"Warning: paging private mp %#" PRIx32
+						" failed: %d\n",
+						memparcel_get_handle(mp),
+						rm_ret);
+					continue;
+				}
+			}
+
 			rm_ret = accept_memparcel_private(vm, mp);
 			if (rm_ret != RM_OK) {
 				(void)printf(
 					"Warning: accept private mp %#" PRIx32
 					" failed: %d\n",
 					memparcel_get_handle(mp), rm_ret);
+				ret = ERROR_FAILURE;
+				goto out;
 			}
 		}
 	}
@@ -2106,7 +2548,7 @@ accept_memparcel(vmid_t vmid, const memparcel_t *mp)
 	acl_entry_t acl[1U] = { { .vmid = vmid, .rights = MEM_RIGHTS_RWX } };
 
 	count_t region_cnt = memparcel_get_num_regions(mp);
-	assert(region_cnt > 0);
+	assert(region_cnt > 0U);
 
 	uint8_t flags = MEM_ACCEPT_FLAG_DONE;
 
@@ -2118,9 +2560,8 @@ accept_memparcel(vmid_t vmid, const memparcel_t *mp)
 
 	// owner doesn't need to access buffer if it's not in
 	// the ACL
-	bool owner_has_read = (owner_rights_ret.e == OK) ? (owner_rights_ret.r &
-							    MEM_RIGHTS_R) != 0U
-							 : false;
+	bool owner_has_read = (owner_rights_ret.e == OK) &&
+			      ((owner_rights_ret.r & MEM_RIGHTS_R) != 0U);
 
 	uint8_result_t vm_rights_ret = memparcel_get_vm_rights(mp, vmid);
 	if (vm_rights_ret.e != OK) {
@@ -2175,7 +2616,7 @@ accept_iomem_memparcel(vmid_t vmid, memparcel_t *mp,
 
 		acl = rm_acl;
 
-		acl_entries = util_array_size(config->rm_acl);
+		acl_entries = (uint16_t)util_array_size(config->rm_acl);
 
 		flags |= MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
 	}
@@ -2196,7 +2637,7 @@ accept_iomem_memparcel(vmid_t vmid, memparcel_t *mp,
 
 		attrs = rm_attrs;
 
-		attr_entries = util_array_size(config->rm_attrs);
+		attr_entries = (uint16_t)util_array_size(config->rm_attrs);
 
 		flags |= MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
 	}
@@ -2269,10 +2710,10 @@ accept_memparcel_fixed(const vm_t *vm, const memparcel_t *mp, vmaddr_t ipa,
 	acl_entry_t acl[1U] = { { .vmid = vmid, .rights = MEM_RIGHTS_RW } };
 
 	count_t region_cnt = memparcel_get_num_regions(mp);
-	assert(region_cnt > 0);
+	assert(region_cnt > 0U);
 
 	sgl_entry_t sgl[1]  = { { .ipa = ipa, .size = sz } };
-	uint16_t    sgl_len = util_array_size(sgl);
+	uint16_t    sgl_len = (uint16_t)util_array_size(sgl);
 
 	uint8_t flags = MEM_ACCEPT_FLAG_DONE;
 
@@ -2339,11 +2780,21 @@ accept_memparcel_private(vm_t *vm, const memparcel_t *mp)
 		goto out;
 	}
 
+	if (vm->mem_base_tag != ADDRESS_RANGE_NO_TAG) {
+		address_range_tag_t tag = memparcel_get_phys_address_tag(mp);
+		if ((vm->mem_base_tag & tag) != vm->mem_base_tag) {
+			(void)printf("accept private mp %d invalid tag %x",
+				     memparcel_get_handle(mp), tag);
+			ret = RM_ERROR_DENIED;
+			goto out;
+		}
+	}
+
 	sgl_entry_t sgl_accept[1U] = { {
 		.ipa  = vm->vm_config->mem_ipa_base + vm->mem_size,
 		.size = size,
 	} };
-	uint16_t    sgl_len	   = util_array_size(sgl_accept);
+	uint16_t    sgl_len	   = (uint16_t)util_array_size(sgl_accept);
 
 	acl_entry_t acl[1U]	 = { { .vmid   = vm->vmid,
 				       .rights = MEM_RIGHTS_RWX } };
@@ -2394,7 +2845,7 @@ map_cfgcpio(size_t cfgcpio_offset, size_t cfgcpio_size, uint32_t mp_handle,
 {
 	uintptr_result_t ret;
 
-	if (util_add_overflows(cfgcpio_offset, cfgcpio_size - 1)) {
+	if (util_add_overflows(cfgcpio_offset, cfgcpio_size - 1U)) {
 		ret = uintptr_result_error(ERROR_ADDR_OVERFLOW);
 		goto out;
 	}
@@ -2484,7 +2935,8 @@ process_cfgcpio(vm_t *vm)
 		header = (struct cpio_header *)(temp_addr + idx);
 
 		// ensure magic header exists
-		if (memcmp(header->c_magic, CPIO_HEADER_MAGIC,
+		if (memcmp((uint8_t *)(header->c_magic),
+			   (const uint8_t *)CPIO_HEADER_MAGIC,
 			   sizeof(CPIO_HEADER_MAGIC) - 1U) != 0) {
 			(void)printf("%c%c%c%c%c%c\n", header->c_magic[0],
 				     header->c_magic[1], header->c_magic[2],
@@ -2502,7 +2954,8 @@ process_cfgcpio(vm_t *vm)
 		file_name = ((char *)header) + sizeof(struct cpio_header);
 
 		// Actually header->c_namesize includes terminator '\0'
-		memcpy(str_to_int, header->c_namesize, sizeof(str_to_int) - 1U);
+		(void)memscpy(str_to_int, sizeof(str_to_int) - 1U,
+			      header->c_namesize, sizeof(header->c_namesize));
 		str_to_int[8] = '\0';
 		name_len      = strtoul(str_to_int, NULL, 16);
 		idx = util_balign_up(idx + sizeof(struct cpio_header) +
@@ -2515,7 +2968,8 @@ process_cfgcpio(vm_t *vm)
 
 		file_data = (void *)(temp_addr + idx);
 
-		memcpy(str_to_int, header->c_filesize, sizeof(str_to_int) - 1U);
+		(void)memscpy(str_to_int, sizeof(str_to_int) - 1U,
+			      header->c_filesize, sizeof(header->c_filesize));
 		str_to_int[8] = '\0';
 		file_len      = strtoul(str_to_int, NULL, 16);
 		idx	      = util_balign_up(idx + file_len, CPIO_ALIGNMENT);
@@ -2555,7 +3009,10 @@ process_cfgcpio(vm_t *vm)
 			// (i + 1U) is the data length after strip. The last 1U
 			// is an additional whitespace ' ' which is used to
 			// separate different cmdlines when merge them.
-			vm->cfgcpio_cmdline_len += (i + 1U + 1U);
+			i += 1U + 1U;
+
+			assert(!util_add_overflows(vm->cfgcpio_cmdline_len, i));
+			vm->cfgcpio_cmdline_len += i;
 
 			ret = vector_push_back(vm->cfgcpio_cmdline, duplicate);
 			if (ret != OK) {
@@ -2582,11 +3039,78 @@ out_unmapped:
 	return ret;
 }
 
-static void
-fdt_fill_u64(uint32_t *data, uint64_t val)
+static error_t
+add_iomem_dto_nodes_prop(dto_t *dto, vmid_t vmid, const vdevice_node_t *node,
+			 memparcel_t *mp, const struct vdevice_iomem *cfg,
+			 const ctx_t *ctx, dto_addrrange_t **regs_ptr)
 {
-	data[0] = (val >> 32);
-	data[1] = (val & util_mask(32));
+	error_t ret = OK;
+
+	dto_addrrange_t *regs = NULL;
+
+	count_t compatible_cnt = 0U;
+
+	const char *compatibles[VDEVICE_MAX_PUSH_COMPATIBLES];
+
+	compatible_cnt = node->push_compatible_num;
+	(void)memscpy(&compatibles, sizeof(compatibles), &node->push_compatible,
+		      sizeof(node->push_compatible));
+
+	CHECK_DTO(ret, dto_property_add_stringlist(
+			       dto, "compatible", compatibles, compatible_cnt));
+
+	count_t region_cnt = memparcel_get_num_regions(mp);
+	assert(region_cnt > 0U);
+
+	regs = calloc(region_cnt, sizeof(regs[0]));
+	if (regs == NULL) {
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	for (index_t i = 0; i < region_cnt; ++i) {
+		regs[i].addr = memparcel_get_phys(mp, i).r;
+		regs[i].size = memparcel_get_region_size(mp, i).r;
+	}
+
+	CHECK_DTO(ret, dto_property_add_addrrange_array(
+			       dto, "reg", regs, region_cnt,
+			       ctx->child_addr_cells, ctx->child_size_cells));
+
+	CHECK_DTO(ret, dto_property_add_u32(dto, "peer", cfg->peer));
+
+	mem_handle_t mem_handle = memparcel_get_handle(mp);
+
+	CHECK_DTO(ret,
+		  dto_property_add_u64(dto, "qcom,rm-mem-handle", mem_handle));
+
+	uint8_result_t self_rights = memparcel_get_vm_rights(mp, vmid);
+
+	uint8_result_t peer_rights = memparcel_get_vm_rights(mp, cfg->peer);
+
+	if ((self_rights.e == OK) && (peer_rights.e == OK)) {
+		uint32_t acl[2];
+		acl[0] = self_rights.r;
+		acl[1] = peer_rights.r;
+		CHECK_DTO(ret, dto_property_add_u32array(dto, "qcom,rm-acl",
+							 acl, 2));
+	}
+
+	uint16_result_t self_attrs = memparcel_get_vm_attrs(mp, vmid);
+
+	uint16_result_t peer_attrs = memparcel_get_vm_attrs(mp, cfg->peer);
+
+	if ((self_attrs.e == OK) && (peer_attrs.e == OK)) {
+		uint32_t attrs[2];
+		attrs[0] = self_attrs.r;
+		attrs[1] = peer_attrs.r;
+		CHECK_DTO(ret, dto_property_add_u32array(
+				       dto, "qcom,rm-attributes", attrs, 2));
+	}
+
+out:
+	*regs_ptr = regs;
+	return ret;
 }
 
 static error_t
@@ -2597,16 +3121,7 @@ create_iomem_nodes(dto_t *dto, vmid_t vmid)
 	vm_t *cur_vm = vm_lookup(vmid);
 	assert(cur_vm != NULL);
 	assert(cur_vm->vm_config != NULL);
-
-#define CHECK_DTO(ret_val, dto_call)                                           \
-	do {                                                                   \
-		ret_val = (dto_call);                                          \
-		if (ret_val != OK) {                                           \
-			goto out;                                              \
-		}                                                              \
-	} while (0)
-
-	uint32_t *regs = NULL;
+	dto_addrrange_t *regs = NULL;
 
 	vdevice_node_t *node = NULL;
 	loop_list(node, &cur_vm->vm_config->vdevice_nodes, vdevice_)
@@ -2614,8 +3129,7 @@ create_iomem_nodes(dto_t *dto, vmid_t vmid)
 		if (node->type != VDEV_IOMEM) {
 			continue;
 		}
-		struct vdevice_iomem *cfg =
-			(struct vdevice_iomem *)node->config;
+		struct vdevice_iomem *cfg = node->config.iomem;
 
 		label_t vlabel;
 		vlabel = cfg->label;
@@ -2634,78 +3148,22 @@ create_iomem_nodes(dto_t *dto, vmid_t vmid)
 			continue;
 		}
 
+		ctx_t ctx;
+		CHECK_DTO(ret,
+			  dto_get_path_ctx(dto, node->generate, &ctx, true));
+
+		if (!ctx.child_addr_is_phys) {
+			(void)printf(
+				"Warning: patching non-physical reg in %s!\n",
+				node->generate);
+		}
+
 		CHECK_DTO(ret, dto_construct_begin_path(dto, node->generate));
 
-		CHECK_DTO(ret, dto_property_add_u32(dto, "#address-cells", 2));
-		CHECK_DTO(ret, dto_property_add_u32(dto, "#size-cells", 2));
-
-		count_t compatible_cnt = 0U;
-
-		const char *compatibles[VDEVICE_MAX_PUSH_COMPATIBLES];
-
-		compatible_cnt = node->push_compatible_num;
-		memcpy(&compatibles, &node->push_compatible,
-		       sizeof(node->push_compatible));
-
-		CHECK_DTO(ret, dto_property_add_stringlist(dto, "compatible",
-							   compatibles,
-							   compatible_cnt));
-
-		count_t region_cnt = memparcel_get_num_regions(mp);
-
-		if (util_mult_integer_overflows(region_cnt, 2 * 2)) {
-			ret = ERROR_ARGUMENT_SIZE;
+		ret = add_iomem_dto_nodes_prop(dto, vmid, node, mp, cfg, &ctx,
+					       &regs);
+		if (ret != OK) {
 			goto out;
-		}
-		count_t regs_size = region_cnt * 2U * 2U;
-
-		regs = calloc(regs_size, sizeof(regs[0]));
-		if (regs == NULL) {
-			ret = ERROR_NOMEM;
-			goto out;
-		}
-		for (index_t i = 0; i < region_cnt; ++i) {
-			fdt_fill_u64(&regs[i * 4U],
-				     memparcel_get_phys(mp, i).r);
-			fdt_fill_u64(&regs[(i * 4U) + 2U],
-				     memparcel_get_region_size(mp, i).r);
-		}
-
-		CHECK_DTO(ret, dto_property_add_u32array(dto, "reg", regs,
-							 regs_size));
-
-		CHECK_DTO(ret, dto_property_add_u32(dto, "peer", cfg->peer));
-
-		mem_handle_t mem_handle = memparcel_get_handle(mp);
-
-		CHECK_DTO(ret, dto_property_add_u64(dto, "qcom,rm-mem-handle",
-						    mem_handle));
-
-		uint8_result_t self_rights = memparcel_get_vm_rights(mp, vmid);
-
-		uint8_result_t peer_rights =
-			memparcel_get_vm_rights(mp, cfg->peer);
-
-		if ((self_rights.e == OK) && (peer_rights.e == OK)) {
-			uint32_t acl[2];
-			acl[0] = self_rights.r;
-			acl[1] = peer_rights.r;
-			CHECK_DTO(ret, dto_property_add_u32array(
-					       dto, "qcom,rm-acl", acl, 2));
-		}
-
-		uint16_result_t self_attrs = memparcel_get_vm_attrs(mp, vmid);
-
-		uint16_result_t peer_attrs =
-			memparcel_get_vm_attrs(mp, cfg->peer);
-
-		if ((self_attrs.e == OK) && (peer_attrs.e == OK)) {
-			uint32_t attrs[2];
-			attrs[0] = self_attrs.r;
-			attrs[1] = peer_attrs.r;
-			CHECK_DTO(ret,
-				  dto_property_add_u32array(
-					  dto, "qcom,rm-attributes", attrs, 2));
 		}
 
 		CHECK_DTO(ret,
@@ -2716,7 +3174,6 @@ create_iomem_nodes(dto_t *dto, vmid_t vmid)
 
 		CHECK_DTO(ret, dto_construct_end_path(dto, node->generate));
 	}
-#undef CHECK_DTO
 
 out:
 	free(regs);
@@ -2724,9 +3181,79 @@ out:
 }
 
 static error_t
-patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb)
+parse_cfgcpio(dto_t *dto, vm_t *vm, const void *base_dtb, int chosen_ofs)
 {
-	error_t ret = OK;
+	error_t ret;
+
+	char	   *bootargs_total = NULL;
+	const char *bootargs;
+	size_t	    bootargs_len;
+
+	if (chosen_ofs >= 0) {
+		int len;
+		bootargs = fdt_stringlist_get(base_dtb, chosen_ofs, "bootargs",
+					      0, &len);
+		bootargs_len = (bootargs == NULL) ? 0U : (size_t)len;
+	} else {
+		bootargs     = NULL;
+		bootargs_len = 0U;
+	}
+
+	// append cfgcpio_cmdline to bootargs
+	assert(bootargs_len < (size_t)SIZE_MAX);
+	size_t bootargs_total_size = bootargs_len + 1U;
+	assert(!util_add_overflows(bootargs_total_size,
+				   vm->cfgcpio_cmdline_len));
+	bootargs_total_size += vm->cfgcpio_cmdline_len;
+
+	bootargs_total = (char *)malloc(bootargs_total_size);
+	if (bootargs_total == NULL) {
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	if (bootargs_len > 0U) {
+		(void)memscpy(bootargs_total, bootargs_total_size, bootargs,
+			      (size_t)bootargs_len);
+		bootargs_total[bootargs_len] = '\0';
+	}
+
+	index_t idx	    = 0U;
+	size_t	cmdline_len = 0;
+	char   *cmdline	    = NULL;
+	size_t	offset	    = (size_t)bootargs_len;
+	foreach_vector(char *, vm->cfgcpio_cmdline, idx, cmdline)
+	{
+		if (cmdline != NULL) {
+			cmdline_len = strlen(cmdline);
+			assert(bootargs_total_size >
+			       (offset + 1U + cmdline_len));
+
+			bootargs_total[offset] = ' ';
+			offset++;
+			offset += memscpy(&bootargs_total[offset],
+					  bootargs_total_size - offset - 1U,
+					  cmdline, cmdline_len);
+		}
+	}
+	assert(offset < bootargs_total_size);
+	bootargs_total[offset] = '\0';
+
+	ret = dto_property_add_string(dto, "bootargs", bootargs_total);
+	// Firstly we free bootargs_total regardless of the value of
+	// ret, and then check if ret equals OK.
+	free(bootargs_total);
+
+	ret = OK;
+out:
+	return ret;
+}
+
+static error_t
+generate_chosen_props(dto_t *dto, vm_t *vm, const void *base_dtb,
+		      int chosen_ofs)
+{
+	error_t ret;
 
 	uint64_result_t seed = random_get_entropy64();
 	if (seed.e != OK) {
@@ -2734,16 +3261,6 @@ patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb)
 		ret = seed.e;
 		goto out;
 	}
-
-#define CHECK_DTO(ret_val, dto_call)                                           \
-	do {                                                                   \
-		ret_val = (dto_call);                                          \
-		if (ret_val != OK) {                                           \
-			goto out;                                              \
-		}                                                              \
-	} while (0)
-
-	CHECK_DTO(ret, dto_modify_begin_by_path(dto, "/chosen"));
 
 	CHECK_DTO(ret, dto_property_add_u64(dto, "kaslr-seed", seed.r));
 
@@ -2765,62 +3282,41 @@ patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb)
 	}
 
 	if ((vm->cfgcpio_cmdline != NULL) && (vm->cfgcpio_cmdline_len > 0U)) {
-		char	   *bootargs_total = NULL;
-		const char *bootargs	   = NULL;
-		int	    bootargs_len   = 0;
-		int	    bootargs_ofs = fdt_path_offset(base_dtb, "/chosen");
-		if (bootargs_ofs > 0) {
-			bootargs = fdt_stringlist_get(base_dtb, bootargs_ofs,
-						      "bootargs", 0,
-						      &bootargs_len);
-			if (bootargs == NULL) {
-				// clear the error code, "bootargs" is not found
-				// in base dtb
-				bootargs_len = 0;
-			}
-		}
-
-		// append cfgcpio_cmdline to bootargs
-		bootargs_total = (char *)malloc((size_t)bootargs_len + 1U +
-						vm->cfgcpio_cmdline_len);
-		if (bootargs_total == NULL) {
-			ret = ERROR_NOMEM;
-			goto out;
-		}
-
-		if (bootargs_len > 0) {
-			memcpy(bootargs_total, bootargs, (size_t)bootargs_len);
-			bootargs_total[bootargs_len] = '\0';
-		}
-
-		index_t idx	    = 0U;
-		size_t	cmdline_len = 0;
-		char   *cmdline	    = NULL;
-		char   *current_ptr = bootargs_total + bootargs_len;
-
-		foreach_vector(char *, vm->cfgcpio_cmdline, idx, cmdline)
-		{
-			if (cmdline != NULL) {
-				*current_ptr = ' ';
-				current_ptr++;
-				cmdline_len = strlen(cmdline);
-				memcpy(current_ptr, cmdline, cmdline_len);
-				current_ptr += cmdline_len;
-			}
-		}
-		*current_ptr = '\0';
-
-		ret = dto_property_add_string(dto, "bootargs", bootargs_total);
-		// Firstly we free bootargs_total regardless of the value of
-		// ret, and then check if ret equals OK.
-		free(bootargs_total);
+		ret = parse_cfgcpio(dto, vm, base_dtb, chosen_ofs);
 		if (ret != OK) {
 			goto out;
 		}
 	}
 
-	CHECK_DTO(ret, dto_modify_end_by_path(dto, "/chosen"));
-#undef CHECK_DTO
+out:
+	return ret;
+}
+
+static error_t
+patch_chosen_node(dto_t *dto, vm_t *vm, const void *base_dtb)
+{
+	error_t ret = OK;
+
+	int chosen_ofs = fdt_path_offset(base_dtb, "/chosen");
+
+	if (chosen_ofs >= 0) {
+		CHECK_DTO(ret, dto_modify_begin_by_path(dto, "/chosen"));
+	} else {
+		CHECK_DTO(ret, dto_modify_begin_by_path(dto, "/"));
+		CHECK_DTO(ret, dto_node_begin(dto, "chosen"));
+	}
+
+	ret = generate_chosen_props(dto, vm, base_dtb, chosen_ofs);
+	if (ret != OK) {
+		goto out;
+	}
+
+	if (chosen_ofs >= 0) {
+		CHECK_DTO(ret, dto_modify_end_by_path(dto, "/chosen"));
+	} else {
+		CHECK_DTO(ret, dto_node_end(dto, "chosen"));
+		CHECK_DTO(ret, dto_modify_end_by_path(dto, "/"));
+	}
 
 out:
 	return ret;

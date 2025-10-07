@@ -2,16 +2,10 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-// clang-format off
-#define compiler_ffs(x) (index_t)_Generic(				       \
-	(x),								       \
-	long long: __builtin_ffsll(x),					       \
-	unsigned long long: __builtin_ffsll((long long)(x)),		       \
-	long: __builtin_ffsl(x),					       \
-	unsigned long: __builtin_ffsl((long)(x)),			       \
-	int: __builtin_ffs(x),						       \
-	unsigned int: __builtin_ffs((int)(x)))
+#ifndef INCLUDE_COMPILER_H_
+#define INCLUDE_COMPILER_H_
 
+// clang-format off
 #define compiler_clz(x) (assert((x) != 0U), (index_t)_Generic(		       \
 	(x),								       \
 	unsigned long long: __builtin_clzll,				       \
@@ -28,4 +22,16 @@
 	(x), long long: __builtin_clrsbll,				       \
 	long: __builtin_clrsbl,					       \
 	int: __builtin_clrsb)(x)
+
+#define compiler_popcount(x) (assert((x) != 0U), (index_t)_Generic(	       \
+	(x),								       \
+	unsigned long long: __builtin_popcountll,			       \
+	unsigned long: __builtin_popcountl,				       \
+	unsigned int: __builtin_popcount)(x))
 // clang-format on
+
+#else
+
+#error multiple include of compiler.h
+
+#endif

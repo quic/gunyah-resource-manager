@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_DT_OVERLAY_H_
+#define INCLUDE_DT_OVERLAY_H_
+
 // Wrappers for device tree binary overlay creation.
 // This set of APIs are implmeneted based on libfdt library. It supports the
 // basic operation to add/modify the existing device tree node/property.
@@ -21,18 +24,31 @@
 // invalid value of -1.
 #define DTO_PHANDLE_UNSET (uint32_t)0x80000000U
 
-typedef struct dto_s dto_t;
+struct ctx_s;
 
 #define CHECK_DTO(ret_val, dto_call)                                           \
 	do {                                                                   \
-		ret_val = (dto_call);                                          \
-		if (ret_val != OK) {                                           \
+		(ret_val) = (dto_call);                                        \
+		if ((ret_val) != OK) {                                         \
 			goto out;                                              \
 		}                                                              \
 	} while (0)
 
 dto_t *
-dto_init(void *external_memory, size_t memory_size);
+dto_init(void *external_memory, size_t memory_size, const void *base_fdt);
+
+// Obtain a parser context for the specified path, or for its parent.
+//
+// This will fail if the base FDT was not specified when dto_init() was called
+// (ERROR_FAILURE), or if the path does not exist (ERROR_ARGUMENT_INVALID).
+error_t
+dto_get_path_ctx(const dto_t *dto, const char *target, struct ctx_s *context,
+		 bool parent);
+
+// Register a parser context for a new node in the DTO.
+error_t
+dto_register_path_ctx(dto_t *dto, const char *target, count_t addr_cells,
+		      count_t size_cells, bool addr_is_phys);
 
 // Start to modify a node, it will create a fragment for that target.
 // And return it's path to buf
@@ -55,7 +71,7 @@ error_t
 dto_modify_end_by_phandle(dto_t *dto, uint32_t target);
 
 error_t
-dto_node_begin(dto_t *dto, const char *name);
+dto_node_begin(dto_t *dto, const char *node_name);
 
 error_t
 dto_node_end(dto_t *dto, const char *name);
@@ -155,3 +171,9 @@ dto_get_size(dto_t *dto);
 
 void
 dto_deinit(dto_t *dto);
+
+#else
+
+#error multiple include of dt_overlay.h
+
+#endif

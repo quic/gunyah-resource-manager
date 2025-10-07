@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_IPA_MESSAGE_H_
+#define INCLUDE_VM_IPA_MESSAGE_H_
+
 #define IPA_RESERVE   0x560000B0
 #define IPA_UNRESERVE 0x560000B1
 
@@ -45,3 +48,9 @@ typedef struct {
 typedef struct {
 	uint32_t reserved_entires;
 } ipa_reserve_alloc_resp_t;
+
+#else
+
+#error multiple include of vm_ipa_message.h
+
+#endif

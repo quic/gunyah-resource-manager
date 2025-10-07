@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_RM_RPC_H_
+#define INCLUDE_RM_RPC_H_
+
 #define RM_RPC_MESSAGE_SIZE 240U
 
 #define RM_RPC_API_VERSION   1U
@@ -76,6 +79,10 @@ rm_rpc_register_tx_complete_handler(rm_rpc_tx_callback_t callback);
 void
 rm_rpc_wait(int suspend_timeout);
 
+// Attempt to flush any received RPC messages for the client.
+void
+rm_rpc_flush(vmid_t client_id);
+
 // Utility function to get an RM RPC list (array)'s data start address and
 // length.
 //
@@ -93,5 +100,11 @@ rm_rpc_wait(int suspend_timeout);
 // Returns `error != RM_OK` on error.
 rm_error_t
 rm_rpc_read_list(uint8_t *buf, size_t len, uint16_t *entries,
-		 uint32_t max_entries, uintptr_t *list, size_t entry_size,
+		 const uint32_t max_entries, uintptr_t *list, size_t entry_size,
 		 uint8_t **next_buf);
+
+#else
+
+#error multiple include of rm-rpc.h
+
+#endif

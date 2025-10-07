@@ -18,6 +18,7 @@
 #include <event.h>
 #include <fcntl.h>
 #include <guest_interface.h>
+#include <platform.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
 #include <uapi/interrupt.h>

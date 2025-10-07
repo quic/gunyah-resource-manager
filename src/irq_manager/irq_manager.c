@@ -11,7 +11,6 @@
 #include <rm_types.h>
 #include <util.h>
 #include <utils/dict.h>
-#include <utils/vector.h>
 
 #include <event.h>
 #include <guest_interface.h>
@@ -19,16 +18,36 @@
 #include <irq_manager.h>
 #include <irq_message.h>
 #include <log.h>
+#include <mem_region.h>
+#include <memparcel.h>
+#include <memparcel_msg.h>
 #include <panic.h>
+#include <platform.h>
+#include <platform_vm_config.h>
 #include <random.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
 #include <rm_env_data.h>
 #include <virq.h>
+#include <vm_config.h>
+#include <vm_config_struct.h>
 #include <vm_mgnt.h>
 #include <vm_passthrough_config.h>
 
 #define INVALID_IRQ 0xffffffffU
+
+#if defined(PLATFORM_STATIC_IRQ_SHARE_ALLOWED) &&                              \
+	PLATFORM_STATIC_IRQ_SHARE_ALLOWED
+#define USE_LEGACY_STATIC_SHARE 1
+#else
+#define USE_LEGACY_STATIC_SHARE 0
+#endif
+#if defined(PLATFORM_RESTRICTED_IRQ_SHARE_ALLOWED) &&                          \
+	PLATFORM_RESTRICTED_IRQ_SHARE_ALLOWED
+#define USE_LEGACY_RESTRICTED_SHARE 1
+#else
+#define USE_LEGACY_RESTRICTED_SHARE 0
+#endif
 
 typedef enum {
 	IRQ_TYPE_HW,
@@ -46,7 +65,9 @@ typedef enum {
 	IRQ_LEND_STATE_NONE,
 	IRQ_LEND_STATE_OFFERED,
 	IRQ_LEND_STATE_ACCEPTED,
+#if USE_LEGACY_STATIC_SHARE || USE_LEGACY_RESTRICTED_SHARE
 	IRQ_LEND_STATE_ACCEPTED_STATIC,
+#endif
 } irq_lend_state_t;
 
 RM_PADDED(typedef struct {
@@ -111,6 +132,91 @@ irq_numbers_compatible(uint32_t irq1, uint32_t irq2)
 static error_t
 irq_manager_init_passthrough_irqs(const rm_env_data_t *env_data);
 
+static error_t
+irq_manager_init_hlos(const rm_env_data_t *env_data, uint32_t first_cpulocal,
+		      uint32_t last_cpulocal, uint32_t first_global,
+		      uint32_t last_global)
+{
+	error_t ret = OK;
+
+	assert(env_data != NULL);
+	rm_irq_env_data_t *irq_env = env_data->irq_env;
+	assert(irq_env != NULL);
+
+	// Assign all local HW IRQs to HLOS by default
+	index_t irq_tmp = (index_t)first_cpulocal;
+	do {
+		if (!arch_irq_cpulocal_valid(irq_tmp)) {
+			irq_tmp = (index_t)arch_irq_cpulocal_next_valid(
+				(uint32_t)irq_tmp);
+			assert(irq_tmp != 0U);
+			continue;
+		} else if (irq_env->vic_hwirq[irq_tmp] != CSPACE_CAP_INVALID) {
+			ret = irq_manager_hwirq_add(irq_tmp,
+						    irq_env->vic_hwirq[irq_tmp],
+						    VMID_HLOS);
+			if (ret != OK) {
+				LOG("hwirq %d\n", irq_tmp);
+				goto out;
+			}
+		} else {
+			// Go to next
+		}
+		irq_tmp++;
+	} while (irq_tmp <= last_cpulocal);
+
+	// Assign all global HW IRQs to HLOS by default
+	irq_tmp = (index_t)first_global;
+	do {
+		if (!arch_irq_global_valid(irq_tmp)) {
+			irq_tmp = (index_t)arch_irq_global_next_valid(
+				(uint32_t)irq_tmp);
+			assert(irq_tmp != 0U);
+			continue;
+		} else if (irq_env->vic_hwirq[irq_tmp] != CSPACE_CAP_INVALID) {
+			ret = irq_manager_hwirq_add(irq_tmp,
+						    irq_env->vic_hwirq[irq_tmp],
+						    VMID_HLOS);
+			if (ret != OK) {
+				LOG("hwirq %d\n", irq_tmp);
+				goto out;
+			}
+		} else {
+			// Go to next
+		}
+		irq_tmp++;
+	} while (irq_tmp <= last_global);
+
+#if USE_LEGACY_RESTRICTED_SHARE
+	// Deprecated:
+	// Update all restricted IRQs ownership
+	uint32_t num_reserved = env_data->num_reserved_dev_irqs;
+	assert(num_reserved <= util_array_size(env_data->reserved_dev_irq));
+
+	uint32_t first_irq = util_min(first_cpulocal, first_global);
+	uint32_t last_irq  = util_max(last_cpulocal, last_global);
+
+	for (index_t i = 0; i < num_reserved; i++) {
+		uint32_t res_irq = env_data->reserved_dev_irq[i];
+		if ((res_irq < first_irq) || (res_irq > last_irq) ||
+		    (irq_env->vic_hwirq[res_irq] == CSPACE_CAP_INVALID)) {
+			LOG("Warning: skipping invalid reserved irq %d\n",
+			    res_irq);
+			continue;
+		}
+
+		ret = irq_manager_hwirq_donate(res_irq, VMID_HLOS, VMID_ANY);
+		if (ret != OK) {
+			LOG("%i: res irq %d\n", i, res_irq);
+			goto out;
+		}
+	}
+#endif
+
+out:
+	return ret;
+}
+
 error_t
 irq_manager_init(const rm_env_data_t *env_data)
 {
@@ -129,7 +235,7 @@ irq_manager_init(const rm_env_data_t *env_data)
 	rm_irq_env_data_t *irq_env = env_data->irq_env;
 	assert(irq_env != NULL);
 
-	count_t hwirq_max = util_array_size(irq_env->vic_hwirq) - 1U;
+	count_t hwirq_max = VIC_HWIRQ_SIZE - 1U;
 
 	irq_handle_rand_base = (irq_handle_t)seed.r;
 	if (util_add_overflows(irq_handle_rand_base, hwirq_max)) {
@@ -169,54 +275,29 @@ irq_manager_init(const rm_env_data_t *env_data)
 	hwirq_lending_dict = dict_init(first_irq, last_irq);
 	if (hwirq_lending_dict == NULL) {
 		ret = ERROR_NOMEM;
-		goto out_free;
+		goto out_free_hwirq_owners_dict;
 	}
 
-	ret = OK;
-	// Assign all HW global IRQs to HLOS by default
-	for (index_t i = first_irq; i <= last_irq; i++) {
-		if (irq_env->vic_hwirq[i] == CSPACE_CAP_INVALID) {
-			continue;
-		}
-		ret = irq_manager_hwirq_add(i, irq_env->vic_hwirq[i],
-					    VMID_HLOS);
-		if (ret != OK) {
-			LOG("hwirq %d\n", i);
-			goto out_free;
-		}
-	}
-
-	// Deprecated:
-	// Update all restricted IRQs ownership
-	uint32_t num_reserved = env_data->num_reserved_dev_irqs;
-	assert(num_reserved <= util_array_size(env_data->reserved_dev_irq));
-
-	for (index_t i = 0; i < num_reserved; i++) {
-		uint32_t res_irq = env_data->reserved_dev_irq[i];
-		if ((res_irq < first_irq) || (res_irq > last_irq) ||
-		    (irq_env->vic_hwirq[res_irq] == CSPACE_CAP_INVALID)) {
-			LOG("Warning: skipping invalid reserved irq %d\n",
-			    res_irq);
-			continue;
-		}
-
-		ret = irq_manager_hwirq_donate(res_irq, VMID_ANY);
-		if (ret != OK) {
-			LOG("%i: res irq %d\n", i, res_irq);
-			goto out_free;
-		}
+	ret = irq_manager_init_hlos(env_data, first_cpulocal, last_cpulocal,
+				    first_global, last_global);
+	if (ret != OK) {
+		goto out_free_hwirq_lending_dict;
 	}
 
 	// Donate all the passthrough IRQs to the respective VMs
 	ret = irq_manager_init_passthrough_irqs(env_data);
 	if (ret != OK) {
-		goto out;
+		goto out_free_hwirq_lending_dict;
 	}
 	vm_t *rm = vm_lookup(VMID_RM);
 	assert(rm != NULL);
 	ret = irq_manager_vm_init(rm, rm_get_rm_vic(), 511U);
 
-out_free:
+out_free_hwirq_lending_dict:
+	if (ret != OK) {
+		dict_deinit(&hwirq_lending_dict);
+	}
+out_free_hwirq_owners_dict:
 	if (ret != OK) {
 		dict_deinit(&hwirq_owners_dict);
 	}
@@ -272,13 +353,13 @@ out:
 }
 
 error_t
-irq_manager_hwirq_donate(uint32_t hw_irq_number, vmid_t owner)
+irq_manager_hwirq_donate(uint32_t hw_irq_number, vmid_t from, vmid_t to)
 {
 	assert(hwirq_owners_dict != NULL);
 
 	error_t ret;
 
-	if (!irq_number_valid(hw_irq_number)) {
+	if (!irq_number_valid(hw_irq_number) || (from == to)) {
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -289,7 +370,7 @@ irq_manager_hwirq_donate(uint32_t hw_irq_number, vmid_t owner)
 		ret = ERROR_NORESOURCES;
 		goto out;
 	}
-	if (irq->owner == owner) {
+	if (irq->owner != from) {
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -298,7 +379,7 @@ irq_manager_hwirq_donate(uint32_t hw_irq_number, vmid_t owner)
 		ret = ERROR_BUSY;
 		goto out;
 	}
-	irq->owner = owner;
+	irq->owner = to;
 
 	ret = OK;
 out:
@@ -361,7 +442,7 @@ irq_manager_vm_init(vm_t *vm, cap_id_t vic, count_t max_irq)
 		mgr->global_irq_alloc_base = first_global;
 	} else {
 		// TODO: how to set this dynamically ?
-		mgr->global_irq_alloc_base = 960U;
+		mgr->global_irq_alloc_base = PLATFORM_GLOBAL_IRQ_ALLOC_BASE;
 	}
 
 	mgr->irq_mappings_dict = dict_init(first_irq, max_irq);
@@ -677,9 +758,9 @@ irq_manager_vm_hwirq_map_all_direct(const vm_t *vm)
 			goto out;
 		}
 
-		ret = gunyah_hyp_hwirq_bind_virq(hw_irq->capid,
-						 vm->irq_manager->vic,
-						 irq_map->irq_number);
+		ret = gunyah_hyp_vic_bind_virq(hw_irq->capid,
+					       vm->irq_manager->vic,
+					       irq_map->irq_number, 0U);
 		if (ret != OK) {
 			error_t err = dict_remove(
 				vm->irq_manager->irq_mappings_dict, key, NULL);
@@ -763,8 +844,8 @@ irq_manager_vm_hwirq_map_internal(const vm_t *vm, uint32_t irq_number,
 		}
 	}
 
-	ret = gunyah_hyp_hwirq_bind_virq(hw_irq->capid, vm->irq_manager->vic,
-					 irq_number);
+	ret = gunyah_hyp_vic_bind_virq(hw_irq->capid, vm->irq_manager->vic,
+				       irq_number, 0U);
 	if (ret != OK) {
 		if (alloc) {
 			error_t err =
@@ -833,7 +914,7 @@ irq_manager_vm_hwirq_unmap_internal(const vm_t *vm, uint32_t irq_number,
 	}
 	assert(hw_irq->capid != CSPACE_CAP_INVALID);
 
-	ret = gunyah_hyp_hwirq_unbind_virq(hw_irq->capid);
+	ret = gunyah_hyp_vic_unbind_virq(hw_irq->capid, 0U);
 	if ((ret == ERROR_VIRQ_NOT_BOUND) &&
 	    (vm->irq_manager->vic == CSPACE_CAP_INVALID)) {
 		// It is expected that the VIRQ may have been unbound when the
@@ -1073,7 +1154,7 @@ irq_manager_handle_lend(vmid_t client_id, uint16_t seq_num, void *buf,
 	}
 	assert(ret == OK);
 
-	ret = gunyah_hyp_hwirq_unbind_virq(hw_irq->capid);
+	ret = gunyah_hyp_vic_unbind_virq(hw_irq->capid, 0U);
 	assert(ret == OK);
 
 	irq_map->state = IRQ_MAP_STATE_LENDING;
@@ -1121,14 +1202,14 @@ irq_manager_notify_flag_lent(vmid_t client_id, const hwirq_t *hw_irq,
 		notify_list_entries = lent_req->notify_vmid_entries;
 
 		size_t notify_vmids_size =
-			notify_list_entries * sizeof(lent_req->notify_vmids[0]);
+			notify_list_entries * sizeof(notify_list[0]);
 
 		if (len != (sizeof(*lent_req) + notify_vmids_size)) {
 			err = RM_ERROR_MSG_INVALID;
 			goto out;
 		}
 
-		notify_list = lent_req->notify_vmids;
+		notify_list = (rm_irq_notify_vmid_t *)(void *)(lent_req + 1U);
 	}
 
 	if (hw_irq->owner != client_id) {
@@ -1318,7 +1399,7 @@ irq_manager_handle_accept(vmid_t client_id, uint16_t seq_num, void *buf,
 
 	handle	= req->handle;
 	dst_irq = req->virq_num;
-	alloc	= dst_irq == VIRQ_NUM_INVALID;
+	alloc	= dst_irq == VIRQ_INVALID;
 
 	uint32_t hw_irq_num = irq_manager_handle_lookup(handle);
 
@@ -1333,7 +1414,7 @@ irq_manager_handle_accept(vmid_t client_id, uint16_t seq_num, void *buf,
 		goto out_err;
 	}
 	if (lend_info->lend_state != IRQ_LEND_STATE_OFFERED) {
-		err = RM_ERROR_IN_USE;
+		err = RM_ERROR_IRQ_INUSE;
 		goto out_err;
 	}
 	assert(lend_info->handle == handle);
@@ -1346,7 +1427,7 @@ irq_manager_handle_accept(vmid_t client_id, uint16_t seq_num, void *buf,
 		// API.
 		dst_irq = hw_irq_num;
 	}
-	error_t ret = irq_manager_vm_hwirq_map_internal(vm, dst_irq, dst_irq,
+	error_t ret = irq_manager_vm_hwirq_map_internal(vm, dst_irq, hw_irq_num,
 							true, false);
 	if (ret != OK) {
 		if (ret == ERROR_NOMEM) {
@@ -1414,7 +1495,7 @@ irq_manager_handle_release(vmid_t client_id, uint16_t seq_num, void *buf,
 		goto out_err;
 	}
 	if (lend_info->lend_state != IRQ_LEND_STATE_ACCEPTED) {
-		err = RM_ERROR_IN_USE;
+		err = RM_ERROR_IRQ_INUSE;
 		goto out_err;
 	}
 	assert(lend_info->handle == handle);
@@ -1478,7 +1559,7 @@ irq_manager_handle_reclaim(vmid_t client_id, uint16_t seq_num, void *buf,
 		goto out_err;
 	}
 	if (lend_info->lend_state != IRQ_LEND_STATE_OFFERED) {
-		err = RM_ERROR_IN_USE;
+		err = RM_ERROR_IRQ_INUSE;
 		goto out_err;
 	}
 	assert(lend_info->handle == handle);
@@ -1513,8 +1594,8 @@ irq_manager_handle_reclaim(vmid_t client_id, uint16_t seq_num, void *buf,
 	borrower = lend_info->borrower;
 
 	// === Perform the Reclaim ===
-	ret = gunyah_hyp_hwirq_bind_virq(hw_irq->capid, vm->irq_manager->vic,
-					 irq_map->irq_number);
+	ret = gunyah_hyp_vic_bind_virq(hw_irq->capid, vm->irq_manager->vic,
+				       irq_map->irq_number, 0U);
 	assert(ret == OK);
 
 	irq_map->state = IRQ_MAP_STATE_BOUND;
@@ -1561,8 +1642,12 @@ irq_manager_check_release_global_irq(const vm_t *vm, uint32_t hw_irq_number,
 
 	irq_lend_state_t lend_state = lend_info->lend_state;
 	// If STATE_RELEASED, the irq_map should have already been freed
+#if USE_LEGACY_STATIC_SHARE || USE_LEGACY_RESTRICTED_SHARE
 	assert((lend_state == IRQ_LEND_STATE_ACCEPTED) ||
 	       (lend_state == IRQ_LEND_STATE_ACCEPTED_STATIC));
+#else
+	assert(lend_state == IRQ_LEND_STATE_ACCEPTED);
+#endif
 
 	ret = irq_manager_vm_hwirq_unmap_internal(vm, irq, true, false);
 	assert(ret == OK);
@@ -1573,6 +1658,7 @@ irq_manager_check_release_global_irq(const vm_t *vm, uint32_t hw_irq_number,
 	lend_info->borrower_irq_number = INVALID_IRQ;
 	handle			       = lend_info->handle;
 
+#if USE_LEGACY_STATIC_SHARE || USE_LEGACY_RESTRICTED_SHARE
 	// deprecated: restricted/static_lend reclaim
 	if (lend_state == IRQ_LEND_STATE_ACCEPTED_STATIC) {
 		ret = dict_remove(hwirq_lending_dict, (dict_key_t)hw_irq_number,
@@ -1583,10 +1669,16 @@ irq_manager_check_release_global_irq(const vm_t *vm, uint32_t hw_irq_number,
 
 		irq_manager_handle_free(handle);
 
+		ret = ERROR_FAILURE;
+#if USE_LEGACY_RESTRICTED_SHARE
 		if (hw_irq->owner == VMID_ANY) {
 			LOG("restricted reclaim: %d: VM %d IRQ %d\n",
 			    hw_irq_number, hw_irq->owner, irq);
-		} else {
+			ret = OK;
+		}
+#endif
+#if USE_LEGACY_STATIC_SHARE
+		if (hw_irq->owner == VMID_HLOS) {
 			LOG("static_lend reclaim: %d: VM %d IRQ %d\n",
 			    hw_irq_number, hw_irq->owner, irq);
 
@@ -1604,19 +1696,29 @@ irq_manager_check_release_global_irq(const vm_t *vm, uint32_t hw_irq_number,
 			assert(irq_map->type == IRQ_TYPE_HW);
 			assert(irq_map->irq_number == hw_irq_number);
 
-			ret = gunyah_hyp_hwirq_bind_virq(
-				hw_irq->capid, owner->irq_manager->vic,
-				irq_map->irq_number);
-			assert(ret == OK);
+			ret = gunyah_hyp_vic_bind_virq(hw_irq->capid,
+						       owner->irq_manager->vic,
+						       irq_map->irq_number, 0U);
+			if (ret != OK) {
+				LOG("re-bind %u to HLOS failed\n",
+				    irq_map->irq_number);
+			}
 			irq_map->state = IRQ_MAP_STATE_BOUND;
 		}
+#endif
+		assert(ret == OK);
 	}
+#endif
 
-	LOG("IRQ_RELEASED: VM %d: IRQ %d / H %#x\n", vm->vmid, irq, handle);
 out:
+	if (hw_irq->owner != vm->vmid) {
+		LOG("IRQ_RELEASED: VM %d: IRQ %d / H %#x\n", vm->vmid, irq,
+		    handle);
+	}
 	return ret;
 }
 
+#if USE_LEGACY_RESTRICTED_SHARE
 // Deprecated
 error_t
 irq_manager_vm_restricted_lend(const vm_t *vm, uint32_t irq_number,
@@ -1710,7 +1812,9 @@ out_err:
 	    borrower, irq_number, ret);
 	return ret;
 }
+#endif
 
+#if USE_LEGACY_STATIC_SHARE
 // Deprecated
 error_t
 irq_manager_vm_static_lend(const vm_t *vm, uint32_t irq_number,
@@ -1750,7 +1854,35 @@ irq_manager_vm_static_lend(const vm_t *vm, uint32_t irq_number,
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out_err;
 	}
-	assert(hw_irq->owner_irq_number != INVALID_IRQ);
+
+	if (vm->vm_config->trusted_config && (hw_irq->owner == VMID_HLOS) &&
+	    (hw_irq->owner_irq_number == INVALID_IRQ)) {
+		// This IRQ is owned by HLOS, but not yet mapped to it.
+		// A Trusted VM wants to claim it, donate and map it to the VM.
+		ret = irq_manager_hwirq_donate(hw_irq_number, VMID_HLOS,
+					       borrower);
+		if (ret != OK) {
+			LOG("Failed to donate IRQ %d to VM %d\n", hw_irq_number,
+			    borrower);
+		} else {
+			LOG("Donated IRQ %d to VM %d\n", hw_irq_number,
+			    borrower);
+
+			ret = irq_manager_vm_hwirq_map(vm, irq_number,
+						       hw_irq_number, true);
+			if (ret != OK) {
+				LOG("Failed to map HW_IRQ %u to vIRQ %u for VM %u\n",
+				    hw_irq_number, irq_number, borrower);
+			} else {
+				LOG("Mapped HW_IRQ %u to vIRQ %u for VM %u\n",
+				    hw_irq_number, irq_number, borrower);
+			}
+		}
+		goto out;
+	} else {
+		assert(hw_irq->owner_irq_number != INVALID_IRQ);
+	}
+
 	assert(hw_irq->capid != CSPACE_CAP_INVALID);
 
 	irq_lending_t *lend_info = dict_get(hwirq_lending_dict, hw_irq_number);
@@ -1775,7 +1907,7 @@ irq_manager_vm_static_lend(const vm_t *vm, uint32_t irq_number,
 	assert(irq_map->irq_number == hw_irq_number);
 
 	// - Unmap from HLOS
-	ret = gunyah_hyp_hwirq_unbind_virq(hw_irq->capid);
+	ret = gunyah_hyp_vic_unbind_virq(hw_irq->capid, 0U);
 	assert(ret == OK);
 
 	lend_info = calloc(1, sizeof(*lend_info));
@@ -1821,8 +1953,10 @@ out_free:
 out_err:
 	LOG("vm_static_lend: HLOS %d -> VM %d: IRQ %d, ret %d\n", hw_irq_number,
 	    borrower, irq_number, ret);
+out:
 	return ret;
 }
+#endif
 
 bool
 vm_reset_handle_release_irqs(vmid_t vmid)
@@ -1949,13 +2083,18 @@ irq_manager_init_passthrough_irqs(const rm_env_data_t *env_data)
 				ret = ERROR_NORESOURCES;
 				LOG("Invalid passthrough irq:%u of vmid:%u",
 				    pt_irq, vmid);
+#if USE_LEGACY_RESTRICTED_SHARE
+			} else if (irq->owner == VMID_ANY) {
+				LOG("Warning: skipping passthrough reserved irq %d\n",
+				    pt_irq);
+#endif
 			} else if (irq->owner != VMID_HLOS) {
 				ret = ERROR_BUSY;
-				LOG("The passthrough irq:%u of vmid:%u is not owned by HLOS ",
+				LOG("passthrough irq:%u to vmid:%u is not owned by HLOS ",
 				    pt_irq, vmid);
 			} else {
-				ret = irq_manager_hwirq_donate(pt_irq,
-							       (vmid_t)vmid);
+				ret = irq_manager_hwirq_donate(
+					pt_irq, irq->owner, (vmid_t)vmid);
 				if (ret != OK) {
 					LOG("Failed to map passthrough irq:%u of vmid:%u",
 					    pt_irq, vmid);

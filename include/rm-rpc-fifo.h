@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_RM_RPC_FIFO_H_
+#define INCLUDE_RM_RPC_FIFO_H_
+
 rm_error_t
 rm_rpc_fifo_init(void);
 
@@ -66,3 +69,9 @@ rm_notify(vmid_t client_id, uint32_t notif_id, void *data, size_t len);
 // Helper function to check if a client can receive RM RPC.
 bool
 rm_can_rpc(vmid_t client_id);
+
+#else
+
+#error multiple include of rm-rpc-fifo.h
+
+#endif

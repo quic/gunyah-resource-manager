@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_CREATION_MESSAGE_H_
+#define INCLUDE_VM_CREATION_MESSAGE_H_
+
 #define VM_CONFIG_IMAGE 0x56000009
 #define VM_AUTH_IMAGE	0x5600000a
 #define VM_INIT		0x5600000b
@@ -19,12 +22,17 @@ typedef struct {
 } vm_config_image_req_t;
 
 typedef struct {
-	vmid_t		target;
-	uint16_t	num_auth_params;
-	vm_auth_param_t auth_params[];
+	vmid_t	 target;
+	uint16_t num_auth_params;
 } vm_auth_req_t;
 
 typedef struct {
 	vmid_t	 target;
 	uint16_t res0;
 } vm_init_req_t;
+
+#else
+
+#error multiple include of vm_creation_message.h
+
+#endif

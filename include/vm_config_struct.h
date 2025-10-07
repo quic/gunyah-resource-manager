@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-typedef struct memparcel   memparcel_t;
-typedef struct sgl_entry_s sgl_entry_t;
+#ifndef INCLUDE_VM_CONFIG_STRUCT_H_
+#define INCLUDE_VM_CONFIG_STRUCT_H_
 
 typedef enum {
 	// two message queues to communicate with resource manager
@@ -15,14 +15,15 @@ typedef enum {
 	// contains two direction message queue
 	VDEV_MSG_QUEUE_PAIR,
 	VDEV_SHM,
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
 	VDEV_WATCHDOG,
-#endif
 	VDEV_VIRTUAL_PM,
 	VDEV_VIRTIO_MMIO,
 	VDEV_IOMEM,
+	VDEV_SMMU_V2,
 	VDEV_RTC,
 	VDEV_MINIDUMP,
+	VDEV_MEMORY_EXTENT,
+	VDEV_ADDRESS_SPACE,
 } vdevice_type_t;
 
 #pragma clang diagnostic push
@@ -114,6 +115,7 @@ struct vdevice_virtio_mmio {
 	bool	 dma_coherent;
 
 	uint32_t label;
+	char	*patch;
 };
 
 struct vdevice_msg_queue {
@@ -155,12 +157,13 @@ struct vdevice_shm {
 struct vdevice_watchdog {
 	interrupt_data_t bark_virq;
 	interrupt_data_t bite_virq;
+#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
+	vmaddr_t ipa;
+#endif
 
 	vmid_t	 manager;
 	cap_id_t manager_cap;
 };
-
-typedef struct sgl_entry_s sgl_entry_t;
 
 // index definition for iomem vdevice node validation member's index
 enum iomem_validation_index {
@@ -188,18 +191,34 @@ RM_PADDED(struct vdevice_iomem {
 	bool validate_attrs;
 })
 
-struct vdevice_smmu_v2 {
-	vmaddr_t	  ipa;
-	uint64_t	  ipa_size;
-	uint8_t		  num_cbs;
-	cap_id_t	 *cb_me_caps;
-	interrupt_data_t *irqs;
-	char		 *patch;
-};
-
 struct vdevice_rtc {
 	vmaddr_t ipa;
 	uint64_t ipa_size;
+};
+
+typedef enum {
+	VDEVICE_MEMORY_EXTENT_LABEL_GUEST_PAGED	     = 0U,
+	VDEVICE_MEMORY_EXTENT_LABEL_HOST_UNPROTECTED = 1U,
+	VDEVICE_MEMORY_EXTENT_LABEL_HOST_PROTECTED   = 2U,
+	VDEVICE_MEMORY_EXTENT_LABEL_GUEST_VMMIO	     = 3U,
+} vdevice_memory_extent_label_t;
+
+struct vdevice_memory_extent {
+	vmid_t	 owner;
+	cap_id_t owner_host_cap;
+
+	vmid_t	 manager;
+	cap_id_t manager_guest_cap;
+
+	vdevice_memory_extent_label_t label;
+};
+
+struct vdevice_address_space {
+	vmid_t	 owner;
+	cap_id_t vm_cap;
+
+	vmid_t	 manager;
+	cap_id_t manager_map_cap;
 };
 
 struct vdevice_node {
@@ -219,18 +238,42 @@ struct vdevice_node {
 	char *generate;
 
 	// type specific configuration
-	void *config;
+	union {
+		void			      *raw;
+		struct vdevice_iomem	      *iomem;
+		struct vdevice_shm	      *shm;
+		struct vdevice_doorbell	      *doorbell;
+		struct vdevice_msg_queue      *msg_queue;
+		struct vdevice_msg_queue_pair *msg_queue_pair;
+		struct vdevice_virtual_pm     *virtual_pm;
+		struct vdevice_virtio_mmio    *virtio_mmio;
+		struct vdevice_watchdog	      *watchdog;
+		struct vdevice_memory_extent  *memory_extent;
+		struct vdevice_address_space  *address_space;
+		struct vdevice_smmu_v2	      *smmu_v2;
+		struct vdevice_rtc	      *rtc;
+	} config;
 
 	resource_handle_t handle;
 };
 
-struct vm_config {
+typedef enum vm_config_affinity_e {
+	// default
+	VM_CONFIG_AFFINITY_STATIC,
+	VM_CONFIG_AFFINITY_STICKY,
+	VM_CONFIG_AFFINITY_PINNED,
+	VM_CONFIG_AFFINITY_PROXY,
+} vm_config_affinity_t;
+
+struct mem_range {
+	vmaddr_t base;
+	size_t	 size;
+};
+
+typedef struct vm_boot_context_s vm_boot_context_t;
+
+struct vm_config_s {
 	vm_t *vm;
-
-	// for vm identification
-	char *vendor;
-
-	char *image_name;
 
 	// True if the configuration data has been authenticated by the
 	// platform, and therefore can be trusted to specify parameters that
@@ -239,7 +282,9 @@ struct vm_config {
 
 	uint64_t swid;
 
-	vector_t *vcpus;
+	vector_t	    *vcpus;
+	vm_config_affinity_t vm_affinity;
+
 	vector_t *iomem_ranges;
 
 	vdevice_node_t *vdevice_nodes;
@@ -255,6 +300,9 @@ struct vm_config {
 #if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
 	bool insecure_console;
 #endif // PLATFORM_ALLOW_INSECURE_CONSOLE
+
+	bool	  mem_demand_paging;
+	vector_t *mem_demand_paged_ranges;
 
 	paddr_t fw_ipa_base;
 	paddr_t fw_size_max;
@@ -275,6 +323,7 @@ struct vm_config {
 	vm_console_t *console;
 
 	platform_vm_config_t platform;
+	vm_boot_context_t   *boot_ctx;
 
 	vector_t *accepted_memparcels;
 };
@@ -284,3 +333,9 @@ struct dtb_parser_alloc_params_s {
 };
 
 #pragma clang diagnostic pop
+
+#else
+
+#error multiple include of vm_config_struct.h
+
+#endif

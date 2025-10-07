@@ -22,14 +22,14 @@ read_ctr(void)
 }
 
 void
-cache_clean_by_va(void *ptr, size_t size)
+cache_clean_by_va(const void *va, size_t size)
 {
 	uint64_t      ctr_el0	   = read_ctr();
 	const count_t line_size_p2 = (count_t)((ctr_el0 >> 16U) & 0xfU);
 	const bool    dic	   = ((ctr_el0 & util_bit(29U)) != 0U);
 
-	uintptr_t aligned_va = util_p2align_down((uintptr_t)ptr, line_size_p2);
-	uintptr_t end	     = (uintptr_t)ptr + size - 1U;
+	uintptr_t aligned_va = util_p2align_down((uintptr_t)va, line_size_p2);
+	uintptr_t end	     = (uintptr_t)va + size - 1U;
 
 	// No barrier is needed before the CMOs, because we are cleaning writes
 	// made through the same mapping.
@@ -56,13 +56,13 @@ cache_clean_by_va(void *ptr, size_t size)
 }
 
 void
-cache_flush_by_va(void *ptr, size_t size)
+cache_flush_by_va(const void *va, size_t size)
 {
 	uint64_t      ctr_el0	   = read_ctr();
 	const count_t line_size_p2 = (count_t)((ctr_el0 >> 16U) & 0xfU);
 
-	uintptr_t aligned_va = util_p2align_down((uintptr_t)ptr, line_size_p2);
-	uintptr_t end	     = (uintptr_t)ptr + size - 1U;
+	uintptr_t aligned_va = util_p2align_down((uintptr_t)va, line_size_p2);
+	uintptr_t end	     = (uintptr_t)va + size - 1U;
 
 	// A DMB is needed to synchronise any earlier writes to the range that
 	// were made with different cache attributes.

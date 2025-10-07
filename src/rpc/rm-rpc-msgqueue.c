@@ -13,10 +13,8 @@
 
 #include <rm_types.h>
 #include <utils/list.h>
-#include <utils/vector.h>
 
 #include <event.h>
-#include <fcntl.h>
 #include <guest_interface.h>
 #include <panic.h>
 #include <platform.h>
@@ -75,7 +73,7 @@ msgqueue_rx_callback(event_t *event, void *data)
 static rm_error_t
 init_transport(rm_rpc_transport_t *transport, vmid_t my_id, vmid_t other_id)
 {
-	rm_error_t err = RM_OK;
+	rm_error_t err;
 
 	transport->vm_id = other_id;
 
@@ -117,6 +115,8 @@ init_transport(rm_rpc_transport_t *transport, vmid_t my_id, vmid_t other_id)
 
 	rm_rpc_init_rx_data(transport->vm_id, &transport->rx_data);
 	rm_rpc_init_tx_data(transport->vm_id, &transport->tx_data);
+
+	err = RM_OK;
 
 err_rx_event:
 	if (err != RM_OK) {
@@ -325,6 +325,15 @@ rm_rpc_server_remove_link(vmid_t client_id)
 	free(t);
 out:
 	return err;
+}
+
+void
+rm_rpc_flush(vmid_t client_id)
+{
+	rm_rpc_transport_t *t = rm_rpc_get_transport(client_id);
+	if ((t != NULL) && event_untrigger(&t->rx_event)) {
+		rm_rpc_rx_callback(client_id, &t->rx_data);
+	}
 }
 
 static void

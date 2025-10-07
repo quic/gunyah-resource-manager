@@ -48,7 +48,10 @@ deviation_map = {
         (None, re.compile(r"parameter of potential macro 'assert'")),
     ],
     'MISRAC2012-RULE_21_6-a': [
-        (None, re.compile(r"Usage of 'printf' function")),
+        (None, None),
+    ],
+    'CERT_C-STR07-a': [
+        (None, re.compile(r"Unsafe string function 'snprintf' is being used")),
     ],
     # False positives due to __c11 builtins taking int memory order arguments
     # instead of enum in the Clang implementation.

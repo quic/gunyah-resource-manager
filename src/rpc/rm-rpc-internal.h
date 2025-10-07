@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef SRC_RM_RPC_INTERNAL_H_
+#define SRC_RM_RPC_INTERNAL_H_
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 
@@ -58,3 +61,9 @@ rm_rpc_send_packet(rm_rpc_tx_data_t *tx, void *buf, size_t len);
 
 rm_error_t
 rm_rpc_recv_packet(rm_rpc_rx_data_t *rx, void *buf, size_t *len);
+
+#else
+
+#error src/rpc/rm-rpc-internal.h multiple include
+
+#endif

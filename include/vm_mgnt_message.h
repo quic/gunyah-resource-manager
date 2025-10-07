@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_MGNT_MESSAGE_H_
+#define INCLUDE_VM_MGNT_MESSAGE_H_
+
 #define VM_ALLOCATE   0x56000001U
 #define VM_DEALLOCATE 0x56000002U
 #define VM_START      0x56000004U
@@ -24,9 +27,12 @@
 #define VM_GET_VMID	     0x56000024U
 #define VM_GET_PEERS	     0x56000025U
 
-#define VM_SET_TIME_BASE    0x56000030U
-#define VM_SET_CONTEXT	    0x56000031U
-#define VM_SET_FIRMWARE_MEM 0x56000032U
+#define VM_SET_TIME_BASE      0x56000030U
+#define VM_SET_CONTEXT	      0x56000031U
+#define VM_SET_FIRMWARE_MEM   0x56000032U
+#define VM_SET_DEMAND_PAGING  0x56000033U
+#define VM_SET_ADDRESS_LAYOUT 0x56000034U
+#define VM_SET_DEBUG	      0x56000035U
 
 #define VM_SET_STATUS	 0x56000080U
 #define VM_EXIT		 0x56000085U
@@ -61,4 +67,44 @@ typedef struct rm_notify_vm_exited {
 	// exit_reason
 } rm_notify_vm_exited_t;
 
+typedef struct vm_set_debug {
+	vmid_t	target;
+	uint8_t res0;
+	uint8_t debug_enabled;
+} vm_set_debug_t;
+
 #define VM_STOP_FLAG_FORCE 1U
+
+typedef struct {
+	uint64_t paged_base;
+	uint64_t paged_size;
+} vm_set_demand_paging_range_t;
+
+typedef struct {
+	vmid_t	 target;
+	uint16_t res0_0;
+
+	uint32_t range_count;
+
+	// Variable-length array of vm_set_demand_paging_range_t follows
+} vm_set_demand_paging_t;
+
+typedef enum {
+	ADDRESS_LAYOUT_RANGE_IMAGE    = 0,
+	ADDRESS_LAYOUT_RANGE_FIRMWARE = 1,
+} vm_set_address_layout_range_id_t;
+
+typedef struct {
+	vmid_t	 target;
+	uint16_t res0_0;
+
+	uint32_t range_id;
+	uint64_t range_base;
+	uint64_t range_size;
+} vm_set_address_layout_t;
+
+#else
+
+#error multiple include of vm_mgnt_message.h
+
+#endif

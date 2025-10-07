@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-typedef struct gunyah_hyp_hypervisor_identify_result
-	gunyah_hyp_hypervisor_identify_result_t;
+#ifndef INCLUDE_RESOURCE_MANAGER_H_
+#define INCLUDE_RESOURCE_MANAGER_H_
 
 extern gunyah_hyp_hypervisor_identify_result_t hyp_id;
 
@@ -22,14 +22,17 @@ rm_get_rm_partition(void);
 cap_id_t
 rm_get_rm_vic(void);
 
+count_t
+rm_get_vic_max_virqs(void);
+
 cap_id_t
 rm_get_device_me_cap(void);
 
-paddr_t
-rm_get_device_me_base(void);
+count_t
+rm_get_device_ranges_count(void);
 
-size_t
-rm_get_device_me_size(void);
+void
+rm_get_device_ranges(index_t i, paddr_t *base, size_t *size);
 
 cap_id_t
 rm_get_me(void);
@@ -49,17 +52,23 @@ rm_get_restricted_hwirq(virq_t irq, vmid_t vmid);
 count_t
 rm_get_platform_max_cores(void);
 
-index_t
+cpu_index_t
 rm_get_platform_root_vcpu_index(void);
 
 bool
 rm_is_core_usable(cpu_index_t i);
+
+const uint64_t *
+rm_get_usable_cores(count_t *array_size);
 
 vmaddr_t
 rm_get_me_ipa_base(void);
 
 vmaddr_t
 rm_get_hlos_dt_base(void);
+
+paddr_t
+rm_get_uart_address(void);
 
 cap_id_t
 rm_get_uart_me(void);
@@ -69,3 +78,9 @@ rm_get_platform_env_data(void);
 
 const vm_device_assignments_t *
 rm_get_vm_device_assignments(void);
+
+#else
+
+#error multiple include of resource-manager.h
+
+#endif

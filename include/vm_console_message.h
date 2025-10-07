@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_CONSOLE_MESSAGE_H_
+#define INCLUDE_VM_CONSOLE_MESSAGE_H_
+
 #define VM_CONSOLE_OPEN	 0x56000081
 #define VM_CONSOLE_CLOSE 0x56000082
 #define VM_CONSOLE_WRITE 0x56000083
@@ -38,3 +41,9 @@ typedef struct {
 
 	// with content tailing
 } vm_console_chars_notify_t;
+
+#else
+
+#error multiple include of vm_console_message.h
+
+#endif

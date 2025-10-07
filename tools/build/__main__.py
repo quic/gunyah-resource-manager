@@ -15,7 +15,6 @@ variables to the build graph.
 import os
 import sys
 import logging
-import inspect
 
 from . import config_file as cfg
 
@@ -108,18 +107,3 @@ if missing_variant:
 # parse configure file
 config = cfg.Configuration(config_file_name, graph, **variant_config)
 config.process()
-
-#
-# Python dependencies
-#
-for m in sys.modules.values():
-    try:
-        f = inspect.getsourcefile(m)
-    except TypeError:
-        continue
-    if f is None:
-        continue
-    f = os.path.relpath(f)
-    if f.startswith('../'):
-        continue
-    graph.add_gen_source(f)

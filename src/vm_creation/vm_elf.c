@@ -79,9 +79,15 @@ vm_elf_process_ptload_segments(Elf_Ehdr_ptr ehdr, Elf_Phdr_ptr phdrs,
 			segment_count++;
 		}
 
+		// Perform cache flush operations on all loadable segments in
+		// the PIL image. HLOS may not have cache-invalidated the memory
+		// before or after loading. This might result in cache
+		// incoherency. For DT parsing in select_dtb function, we will
+		// use cacheable non-secure mapping, flush is need to avoid
+		// incorrect view of memory.
+		cache_flush_by_va((void *)(mem_base + segment_offset), p_memsz);
 		// Check whether the segment contains the DT.
 		uint32_t *first_word = (uint32_t *)(mem_base + segment_offset);
-		cache_flush_by_va(first_word, sizeof(*first_word));
 		if (elf_segment_contains_dt(first_word, single_dtb)) {
 			*dt_offset = segment_offset;
 			*dt_size =

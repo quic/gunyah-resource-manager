@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include <rm_types.h>
+#include <util.h>
 #include <utils/list.h>
 #include <utils/vector.h>
 
@@ -141,7 +142,7 @@ clear_pending_msgs(fifo_status_t *status)
 		delete_pending_notif(status, status->pending_notif_list, false);
 	}
 
-	assert(status->pending_notif_count == 0);
+	assert(status->pending_notif_count == 0U);
 
 	if (status->reply_buf != NULL) {
 		free(status->reply_buf);
@@ -377,10 +378,11 @@ rm_reply_error(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	rm_standard_rep_t rep = (rm_standard_rep_t){ .err = err };
 
-	(void)memcpy(out_buf, (const char *)&rep, sizeof(rm_standard_rep_t));
+	(void)memscpy(out_buf, size, (const char *)&rep,
+		      sizeof(rm_standard_rep_t));
 	if (len > 0U) {
-		(void)memcpy((void *)(out_buf + sizeof(rm_standard_rep_t)),
-			     data, len);
+		(void)memscpy((void *)(out_buf + sizeof(rm_standard_rep_t)),
+			      size - sizeof(rm_standard_rep_t), data, len);
 	}
 
 	rm_error_t rpc_err =
@@ -408,7 +410,7 @@ rm_notify(vmid_t client_id, uint32_t notif_id, void *data, size_t len)
 		(void)printf("Length is Zero\n");
 		exit(1);
 	}
-	(void)memcpy((void *)out_buf, data, len);
+	(void)memscpy((void *)out_buf, len, data, len);
 
 	rm_error_t rpc_err = rm_rpc_fifo_send_notification(client_id, notif_id,
 							   out_buf, len, true);

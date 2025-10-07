@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_CREATION_DT_H_
+#define INCLUDE_VM_CREATION_DT_H_
+
 error_t
 vm_creation_add_compatibles(const struct vdevice_node *node,
 			    const char *const	       compatibles[],
@@ -9,3 +12,9 @@ vm_creation_add_compatibles(const struct vdevice_node *node,
 
 char *
 vm_creation_node_name_capid(const char *generate, cap_id_t cap_id);
+
+#else
+
+#error multiple include of vm_creation_dt.h
+
+#endif

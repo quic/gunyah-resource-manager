@@ -2,24 +2,16 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_CONFIG_H_
+#define INCLUDE_VM_CONFIG_H_
+
 extern const char *gunyah_api_version;
-
-typedef uint32_t label_t;
-
-struct vdevice_node;
-typedef struct vdevice_node vdevice_node_t;
 
 struct vm_console;
 typedef struct vm_console vm_console_t;
 
 struct rm_rpc_data;
 typedef struct rm_rpc_data rm_rpc_data_t;
-
-struct dtb_parser_ops;
-typedef struct dtb_parser_ops dtb_parser_ops_t;
-
-struct dtb_parser_data_s;
-typedef struct dtb_parser_data_s vm_config_parser_data_t;
 
 struct dtb_parser_alloc_params_s;
 typedef struct dtb_parser_alloc_params_s vm_config_parser_params_t;
@@ -28,8 +20,6 @@ struct general_data;
 typedef struct general_data general_data_t;
 
 typedef uint32_t resource_handle_t;
-
-typedef struct vector_s vector_t;
 
 #define VDEVICE_MAX_COMPATIBLE_LEN   256U
 #define VDEVICE_MAX_PUSH_COMPATIBLES 6U
@@ -43,7 +33,7 @@ vm_config_alloc(vm_t *vm, cap_id_t cspace, cap_id_t partition);
 void
 vm_config_dealloc(vm_t *vm);
 
-void
+error_t
 vm_config_hlos_vdevices_setup(vm_config_t *vmcfg, cap_id_t vic);
 
 void
@@ -56,6 +46,9 @@ error_t
 vm_config_add_vcpu(vm_config_t *vmcfg, cap_id_t rm_cap, uint32_t affinity_index,
 		   bool boot_vcpu, const char *patch);
 
+error_t
+vm_config_add_defective_vcpu(vm_config_t *vmcfg, char *patch);
+
 vector_t *
 vm_config_get_vcpus(const vm_config_t *vmcfg);
 
@@ -67,6 +60,9 @@ vm_config_deinit(void);
 
 error_t
 handle_compatibles(vdevice_node_t *vdevice, const general_data_t *data);
+
+error_t
+vm_config_reserve_bind_vpm_virq(vm_config_t *vmcfg, vmid_t peer);
 
 // APIs to help vm query
 rm_error_t
@@ -124,7 +120,7 @@ void
 vm_config_handle_exit(const vm_t *vm);
 
 bool
-vm_reset_handle_init(const vm_t *vm);
+vm_reset_handle_init(vm_t *vm);
 
 bool
 vm_reset_handle_destroy_vdevices(const vm_t *vm);
@@ -140,3 +136,9 @@ extern vmid_t ras_handler_vm;
 error_t
 vm_config_vrtc_set_time_base(vm_t *vm, uint64_t time_base,
 			     uint64_t sys_timer_ref);
+
+#else
+
+#error multiple include of vm_config.h
+
+#endif

@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_RM_TYPES_H_
+#define INCLUDE_RM_TYPES_H_
+
 #define VMID_HYP	  0x0U
 #define VMID_HLOS	  0x3U
 #define VMID_DYNAMIC_BASE 0x80U
@@ -13,10 +16,10 @@
 #define VMID_ANY	  0xFFFEU // For resources without specific owner
 #define VMID_PEER_DEFAULT 0xFFFFU
 
-#define INVALID_ADDRESS (~0UL)
+#define INVALID_ADDRESS (~(paddr_t)0U)
 
 #define VM_MAX_NAME_LEN 80
-#define VM_GUID_LEN	16
+#define VM_GUID_LEN	16U
 #define VM_MAX_URI_LEN	80
 
 // Macros to instruct the compiler not to warn about padding. These should only
@@ -41,8 +44,8 @@ typedef struct platform_env_data_s platform_env_data_t;
 struct vm_s;
 typedef struct vm_s vm_t;
 
-struct vm_config;
-typedef struct vm_config vm_config_t;
+struct vm_config_s;
+typedef struct vm_config_s vm_config_t;
 
 struct vm_device_descriptor_s;
 typedef struct vm_device_descriptor_s vm_device_descriptor_t;
@@ -50,7 +53,34 @@ typedef struct vm_device_descriptor_s vm_device_descriptor_t;
 struct vm_device_assignments_s;
 typedef struct vm_device_assignments_s vm_device_assignments_t;
 
+struct dtb_parser_data_s;
+typedef struct dtb_parser_data_s dtb_parser_data_t;
+
+struct dtb_parser_ops_s;
+typedef struct dtb_parser_ops_s dtb_parser_ops_t;
+
+struct dto_s;
+typedef struct dto_s dto_t;
+
+struct address_range_allocator_s;
+typedef struct address_range_allocator_s address_range_allocator_t;
+
+struct vector_s;
+typedef struct vector_s vector_t;
+
+struct memparcel_s;
+typedef struct memparcel_s memparcel_t;
+
+struct acl_entry_s;
+typedef struct acl_entry_s acl_entry_t;
+
+struct sgl_entry_s;
+typedef struct sgl_entry_s sgl_entry_t;
+
 struct vdevice_node;
+typedef struct vdevice_node vdevice_node_t;
+
+typedef uint32_t label_t;
 
 typedef enum {
 	VM_ID_TYPE_GUID	     = 0,
@@ -62,7 +92,7 @@ typedef enum {
 typedef enum {
 	VM_AUTH_TYPE_NONE     = 0,
 	VM_AUTH_TYPE_PLATFORM = 1,
-	VM_AUTH_TYPE_ANDROID  = 2,
+	VM_AUTH_TYPE_ANDROID  = 2, // Android pVM
 } vm_auth_type_t;
 
 RM_PADDED(typedef struct interrupt_data {
@@ -70,6 +100,10 @@ RM_PADDED(typedef struct interrupt_data {
 	bool   is_cpu_local;
 	bool   is_edge_triggering;
 } interrupt_data_t)
+
+typedef uint32_t address_range_tag_t;
+
+#define ADDRESS_RANGE_NO_TAG (address_range_tag_t)0UL
 
 typedef uint32_t rm_error_t;
 
@@ -92,6 +126,10 @@ typedef uint32_t rm_error_t;
 #define RM_ERROR_IRQ_INVALID	  ((rm_error_t)0xfU)
 #define RM_ERROR_IRQ_INUSE	  ((rm_error_t)0x10U)
 #define RM_ERROR_IRQ_RELEASED	  ((rm_error_t)0x11U)
-#define RM_ERROR_IN_USE		  ((rm_error_t)0x12U)
-#define RM_ERROR_IRQ_NOT_MAPPED	  ((rm_error_t)0x13U)
 #define RM_ERROR_VM_STATE	  ((rm_error_t)0x14U)
+
+#else
+
+#error multiple include of rm_types.h
+
+#endif

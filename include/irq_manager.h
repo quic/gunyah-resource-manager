@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_IRQ_MANAGER_H_
+#define INCLUDE_IRQ_MANAGER_H_
+
 // IRQ manager design:
 //
 // Requirements:
@@ -40,7 +43,7 @@ irq_manager_hwirq_add(uint32_t hw_irq_number, cap_id_t capid, vmid_t owner);
 // Donate a HW IRQ to another VMID
 // The HW IRQ must not be mapped or currently lending
 error_t
-irq_manager_hwirq_donate(uint32_t hw_irq_number, vmid_t owner);
+irq_manager_hwirq_donate(uint32_t hw_irq_number, vmid_t from, vmid_t to);
 
 // Lookup the owner of a HW global IRQ
 vmid_result_t
@@ -113,19 +116,25 @@ irq_manager_vm_virq_map(const vm_t *vm, uint32_t irq_number, bool alloc);
 error_t
 irq_manager_vm_virq_unmap(const vm_t *vm, uint32_t irq_number, bool free_irq);
 
+#if defined(PLATFORM_RESTRICTED_IRQ_SHARE_ALLOWED) &&                          \
+	PLATFORM_RESTRICTED_IRQ_SHARE_ALLOWED
 // Lend a restricted IRQ to a VM.
 // This is a temporary API, will be removed once restricted IRQs are replaced
 // with IRQ ownership configuration.
 error_t
 irq_manager_vm_restricted_lend(const vm_t *vm, uint32_t irq_number,
 			       uint32_t hw_irq_number);
+#endif
 
+#if defined(PLATFORM_STATIC_IRQ_SHARE_ALLOWED) &&                              \
+	PLATFORM_STATIC_IRQ_SHARE_ALLOWED
 // Static lend an HLOS IRQ to a trusted VM.
 // This is a temporary API, will be removed once static lend IRQs are replaced
 // with dynamic IRQ lends.
 error_t
 irq_manager_vm_static_lend(const vm_t *vm, uint32_t irq_number,
 			   uint32_t hw_irq_number);
+#endif
 
 // Handle VM reset and release all borrowed IRQs
 bool
@@ -135,3 +144,9 @@ vm_reset_handle_release_irqs(vmid_t vmid);
 bool
 irq_manager_lending_msg_handler(vmid_t client_id, uint32_t msg_id,
 				uint16_t seq_num, void *buf, size_t len);
+
+#else
+
+#error multiple include of irq_manager.h
+
+#endif

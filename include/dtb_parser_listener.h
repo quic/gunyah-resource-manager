@@ -1,0 +1,31 @@
+// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+//
+// SPDX-License-Identifier: BSD-3-Clause
+
+#ifndef INCLUDE_DTB_PARSER_LISTNER_H_
+#define INCLUDE_DTB_PARSER_LISTNER_H_
+
+typedef struct dtb_listener_s {
+	listener_trigger_type_t type;
+	uint8_t			type_padding[4];
+
+	union {
+		char *expected_path;
+
+		struct {
+			char *string_prop_name;
+			char *expected_string;
+		};
+
+		char *compatible_string;
+	};
+
+	action_t action;
+	regex_t *ctxt;
+} dtb_listener_t;
+
+#else
+
+#error multiple include of dtb_parser_listener.h
+
+#endif

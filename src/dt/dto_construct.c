@@ -48,7 +48,7 @@ dto_construct_begin_path(dto_t *dto, const char *path)
 		}
 
 		name_start = name_end + 1;
-	} while (name_end != NULL);
+	} while (true);
 
 	// the generate should specify a node name
 	// we can change it to return error latter
@@ -80,7 +80,7 @@ dto_construct_end_path(dto_t *dto, const char *path)
 	assert(target[0] == separator);
 
 	// should have a node name
-	assert(target[sz - 1] != '/');
+	assert(target[sz - 1U] != '/');
 
 	// remove the node name
 	char *name_start = NULL;
@@ -97,7 +97,7 @@ dto_construct_end_path(dto_t *dto, const char *path)
 		if (ret != OK) {
 			goto out;
 		}
-	} while (name_start != NULL);
+	} while (true);
 
 	CHECK_DTO(ret, dto_modify_end_by_path(dto, "/"));
 out:

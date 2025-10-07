@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_VM_DT_H_
+#define INCLUDE_VM_DT_H_
+
 #define HLOS_MAX_NUM_DTBOS 2
 
 RM_PADDED(struct boot_dtbo_info_s {
@@ -22,3 +25,9 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size);
 
 error_t
 vm_dt_apply_hlos_overlay(vm_t *hlos_vm, paddr_t hlos_dtb, size_t dtb_size);
+
+#else
+
+#error multiple include of vm_dt.h
+
+#endif

@@ -5,7 +5,10 @@
 // Parse vm config device tree node, and trigger visitors based on provided
 // condition.
 
-RM_PADDED(typedef struct {
+#ifndef INCLUDE_DTB_PARSER_H_
+#define INCLUDE_DTB_PARSER_H_
+
+RM_PADDED(typedef struct ctx_s {
 	count_t addr_cells;
 	count_t size_cells;
 	bool	addr_is_phys;
@@ -14,6 +17,8 @@ RM_PADDED(typedef struct {
 	count_t child_size_cells;
 	bool	child_addr_is_phys;
 	bool	child_cells_default;
+	char   *parent_path;
+	char   *node_path;
 } ctx_t)
 
 typedef enum {
@@ -27,10 +32,9 @@ typedef enum {
 	RET_ERROR,
 	RET_STOP,
 	RET_CLAIMED,
+	RET_SKIP_CHILD_NODES,
 } listener_return_t;
 
-struct dtb_parser_data_s;
-typedef struct dtb_parser_data_s dtb_parser_data_t;
 typedef listener_return_t (*action_t)(dtb_parser_data_t *data, const void *fdt,
 				      int node_ofs, const ctx_t *ctx);
 
@@ -41,25 +45,9 @@ typedef dtb_parser_data_t *(*dtb_parser_data_alloc_t)(
 
 typedef void (*dtb_parser_data_free_t)(dtb_parser_data_t *data);
 
-typedef struct {
-	listener_trigger_type_t type;
-	uint8_t			type_padding[4];
+typedef struct dtb_listener_s dtb_listener_t;
 
-	union {
-		char *expected_path;
-
-		struct {
-			char *string_prop_name;
-			char *expected_string;
-		};
-
-		char *compatible_string;
-	};
-
-	action_t action;
-} dtb_listener_t;
-
-struct dtb_parser_ops {
+struct dtb_parser_ops_s {
 	dtb_parser_data_alloc_t alloc;
 
 	dtb_listener_t *listeners;
@@ -68,7 +56,6 @@ struct dtb_parser_ops {
 
 	dtb_parser_data_free_t free;
 };
-typedef struct dtb_parser_ops dtb_parser_ops_t;
 
 RM_PADDED(typedef struct {
 	error_t		   err;
@@ -116,3 +103,9 @@ fdt_getprop_num(const void *fdt, int node_ofs, const char *propname,
 
 bool
 fdt_getprop_bool(const void *fdt, int node_ofs, const char *propname);
+
+#else
+
+#error multiple include of dtb_parser.h
+
+#endif

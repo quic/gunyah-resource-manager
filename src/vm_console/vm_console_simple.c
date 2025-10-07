@@ -12,9 +12,10 @@
 #include <string.h>
 
 #include <rm_types.h>
-#include <utils/vector.h>
+#include <util.h>
 
 #include <event.h>
+#include <guest_interface.h>
 #include <platform.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
@@ -177,8 +178,10 @@ handle_write(vmid_t requester, uint16_t seq_num, vmid_t target,
 
 	vmid_t to = (target == 0U) ? console->owner : console->self;
 
-	(void)memcpy(notif_buf, (const char *)&notif, sizeof(notif));
-	(void)memcpy((uint8_t *)notif_buf + sizeof(notif), content, num_bytes);
+	(void)memscpy(notif_buf, notif_size, (const char *)&notif,
+		      sizeof(notif));
+	(void)memscpy((uint8_t *)notif_buf + sizeof(notif),
+		      notif_size - sizeof(notif), content, num_bytes);
 
 	err = rm_rpc_fifo_send_notification(to, NOTIFY_VM_CONSOLE_CHARS,
 					    notif_buf, notif_size, true);
@@ -259,7 +262,7 @@ vm_console_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	case VM_CONSOLE_WRITE: {
 		vm_console_write_req_t *req = (vm_console_write_req_t *)buf;
 
-		if (len == sizeof(*req) + req->num_bytes) {
+		if (len == (sizeof(*req) + req->num_bytes)) {
 			uint8_t *content = (uint8_t *)buf + sizeof(*req);
 			handle_write(client_id, seq_num, req->target,
 				     req->num_bytes, content);

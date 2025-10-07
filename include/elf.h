@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_ELF_H_
+#define INCLUDE_ELF_H_
+
 typedef uint16_t Elf_Half;
 typedef uint32_t Elf_Word;
 typedef int32_t	 Elf_Sword;
@@ -155,7 +158,7 @@ bool
 elf_ehdr_is_class(Elf_Ehdr_ptr ehdr, Elf_Class class);
 
 rm_error_t
-elf_get_phdr_offset(Elf_Ehdr_ptr ehdr, size_t image_size, size_t *e_phoff);
+elf_get_phdr_offset(Elf_Ehdr_ptr ehdr, size_t image_size, size_t *offset);
 
 bool
 elf_segment_is_loadable(Elf_Class class, Elf_Phdr_ptr phdrs, index_t seg_num);
@@ -172,3 +175,9 @@ elf_valid_ptload_segment(index_t seg_num, size_t p_memsz, size_t segment_offset,
 
 bool
 elf_segment_contains_dt(const uint32_t *first_word, bool *single_dtb);
+
+#else
+
+#error multiple include of elf.h
+
+#endif

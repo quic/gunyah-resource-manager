@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_MEMPARCEL_MSG_H_
+#define INCLUDE_MEMPARCEL_MSG_H_
+
+#include <endian.h>
+
 #define MEM_DONATE	    0x51000010U
 #define MEM_ACCEPT	    0x51000011U
 #define MEM_LEND	    0x51000012U
@@ -58,16 +63,33 @@
 #define MEM_ATTR_UNCACHED 2U
 #define MEM_ATTR_CACHED	  3U
 
-typedef struct acl_entry {
+struct acl_entry_s {
 	vmid_t	vmid;
 	uint8_t rights;
 	uint8_t res0;
-} acl_entry_t;
+};
 
-typedef struct sgl_entry_s {
+static_assert(BYTE_ORDER == LITTLE_ENDIAN,
+	      "SGL entry RPC assumes little-endian byte order");
+
+typedef struct sgl_entry_rpc_s {
+	uint32_t ipa_lo;
+	uint32_t ipa_hi;
+	uint32_t size_lo;
+	uint32_t size_hi;
+} sgl_entry_rpc_t;
+
+struct sgl_entry_s {
 	uint64_t ipa;
 	uint64_t size;
-} sgl_entry_t;
+};
+
+static inline void
+sgl_entry_rpc_read(const sgl_entry_rpc_t *sgl, uint64_t *ipa, uint64_t *size)
+{
+	*ipa  = ((uint64_t)sgl->ipa_hi << 32) | ((uint64_t)sgl->ipa_lo);
+	*size = ((uint64_t)sgl->size_hi << 32) | ((uint64_t)sgl->size_lo);
+}
 
 typedef struct {
 	uint16_t attr;
@@ -81,6 +103,8 @@ typedef struct {
 
 static_assert(sizeof(acl_entry_t) == 4U, "ACL entry not sized correctly");
 static_assert(sizeof(sgl_entry_t) == 16U, "SGL entry not sized correctly");
+static_assert(sizeof(sgl_entry_rpc_t) == 16U,
+	      "SGL entry RPC not sized correctly");
 static_assert(sizeof(attr_entry_t) == 4U, "ACL entry not sized correctly");
 static_assert(sizeof(vmid_entry_t) == 4U, "VMID entry not sized correctly");
 
@@ -96,7 +120,7 @@ typedef struct {
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	uint16_t res0_2;
-	// array of sgl_entry_t
+	// array of sgl_entry_rpc_t
 	uint16_t attr_entries;
 	uint16_t res0_3;
 	// array of attr_entry_t
@@ -108,7 +132,7 @@ typedef struct {
 	uint8_t	 res0_0[3];
 	uint16_t sgl_entries;
 	uint16_t res0_1;
-	// array of sgl_entry_t
+	// array of sgl_entry_rpc_t
 } memparcel_append_req_t;
 
 typedef struct {
@@ -123,7 +147,7 @@ typedef struct {
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	vmid_t	 map_vmid;
-	// array of sgl_entry_t
+	// array of sgl_entry_rpc_t
 	uint16_t attr_entries;
 	uint16_t res0_1;
 	// array of attr_entry_t
@@ -153,7 +177,7 @@ typedef struct {
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	uint16_t res0_1;
-	// array of sgl_entry_t
+	// array of sgl_entry_rpc_t
 	// optional attr list
 } memparcel_lookup_req_t;
 
@@ -197,7 +221,7 @@ typedef struct {
 	// array of acl_entry_t
 	uint16_t sgl_entries;
 	uint16_t res0_2;
-	// array of sgl_entry_t
+	// array of sgl_entry_rpc_t sizes
 	uint16_t attr_entries;
 	uint16_t res0_3;
 	// array of attr_entry_t
@@ -214,8 +238,6 @@ typedef struct {
 	uint32_t handle;
 	uint32_t mem_info_tag;
 } memparcel_recall_notif_t;
-
-typedef uint32_t mem_handle_t;
 
 // FIXME: The following declarations don't necessarily belong here. There are here
 // because some necessary type definitions are in this file. Move them out once
@@ -240,11 +262,11 @@ memparcel_accept(vmid_t vmid, uint16_t acl_entries, uint16_t sgl_entries,
 		 vmid_t map_vmid, mem_handle_t handle, uint32_t label,
 		 uint8_t mem_type, uint8_t trans_type, uint8_t flags);
 
-mem_handle_t
-memparcel_sgl_do_lookup(vmid_t vmid, uint16_t acl_entries, uint16_t sgl_entries,
-			uint16_t attr_entries, acl_entry_t *acl,
-			sgl_entry_t *sgl, attr_entry_t *attr_list,
-			uint32_t label, uint8_t mem_type, bool hyp_unassign);
-
 rm_error_t
 memparcel_do_reclaim(vmid_t vmid, mem_handle_t handle, uint8_t flags);
+
+#else
+
+#error multiple include of memparcel_msg.h
+
+#endif

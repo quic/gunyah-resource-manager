@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef UTILS_DICT_H_
+#define UTILS_DICT_H_
+
 typedef uint32_t      dict_key_t;
 typedef struct dict_s dict_t;
 
@@ -64,5 +67,13 @@ dict_get_max_key(dict_t *dict);
 // range. It is less efficient that dict_iterate() however can be used inline
 // without requiring a callback function pointer.
 #define dict_foreach(info, key, dict)                                          \
-	for (key = dict_get_min_key(dict), info		= dict_get(dict, key); \
-	     key <= dict_get_max_key(dict); key++, info = dict_get(dict, key))
+	(key)  = dict_get_min_key(dict);                                       \
+	(info) = dict_get((dict), (key));                                      \
+	for (; (key) <= dict_get_max_key(dict);                                \
+	     (key)++, (info) = dict_get((dict), (key)))
+
+#else
+
+#error multiple include of utils/dict.h
+
+#endif

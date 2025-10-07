@@ -18,17 +18,17 @@ platform_parse_root(vm_config_parser_data_t *data, const void *fdt,
 	{                                                                      \
 		.type	       = BY_PATH,                                      \
 		.expected_path = "^/(qcom,|gunyah-)vm-config/interrupts$",     \
-		.action	       = platform_parse_interrupts,                    \
+		.action	       = &platform_parse_interrupts,                    \
 	},                                                                     \
 	{                                                                      \
 		.type	       = BY_PATH,                                      \
 		.expected_path = "^/$",                                        \
-		.action	       = platform_parse_root,                          \
-	},
+		.action	       = &platform_parse_root,                          \
+	}
 
 // clang-format on
 
-typedef struct platform_data {
+typedef struct platform_data_s {
 	uintptr_t type;
 	void	 *data;
 } platform_data_t;

@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef UAPI_INTERRUPT_H_
+#define UAPI_INTERRUPT_H_
+
 #define IRQ_MAGIC 0x49U
 
 #define IOCTL_ENABLE_IRQ      _IOW(IRQ_MAGIC, 0U, int)
@@ -10,7 +13,7 @@
 #define IOCTL_SET_IRQ_TRIGGER _IOW(IRQ_MAGIC, 3U, struct irq_set_trigger_req)
 #define IOCTL_DEREGISTER_ISR  _IOW(IRQ_MAGIC, 4U, int)
 
-typedef bool (*isr_t)(int, void *);
+typedef bool (*isr_t)(int virq_num, void *data);
 
 struct register_isr_req {
 	isr_t isr;
@@ -39,3 +42,9 @@ register_event_isr(virq_t virq, event_t *event);
 
 rm_error_t
 deregister_isr(virq_t virq);
+
+#else
+
+#error multiple include of uapi/interrupt.h
+
+#endif

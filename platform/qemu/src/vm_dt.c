@@ -22,6 +22,10 @@
 #include <dt_linux.h>
 #include <dt_overlay.h>
 #include <dtb_parser.h>
+#include <guest_interface.h>
+#include <mem_region.h>
+#include <memparcel.h>
+#include <memparcel_msg.h>
 #include <platform_dt.h>
 #include <platform_dt_parser.h>
 #include <platform_vm_config.h>

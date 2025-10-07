@@ -1,6 +1,8 @@
 // Automatically generated. Do not modify.
 //
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// © 2019 Qualcomm Innovation Center, Inc. All rights reserved.
+// All Rights Reserved.
+//
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include <stdalign.h>
@@ -11,93 +13,102 @@
 #include <stdnoreturn.h>
 
 typedef union addrspace_attach_vdevice_flags_u addrspace_attach_vdevice_flags_t;
-typedef struct boot_env_phys_range_s	       boot_env_phys_range_t;
-typedef struct rm_env_data_hdr_s	       rm_env_data_hdr_t;
+typedef struct addrspace_info_area_entry_data_info_b
+	addrspace_info_area_entry_data_info_t;
+typedef struct addrspace_info_area_entry_flags_b
+	addrspace_info_area_entry_flags_t;
+typedef struct addrspace_info_area_entry_type_b addrspace_info_area_entry_type_t;
+typedef struct addrspace_map_flags_b	      addrspace_map_flags_t;
+typedef struct addrspace_modify_pages_flags_b addrspace_modify_pages_flags_t;
+typedef struct boot_env_phys_range_s	      boot_env_phys_range_t;
+typedef struct cap_rights_addrspace_b	      cap_rights_addrspace_t;
+typedef struct cap_rights_cspace_b	      cap_rights_cspace_t;
+typedef struct cap_rights_doorbell_b	      cap_rights_doorbell_t;
+typedef struct cap_rights_generic_b	      cap_rights_generic_t;
+typedef struct cap_rights_hwirq_b	      cap_rights_hwirq_t;
+typedef struct cap_rights_memextent_b	      cap_rights_memextent_t;
+typedef struct cap_rights_msgqueue_b	      cap_rights_msgqueue_t;
+typedef struct cap_rights_partition_b	      cap_rights_partition_t;
+typedef struct cap_rights_thread_b	      cap_rights_thread_t;
+typedef struct cap_rights_vic_b		      cap_rights_vic_t;
+typedef struct cap_rights_virtio_backend_b    cap_rights_virtio_backend_t;
+typedef struct cap_rights_vpm_group_b	      cap_rights_vpm_group_t;
+typedef struct cap_rights_watchdog_b	      cap_rights_watchdog_t;
+typedef struct hyp_api_flags0_b		      hyp_api_flags0_t;
+typedef struct hyp_api_flags1_b		      hyp_api_flags1_t;
+typedef struct hyp_api_flags2_b		      hyp_api_flags2_t;
+typedef struct hyp_api_info_b		      hyp_api_info_t;
+typedef struct memextent_access_attrs_b	      memextent_access_attrs_t;
+typedef struct memextent_attrs_b	      memextent_attrs_t;
+typedef struct memextent_donate_options_b     memextent_donate_options_t;
+typedef struct memextent_mapping_attrs_b      memextent_mapping_attrs_t;
+typedef struct memextent_modify_flags_b	      memextent_modify_flags_t;
+typedef struct msgqueue_create_info_b	      msgqueue_create_info_t;
+typedef struct msgqueue_send_flags_b	      msgqueue_send_flags_t;
+typedef struct rm_env_data_hdr_s	      rm_env_data_hdr_t;
 typedef struct root_env_mmio_range_descriptor_s root_env_mmio_range_descriptor_t;
-typedef struct rt_env_data_s rt_env_data_t;
+typedef struct root_env_mmio_range_properties_b root_env_mmio_range_properties_t;
+typedef struct rt_env_data_s		      rt_env_data_t;
+typedef struct scheduler_yield_control_b      scheduler_yield_control_t;
+typedef struct smccc_function_id_b	      smccc_function_id_t;
+typedef struct smccc_vendor_hyp_function_id_b smccc_vendor_hyp_function_id_t;
+typedef struct vcpu_option_flags_b	      vcpu_option_flags_t;
+typedef struct vcpu_poweroff_flags_b	      vcpu_poweroff_flags_t;
+typedef struct vcpu_poweron_flags_b	      vcpu_poweron_flags_t;
+typedef struct vcpu_run_poweroff_flags_b      vcpu_run_poweroff_flags_t;
+typedef struct vgic_gicr_attach_flags_b	      vgic_gicr_attach_flags_t;
+typedef struct vic_option_flags_b	      vic_option_flags_t;
+typedef struct virtio_backend_notify_reason_b virtio_backend_notify_reason_t;
+typedef struct virtio_backend_option_flags_b  virtio_backend_option_flags_t;
+typedef struct virtio_status_b		      virtio_status_t;
+typedef struct vpm_group_option_flags_b	      vpm_group_option_flags_t;
+typedef struct watchdog_bind_option_flags_b   watchdog_bind_option_flags_t;
+typedef struct watchdog_option_flags_b	      watchdog_option_flags_t;
 
-typedef uint32_t count_t;
-typedef uint32_t index_t;
 #define BOOT_ENV_RANGES_NUM 32
 typedef uint16_t cpu_index_t;
 #define CPU_INDEX_INVALID (cpu_index_t)65535U // 0xffff
 typedef uint64_t cap_id_t;
 #define CSPACE_CAP_INVALID (cap_id_t)18446744073709551615U // 0xffffffffffffffff
-typedef uint64_t paddr_t;
+typedef uint32_t count_t;
 #define MSGQUEUE_DELAY_UNCHANGED     (count_t)4294967295U // 0xffffffff
 #define MSGQUEUE_MAX_MAX_MSG_SIZE    (count_t)1024U	  // 0x400
 #define MSGQUEUE_MAX_QUEUE_DEPTH     (count_t)256U	  // 0x100
 #define MSGQUEUE_THRESHOLD_MAXIMUM   (count_t)4294967294U // 0xfffffffe
 #define MSGQUEUE_THRESHOLD_UNCHANGED (count_t)4294967295U // 0xffffffff
-typedef uint64_t nanoseconds_t;
-#define RM_ENV_DATA_SIGNATURE	  1380795716
-#define RM_ENV_DATA_VERSION	  4096
-#define ROOTVM_ENV_DATA_SIGNATURE 1162696274
-#define ROOTVM_ENV_DATA_VERSION	  4096
+#define RM_ENV_DATA_SIGNATURE	     1380795716
+#define RM_ENV_DATA_VERSION	     4096
+#define ROOTVM_ENV_DATA_SIGNATURE    1162696274
+#define ROOTVM_ENV_DATA_VERSION	     4096
 typedef uint32_t priority_t;
-#define ROOTVM_PRIORITY (priority_t)32U // 0x20
-typedef uint16_t vmid_t;
-#define SCHEDULER_DEFAULT_PRIORITY  (priority_t)32U	      // 0x20
+#define ROOTVM_PRIORITY		   (priority_t)32U // 0x20
+#define SCHEDULER_DEFAULT_PRIORITY (priority_t)32U // 0x20
+typedef uint64_t nanoseconds_t;
 #define SCHEDULER_DEFAULT_TIMESLICE (nanoseconds_t)5000000U   // 0x4c4b40
 #define SCHEDULER_MAX_PRIORITY	    (priority_t)63U	      // 0x3f
 #define SCHEDULER_MAX_TIMESLICE	    (nanoseconds_t)100000000U // 0x5f5e100
 #define SCHEDULER_MIN_PRIORITY	    (priority_t)0U	      // 0x0
 #define SCHEDULER_MIN_TIMESLICE	    (nanoseconds_t)100000U    // 0x186a0
-
-typedef enum scheduler_variant_e {
-	SCHEDULER_VARIANT_TRIVIAL = 0,
-	SCHEDULER_VARIANT_FPRR	  = 1
-} scheduler_variant_t;
-
-#define SCHEDULER_VARIANT__MAX SCHEDULER_VARIANT_FPRR
-#define SCHEDULER_VARIANT__MIN SCHEDULER_VARIANT_TRIVIAL
-
-#define SMCCC_GUNYAH_UID0	 (uint64_t)3448755649U // 0xcd8fd5c1
-#define SMCCC_GUNYAH_UID1	 (uint64_t)3680457636U // 0xdb5f53a4
-#define SMCCC_GUNYAH_UID2	 (uint64_t)919496082U  // 0x36ce6592
-#define SMCCC_GUNYAH_UID3	 (uint64_t)341785959U  // 0x145f3d67
-#define SMCCC_UNKNOWN_FUNCTION32 (uint32_t)4294967295U // 0xffffffff
+#define SMCCC_GUNYAH_UID0	    (uint64_t)3448755649U     // 0xcd8fd5c1
+#define SMCCC_GUNYAH_UID1	    (uint64_t)3680457636U     // 0xdb5f53a4
+#define SMCCC_GUNYAH_UID2	    (uint64_t)919496082U      // 0x36ce6592
+#define SMCCC_GUNYAH_UID3	    (uint64_t)341785959U      // 0x145f3d67
+#define SMCCC_UNKNOWN_FUNCTION32    (uint32_t)4294967295U     // 0xffffffff
 #define SMCCC_UNKNOWN_FUNCTION64                                               \
-	(uint64_t)18446744073709551615U // 0xffffffffffffffff
-#define SMCCC_VERSION (uint32_t)65539U	// 0x10003
-typedef uint64_t ticks_t;
-typedef uint64_t microseconds_t;
-#define VCPU_MAX_PRIORITY (priority_t)62U // 0x3e
-typedef uint64_t vmaddr_t;
+	(uint64_t)18446744073709551615U	   // 0xffffffffffffffff
+#define SMCCC_VERSION	  (uint32_t)65539U // 0x10003
+#define VCPU_MAX_PRIORITY (priority_t)62U  // 0x3e
+typedef uint32_t virq_t;
+#define VIRQ_INVALID (virq_t)4294967295U // 0xffffffff
 
-typedef enum pgtable_access_e {
-	PGTABLE_ACCESS_NONE = 0,
-	PGTABLE_ACCESS_X    = 1,
-	PGTABLE_ACCESS_W    = 2,
-	PGTABLE_ACCESS_R    = 4,
-	PGTABLE_ACCESS_RX   = 5,
-	PGTABLE_ACCESS_RW   = 6,
-	PGTABLE_ACCESS_RWX  = 7
-} pgtable_access_t;
+typedef enum addrspace_access_type_e {
+	ADDRSPACE_ACCESS_TYPE_READ    = 0,
+	ADDRSPACE_ACCESS_TYPE_WRITE   = 1,
+	ADDRSPACE_ACCESS_TYPE_EXECUTE = 2
+} addrspace_access_type_t;
 
-#define PGTABLE_ACCESS__MAX PGTABLE_ACCESS_RWX
-#define PGTABLE_ACCESS__MIN PGTABLE_ACCESS_NONE
-
-typedef enum pgtable_vm_memtype_e {
-	PGTABLE_VM_MEMTYPE_DEVICE_NGNRNE  = 0,
-	PGTABLE_VM_MEMTYPE_DEVICE_NGNRE	  = 1,
-	PGTABLE_VM_MEMTYPE_DEVICE_NGRE	  = 2,
-	PGTABLE_VM_MEMTYPE_DEVICE_GRE	  = 3,
-	PGTABLE_VM_MEMTYPE_NORMAL_NC	  = 5,
-	PGTABLE_VM_MEMTYPE_NORMAL_ONC_IWT = 6,
-	PGTABLE_VM_MEMTYPE_NORMAL_ONC_IWB = 7,
-	PGTABLE_VM_MEMTYPE_NORMAL_OWT_INC = 9,
-	PGTABLE_VM_MEMTYPE_NORMAL_WT	  = 10,
-	PGTABLE_VM_MEMTYPE_NORMAL_OWT_IWB = 11,
-	PGTABLE_VM_MEMTYPE_NORMAL_OWB_INC = 13,
-	PGTABLE_VM_MEMTYPE_NORMAL_OWB_IWT = 14,
-	PGTABLE_VM_MEMTYPE_NORMAL_WB	  = 15
-} pgtable_vm_memtype_t;
-
-#define PGTABLE_VM_MEMTYPE__MAX PGTABLE_VM_MEMTYPE_NORMAL_WB
-#define PGTABLE_VM_MEMTYPE__MIN PGTABLE_VM_MEMTYPE_DEVICE_NGNRNE
-
-typedef uint64_t register_t;
+#define ADDRSPACE_ACCESS_TYPE__MAX ADDRSPACE_ACCESS_TYPE_EXECUTE
+#define ADDRSPACE_ACCESS_TYPE__MIN ADDRSPACE_ACCESS_TYPE_READ
 
 // Bitfield: vgic_gicr_attach_flags <uint64_t>
 typedef struct vgic_gicr_attach_flags_b {
@@ -115,14 +126,11 @@ typedef struct vgic_gicr_attach_flags_b {
 #define vgic_gicr_attach_flags_cast(val_0)                                     \
 	(vgic_gicr_attach_flags_t)                                             \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 vgic_gicr_attach_flags_raw(vgic_gicr_attach_flags_t bit_field);
-
-_Atomic uint64_t *
-vgic_gicr_attach_flags_atomic_ptr_raw(_Atomic vgic_gicr_attach_flags_t *ptr);
 
 void
 vgic_gicr_attach_flags_init(vgic_gicr_attach_flags_t *bit_field);
@@ -193,10 +201,208 @@ union addrspace_attach_vdevice_flags_u {
 	vgic_gicr_attach_flags_t vgic_gicr;
 };
 
+// Bitfield: addrspace_info_area_entry_data_info <uint64_t>
+typedef struct addrspace_info_area_entry_data_info_b {
+	// 31:0      size_t size
+	// 63:32     size_t alignment
+	uint64_t bf[1];
+} addrspace_info_area_entry_data_info_t;
+
+#define addrspace_info_area_entry_data_info_default()                          \
+	(addrspace_info_area_entry_data_info_t)                                \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define addrspace_info_area_entry_data_info_cast(val_0)                        \
+	(addrspace_info_area_entry_data_info_t)                                \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint64_t
+addrspace_info_area_entry_data_info_raw(
+	addrspace_info_area_entry_data_info_t bit_field);
+
+void
+addrspace_info_area_entry_data_info_init(
+	addrspace_info_area_entry_data_info_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+addrspace_info_area_entry_data_info_t
+addrspace_info_area_entry_data_info_clean(
+	addrspace_info_area_entry_data_info_t bit_field);
+
+bool
+addrspace_info_area_entry_data_info_is_equal(
+	addrspace_info_area_entry_data_info_t b1,
+	addrspace_info_area_entry_data_info_t b2);
+
+bool
+addrspace_info_area_entry_data_info_is_empty(
+	addrspace_info_area_entry_data_info_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+addrspace_info_area_entry_data_info_is_clean(
+	addrspace_info_area_entry_data_info_t bit_field);
+
+// Bitfield: addrspace_info_area_entry_flags <uint32_t>
+typedef struct addrspace_info_area_entry_flags_b {
+	// 31        bool valid
+	uint32_t bf[1];
+} addrspace_info_area_entry_flags_t;
+
+#define addrspace_info_area_entry_flags_default()                              \
+	(addrspace_info_area_entry_flags_t)                                    \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define addrspace_info_area_entry_flags_cast(val_0)                            \
+	(addrspace_info_area_entry_flags_t)                                    \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint32_t
+addrspace_info_area_entry_flags_raw(addrspace_info_area_entry_flags_t bit_field);
+
+void
+addrspace_info_area_entry_flags_init(
+	addrspace_info_area_entry_flags_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_clean(
+	addrspace_info_area_entry_flags_t bit_field);
+
+bool
+addrspace_info_area_entry_flags_is_equal(addrspace_info_area_entry_flags_t b1,
+					 addrspace_info_area_entry_flags_t b2);
+
+bool
+addrspace_info_area_entry_flags_is_empty(
+	addrspace_info_area_entry_flags_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+addrspace_info_area_entry_flags_is_clean(
+	addrspace_info_area_entry_flags_t bit_field);
+
+// Union of boolean fields of two addrspace_info_area_entry_flags_t values
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_union(addrspace_info_area_entry_flags_t b1,
+				      addrspace_info_area_entry_flags_t b2);
+
+// Intersection of boolean fields of two addrspace_info_area_entry_flags_t
+// values
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_intersection(
+	addrspace_info_area_entry_flags_t b1,
+	addrspace_info_area_entry_flags_t b2);
+
+// Invert all boolean fields in a addrspace_info_area_entry_flags_t value
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_inverse(addrspace_info_area_entry_flags_t b);
+
+// Set difference of boolean fields of two addrspace_info_area_entry_flags_t
+// values
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_difference(addrspace_info_area_entry_flags_t b1,
+					   addrspace_info_area_entry_flags_t b2);
+
+// Atomically replace a addrspace_info_area_entry_flags_t value with the union
+// of its boolean fields with a given addrspace_info_area_entry_flags_t value,
+// and return the previous value.
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_atomic_union(
+	_Atomic addrspace_info_area_entry_flags_t *b1,
+	addrspace_info_area_entry_flags_t b2, memory_order order);
+
+// Atomically replace a addrspace_info_area_entry_flags_t value with the
+// intersection of its boolean fields with a given
+// addrspace_info_area_entry_flags_t value, and return the previous value.
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_atomic_intersection(
+	_Atomic addrspace_info_area_entry_flags_t *b1,
+	addrspace_info_area_entry_flags_t b2, memory_order order);
+
+// Atomically replace a addrspace_info_area_entry_flags_t value with the set
+// difference of its boolean fields and a given
+// addrspace_info_area_entry_flags_t value, and return the previous value.
+addrspace_info_area_entry_flags_t
+addrspace_info_area_entry_flags_atomic_difference(
+	_Atomic addrspace_info_area_entry_flags_t *b1,
+	addrspace_info_area_entry_flags_t b2, memory_order order);
+
+typedef enum addrspace_info_area_id_owner_e {
+	ADDRSPACE_INFO_AREA_ID_OWNER_INVALID = 0,
+	ADDRSPACE_INFO_AREA_ID_OWNER_GUNYAH  = 1,
+	ADDRSPACE_INFO_AREA_ID_OWNER_ROOTVM  = 2,
+	ADDRSPACE_INFO_AREA_ID_OWNER_RM	     = 3,
+	ADDRSPACE_INFO_AREA_ID_OWNER_QCRM    = 16
+} addrspace_info_area_id_owner_t;
+
+#define ADDRSPACE_INFO_AREA_ID_OWNER__MAX ADDRSPACE_INFO_AREA_ID_OWNER_QCRM
+#define ADDRSPACE_INFO_AREA_ID_OWNER__MIN ADDRSPACE_INFO_AREA_ID_OWNER_INVALID
+
+// Bitfield: addrspace_info_area_entry_type <uint32_t>
+typedef struct addrspace_info_area_entry_type_b {
+	// 15:0      uint32_t id
+	// 31:16     addrspace_info_area_id_owner_t owner
+	uint32_t bf[1];
+} addrspace_info_area_entry_type_t;
+
+#define addrspace_info_area_entry_type_default()                               \
+	(addrspace_info_area_entry_type_t)                                     \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define addrspace_info_area_entry_type_cast(val_0)                             \
+	(addrspace_info_area_entry_type_t)                                     \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint32_t
+addrspace_info_area_entry_type_raw(addrspace_info_area_entry_type_t bit_field);
+
+void
+addrspace_info_area_entry_type_init(addrspace_info_area_entry_type_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+addrspace_info_area_entry_type_t
+addrspace_info_area_entry_type_clean(addrspace_info_area_entry_type_t bit_field);
+
+bool
+addrspace_info_area_entry_type_is_equal(addrspace_info_area_entry_type_t b1,
+					addrspace_info_area_entry_type_t b2);
+
+bool
+addrspace_info_area_entry_type_is_empty(
+	addrspace_info_area_entry_type_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+addrspace_info_area_entry_type_is_clean(
+	addrspace_info_area_entry_type_t bit_field);
+
 // Bitfield: addrspace_map_flags <uint32_t>
 typedef struct addrspace_map_flags_b {
 	// 0         bool partial
-	// 30:1      const uint64_t res0_0
+	// 1         bool private
+	// 2         bool vmmio
 	// 31        bool no_sync
 	uint32_t bf[1];
 } addrspace_map_flags_t;
@@ -210,14 +416,11 @@ typedef struct addrspace_map_flags_b {
 #define addrspace_map_flags_cast(val_0)                                        \
 	(addrspace_map_flags_t)                                                \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 addrspace_map_flags_raw(addrspace_map_flags_t bit_field);
-
-_Atomic uint32_t *
-addrspace_map_flags_atomic_ptr_raw(_Atomic addrspace_map_flags_t *ptr);
 
 void
 addrspace_map_flags_init(addrspace_map_flags_t *bit_field);
@@ -240,27 +443,170 @@ addrspace_map_flags_is_empty(addrspace_map_flags_t bit_field);
 bool
 addrspace_map_flags_is_clean(addrspace_map_flags_t bit_field);
 
-typedef enum addrspace_vmmio_configure_op_e {
-	ADDRSPACE_VMMIO_CONFIGURE_OP_ADD    = 0,
-	ADDRSPACE_VMMIO_CONFIGURE_OP_REMOVE = 1
-} addrspace_vmmio_configure_op_t;
+// Union of boolean fields of two addrspace_map_flags_t values
+addrspace_map_flags_t
+addrspace_map_flags_union(addrspace_map_flags_t b1, addrspace_map_flags_t b2);
 
-#define ADDRSPACE_VMMIO_CONFIGURE_OP__MAX ADDRSPACE_VMMIO_CONFIGURE_OP_REMOVE
-#define ADDRSPACE_VMMIO_CONFIGURE_OP__MIN ADDRSPACE_VMMIO_CONFIGURE_OP_ADD
+// Intersection of boolean fields of two addrspace_map_flags_t values
+addrspace_map_flags_t
+addrspace_map_flags_intersection(addrspace_map_flags_t b1,
+				 addrspace_map_flags_t b2);
+
+// Invert all boolean fields in a addrspace_map_flags_t value
+addrspace_map_flags_t
+addrspace_map_flags_inverse(addrspace_map_flags_t b);
+
+// Set difference of boolean fields of two addrspace_map_flags_t values
+addrspace_map_flags_t
+addrspace_map_flags_difference(addrspace_map_flags_t b1,
+			       addrspace_map_flags_t b2);
+
+// Atomically replace a addrspace_map_flags_t value with the union of its
+// boolean fields with a given addrspace_map_flags_t value, and return the
+// previous value.
+addrspace_map_flags_t
+addrspace_map_flags_atomic_union(_Atomic addrspace_map_flags_t *b1,
+				 addrspace_map_flags_t b2, memory_order order);
+
+// Atomically replace a addrspace_map_flags_t value with the intersection of its
+// boolean fields with a given addrspace_map_flags_t value, and return the
+// previous value.
+addrspace_map_flags_t
+addrspace_map_flags_atomic_intersection(_Atomic addrspace_map_flags_t *b1,
+					addrspace_map_flags_t	       b2,
+					memory_order		       order);
+
+// Atomically replace a addrspace_map_flags_t value with the set difference of
+// its boolean fields and a given addrspace_map_flags_t value, and return the
+// previous value.
+addrspace_map_flags_t
+addrspace_map_flags_atomic_difference(_Atomic addrspace_map_flags_t *b1,
+				      addrspace_map_flags_t	     b2,
+				      memory_order		     order);
+
+// Bitfield: addrspace_modify_pages_flags <uint32_t>
+typedef struct addrspace_modify_pages_flags_b {
+	// 0         bool unlock
+	// 1         bool sanitise
+	// 2         bool no_sync_unlock
+	uint32_t bf[1];
+} addrspace_modify_pages_flags_t;
+
+#define addrspace_modify_pages_flags_default()                                 \
+	(addrspace_modify_pages_flags_t)                                       \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define addrspace_modify_pages_flags_cast(val_0)                               \
+	(addrspace_modify_pages_flags_t)                                       \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint32_t
+addrspace_modify_pages_flags_raw(addrspace_modify_pages_flags_t bit_field);
+
+void
+addrspace_modify_pages_flags_init(addrspace_modify_pages_flags_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_clean(addrspace_modify_pages_flags_t bit_field);
+
+bool
+addrspace_modify_pages_flags_is_equal(addrspace_modify_pages_flags_t b1,
+				      addrspace_modify_pages_flags_t b2);
+
+bool
+addrspace_modify_pages_flags_is_empty(addrspace_modify_pages_flags_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+addrspace_modify_pages_flags_is_clean(addrspace_modify_pages_flags_t bit_field);
+
+// Union of boolean fields of two addrspace_modify_pages_flags_t values
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_union(addrspace_modify_pages_flags_t b1,
+				   addrspace_modify_pages_flags_t b2);
+
+// Intersection of boolean fields of two addrspace_modify_pages_flags_t values
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_intersection(addrspace_modify_pages_flags_t b1,
+					  addrspace_modify_pages_flags_t b2);
+
+// Invert all boolean fields in a addrspace_modify_pages_flags_t value
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_inverse(addrspace_modify_pages_flags_t b);
+
+// Set difference of boolean fields of two addrspace_modify_pages_flags_t values
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_difference(addrspace_modify_pages_flags_t b1,
+					addrspace_modify_pages_flags_t b2);
+
+// Atomically replace a addrspace_modify_pages_flags_t value with the union of
+// its boolean fields with a given addrspace_modify_pages_flags_t value, and
+// return the previous value.
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_atomic_union(
+	_Atomic addrspace_modify_pages_flags_t *b1,
+	addrspace_modify_pages_flags_t b2, memory_order order);
+
+// Atomically replace a addrspace_modify_pages_flags_t value with the
+// intersection of its boolean fields with a given
+// addrspace_modify_pages_flags_t value, and return the previous value.
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_atomic_intersection(
+	_Atomic addrspace_modify_pages_flags_t *b1,
+	addrspace_modify_pages_flags_t b2, memory_order order);
+
+// Atomically replace a addrspace_modify_pages_flags_t value with the set
+// difference of its boolean fields and a given addrspace_modify_pages_flags_t
+// value, and return the previous value.
+addrspace_modify_pages_flags_t
+addrspace_modify_pages_flags_atomic_difference(
+	_Atomic addrspace_modify_pages_flags_t *b1,
+	addrspace_modify_pages_flags_t b2, memory_order order);
+
+typedef enum addrspace_range_configure_op_e {
+	ADDRSPACE_RANGE_CONFIGURE_OP_ADD_VMMIO	    = 0,
+	ADDRSPACE_RANGE_CONFIGURE_OP_REMOVE_VMMIO   = 1,
+	ADDRSPACE_RANGE_CONFIGURE_OP_ADD_PRIVATE    = 2,
+	ADDRSPACE_RANGE_CONFIGURE_OP_REMOVE_PRIVATE = 3
+} addrspace_range_configure_op_t;
+
+#define ADDRSPACE_RANGE_CONFIGURE_OP__MAX                                      \
+	ADDRSPACE_RANGE_CONFIGURE_OP_REMOVE_PRIVATE
+#define ADDRSPACE_RANGE_CONFIGURE_OP__MIN ADDRSPACE_RANGE_CONFIGURE_OP_ADD_VMMIO
+
+typedef enum addrspace_resume_action_e {
+	ADDRSPACE_RESUME_ACTION_DEFAULT = 0,
+	ADDRSPACE_RESUME_ACTION_RETRY	= 1,
+	ADDRSPACE_RESUME_ACTION_FAULT	= 2
+} addrspace_resume_action_t;
+
+#define ADDRSPACE_RESUME_ACTION__MAX ADDRSPACE_RESUME_ACTION_FAULT
+#define ADDRSPACE_RESUME_ACTION__MIN ADDRSPACE_RESUME_ACTION_DEFAULT
+
+typedef uint64_t paddr_t;
 
 struct boot_env_phys_range_s {
 	paddr_t base;
 	size_t	size;
 };
 
-typedef uint32_t cap_rights_t;
-
 // Bitfield: cap_rights_addrspace <uint32_t>
 typedef struct cap_rights_addrspace_b {
 	// 0         bool attach
 	// 1         bool map
 	// 2         bool lookup
-	// 3         bool add_vmmio_range
+	// 3         bool configure_range
+	// 4         bool map_protected
+	// 5         bool modify_protected
+	// 6         bool add_info
 	// 31        bool object_activate
 	uint32_t bf[1];
 } cap_rights_addrspace_t;
@@ -274,14 +620,11 @@ typedef struct cap_rights_addrspace_b {
 #define cap_rights_addrspace_cast(val_0)                                       \
 	(cap_rights_addrspace_t)                                               \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_addrspace_raw(cap_rights_addrspace_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_addrspace_atomic_ptr_raw(_Atomic cap_rights_addrspace_t *ptr);
 
 void
 cap_rights_addrspace_init(cap_rights_addrspace_t *bit_field);
@@ -367,14 +710,11 @@ typedef struct cap_rights_cspace_b {
 #define cap_rights_cspace_cast(val_0)                                          \
 	(cap_rights_cspace_t)                                                  \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_cspace_raw(cap_rights_cspace_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_cspace_atomic_ptr_raw(_Atomic cap_rights_cspace_t *ptr);
 
 void
 cap_rights_cspace_init(cap_rights_cspace_t *bit_field);
@@ -451,14 +791,11 @@ typedef struct cap_rights_doorbell_b {
 #define cap_rights_doorbell_cast(val_0)                                        \
 	(cap_rights_doorbell_t)                                                \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_doorbell_raw(cap_rights_doorbell_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_doorbell_atomic_ptr_raw(_Atomic cap_rights_doorbell_t *ptr);
 
 void
 cap_rights_doorbell_init(cap_rights_doorbell_t *bit_field);
@@ -537,14 +874,11 @@ typedef struct cap_rights_generic_b {
 #define cap_rights_generic_cast(val_0)                                         \
 	(cap_rights_generic_t)                                                 \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_generic_raw(cap_rights_generic_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_generic_atomic_ptr_raw(_Atomic cap_rights_generic_t *ptr);
 
 void
 cap_rights_generic_init(cap_rights_generic_t *bit_field);
@@ -622,14 +956,11 @@ typedef struct cap_rights_hwirq_b {
 #define cap_rights_hwirq_cast(val_0)                                           \
 	(cap_rights_hwirq_t)                                                   \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_hwirq_raw(cap_rights_hwirq_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_hwirq_atomic_ptr_raw(_Atomic cap_rights_hwirq_t *ptr);
 
 void
 cap_rights_hwirq_init(cap_rights_hwirq_t *bit_field);
@@ -694,6 +1025,9 @@ typedef struct cap_rights_memextent_b {
 	// 2         bool attach
 	// 3         bool lookup
 	// 4         bool donate
+	// 5         bool protected_host
+	// 6         bool protected_guest
+	// 7         bool map_private
 	// 31        bool object_activate
 	uint32_t bf[1];
 } cap_rights_memextent_t;
@@ -707,14 +1041,11 @@ typedef struct cap_rights_memextent_b {
 #define cap_rights_memextent_cast(val_0)                                       \
 	(cap_rights_memextent_t)                                               \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_memextent_raw(cap_rights_memextent_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_memextent_atomic_ptr_raw(_Atomic cap_rights_memextent_t *ptr);
 
 void
 cap_rights_memextent_init(cap_rights_memextent_t *bit_field);
@@ -799,14 +1130,11 @@ typedef struct cap_rights_msgqueue_b {
 #define cap_rights_msgqueue_cast(val_0)                                        \
 	(cap_rights_msgqueue_t)                                                \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_msgqueue_raw(cap_rights_msgqueue_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_msgqueue_atomic_ptr_raw(_Atomic cap_rights_msgqueue_t *ptr);
 
 void
 cap_rights_msgqueue_init(cap_rights_msgqueue_t *bit_field);
@@ -887,14 +1215,11 @@ typedef struct cap_rights_partition_b {
 #define cap_rights_partition_cast(val_0)                                       \
 	(cap_rights_partition_t)                                               \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_partition_raw(cap_rights_partition_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_partition_atomic_ptr_raw(_Atomic cap_rights_partition_t *ptr);
 
 void
 cap_rights_partition_init(cap_rights_partition_t *bit_field);
@@ -959,6 +1284,7 @@ cap_rights_partition_t
 cap_rights_partition_atomic_difference(_Atomic cap_rights_partition_t *b1,
 				       cap_rights_partition_t	       b2,
 				       memory_order		       order);
+typedef uint32_t cap_rights_t;
 
 // Bitfield: cap_rights_thread <uint32_t>
 typedef struct cap_rights_thread_b {
@@ -985,14 +1311,11 @@ typedef struct cap_rights_thread_b {
 #define cap_rights_thread_cast(val_0)                                          \
 	(cap_rights_thread_t)                                                  \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_thread_raw(cap_rights_thread_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_thread_atomic_ptr_raw(_Atomic cap_rights_thread_t *ptr);
 
 void
 cap_rights_thread_init(cap_rights_thread_t *bit_field);
@@ -1069,14 +1392,11 @@ typedef struct cap_rights_vic_b {
 #define cap_rights_vic_cast(val_0)                                             \
 	(cap_rights_vic_t)                                                     \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_vic_raw(cap_rights_vic_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_vic_atomic_ptr_raw(_Atomic cap_rights_vic_t *ptr);
 
 void
 cap_rights_vic_init(cap_rights_vic_t *bit_field);
@@ -1134,97 +1454,94 @@ cap_rights_vic_t
 cap_rights_vic_atomic_difference(_Atomic cap_rights_vic_t *b1,
 				 cap_rights_vic_t b2, memory_order order);
 
-// Bitfield: cap_rights_virtio_mmio <uint32_t>
-typedef struct cap_rights_virtio_mmio_b {
-	// 0         bool bind_backend_virq
-	// 1         bool bind_frontend_virq
+// Bitfield: cap_rights_virtio_backend <uint32_t>
+typedef struct cap_rights_virtio_backend_b {
+	// 0         bool bind_virq
+	// 1         bool bind_mmio_frontend_virq
 	// 2         bool assert_virq
 	// 3         bool config
 	// 31        bool object_activate
 	uint32_t bf[1];
-} cap_rights_virtio_mmio_t;
+} cap_rights_virtio_backend_t;
 
-#define cap_rights_virtio_mmio_default()                                       \
-	(cap_rights_virtio_mmio_t)                                             \
+#define cap_rights_virtio_backend_default()                                    \
+	(cap_rights_virtio_backend_t)                                          \
 	{                                                                      \
 		.bf = { 0x0U }                                                 \
 	}
 
-#define cap_rights_virtio_mmio_cast(val_0)                                     \
-	(cap_rights_virtio_mmio_t)                                             \
+#define cap_rights_virtio_backend_cast(val_0)                                  \
+	(cap_rights_virtio_backend_t)                                          \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
-cap_rights_virtio_mmio_raw(cap_rights_virtio_mmio_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_virtio_mmio_atomic_ptr_raw(_Atomic cap_rights_virtio_mmio_t *ptr);
+cap_rights_virtio_backend_raw(cap_rights_virtio_backend_t bit_field);
 
 void
-cap_rights_virtio_mmio_init(cap_rights_virtio_mmio_t *bit_field);
+cap_rights_virtio_backend_init(cap_rights_virtio_backend_t *bit_field);
 
 // Set all unknown/unnamed fields to their expected default values.
 // Note, this does NOT clean const named fields to default values.
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_clean(cap_rights_virtio_mmio_t bit_field);
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_clean(cap_rights_virtio_backend_t bit_field);
 
 bool
-cap_rights_virtio_mmio_is_equal(cap_rights_virtio_mmio_t b1,
-				cap_rights_virtio_mmio_t b2);
+cap_rights_virtio_backend_is_equal(cap_rights_virtio_backend_t b1,
+				   cap_rights_virtio_backend_t b2);
 
 bool
-cap_rights_virtio_mmio_is_empty(cap_rights_virtio_mmio_t bit_field);
+cap_rights_virtio_backend_is_empty(cap_rights_virtio_backend_t bit_field);
 
 // Check all unknown/unnamed fields have expected default values.
 // Note, this does NOT check whether const named fields have their default
 // values.
 bool
-cap_rights_virtio_mmio_is_clean(cap_rights_virtio_mmio_t bit_field);
+cap_rights_virtio_backend_is_clean(cap_rights_virtio_backend_t bit_field);
 
-// Union of boolean fields of two cap_rights_virtio_mmio_t values
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_union(cap_rights_virtio_mmio_t b1,
-			     cap_rights_virtio_mmio_t b2);
+// Union of boolean fields of two cap_rights_virtio_backend_t values
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_union(cap_rights_virtio_backend_t b1,
+				cap_rights_virtio_backend_t b2);
 
-// Intersection of boolean fields of two cap_rights_virtio_mmio_t values
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_intersection(cap_rights_virtio_mmio_t b1,
-				    cap_rights_virtio_mmio_t b2);
+// Intersection of boolean fields of two cap_rights_virtio_backend_t values
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_intersection(cap_rights_virtio_backend_t b1,
+				       cap_rights_virtio_backend_t b2);
 
-// Invert all boolean fields in a cap_rights_virtio_mmio_t value
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_inverse(cap_rights_virtio_mmio_t b);
+// Invert all boolean fields in a cap_rights_virtio_backend_t value
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_inverse(cap_rights_virtio_backend_t b);
 
-// Set difference of boolean fields of two cap_rights_virtio_mmio_t values
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_difference(cap_rights_virtio_mmio_t b1,
-				  cap_rights_virtio_mmio_t b2);
+// Set difference of boolean fields of two cap_rights_virtio_backend_t values
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_difference(cap_rights_virtio_backend_t b1,
+				     cap_rights_virtio_backend_t b2);
 
-// Atomically replace a cap_rights_virtio_mmio_t value with the union of its
-// boolean fields with a given cap_rights_virtio_mmio_t value, and return the
+// Atomically replace a cap_rights_virtio_backend_t value with the union of its
+// boolean fields with a given cap_rights_virtio_backend_t value, and return the
 // previous value.
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_atomic_union(_Atomic cap_rights_virtio_mmio_t *b1,
-				    cap_rights_virtio_mmio_t	      b2,
-				    memory_order		      order);
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_atomic_union(_Atomic cap_rights_virtio_backend_t *b1,
+				       cap_rights_virtio_backend_t	    b2,
+				       memory_order order);
 
-// Atomically replace a cap_rights_virtio_mmio_t value with the intersection of
-// its boolean fields with a given cap_rights_virtio_mmio_t value, and return
-// the previous value.
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_atomic_intersection(_Atomic cap_rights_virtio_mmio_t *b1,
-					   cap_rights_virtio_mmio_t	     b2,
-					   memory_order order);
+// Atomically replace a cap_rights_virtio_backend_t value with the intersection
+// of its boolean fields with a given cap_rights_virtio_backend_t value, and
+// return the previous value.
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_atomic_intersection(
+	_Atomic cap_rights_virtio_backend_t *b1, cap_rights_virtio_backend_t b2,
+	memory_order order);
 
-// Atomically replace a cap_rights_virtio_mmio_t value with the set difference
-// of its boolean fields and a given cap_rights_virtio_mmio_t value, and return
-// the previous value.
-cap_rights_virtio_mmio_t
-cap_rights_virtio_mmio_atomic_difference(_Atomic cap_rights_virtio_mmio_t *b1,
-					 cap_rights_virtio_mmio_t	   b2,
-					 memory_order order);
+// Atomically replace a cap_rights_virtio_backend_t value with the set
+// difference of its boolean fields and a given cap_rights_virtio_backend_t
+// value, and return the previous value.
+cap_rights_virtio_backend_t
+cap_rights_virtio_backend_atomic_difference(
+	_Atomic cap_rights_virtio_backend_t *b1, cap_rights_virtio_backend_t b2,
+	memory_order order);
 
 // Bitfield: cap_rights_vpm_group <uint32_t>
 typedef struct cap_rights_vpm_group_b {
@@ -1244,14 +1561,11 @@ typedef struct cap_rights_vpm_group_b {
 #define cap_rights_vpm_group_cast(val_0)                                       \
 	(cap_rights_vpm_group_t)                                               \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 cap_rights_vpm_group_raw(cap_rights_vpm_group_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_vpm_group_atomic_ptr_raw(_Atomic cap_rights_vpm_group_t *ptr);
 
 void
 cap_rights_vpm_group_init(cap_rights_vpm_group_t *bit_field);
@@ -1317,89 +1631,91 @@ cap_rights_vpm_group_atomic_difference(_Atomic cap_rights_vpm_group_t *b1,
 				       cap_rights_vpm_group_t	       b2,
 				       memory_order		       order);
 
-// Bitfield: cap_rights_vrtc <uint32_t>
-typedef struct cap_rights_vrtc_b {
-	// 0         bool configure
-	// 1         bool attach_addrspace
-	// 2         bool set_time_base
+// Bitfield: cap_rights_watchdog <uint32_t>
+typedef struct cap_rights_watchdog_b {
+	// 0         bool attach_vcpu
+	// 1         bool bind_virq
+	// 2         bool manage
 	// 31        bool object_activate
 	uint32_t bf[1];
-} cap_rights_vrtc_t;
+} cap_rights_watchdog_t;
 
-#define cap_rights_vrtc_default()                                              \
-	(cap_rights_vrtc_t)                                                    \
+#define cap_rights_watchdog_default()                                          \
+	(cap_rights_watchdog_t)                                                \
 	{                                                                      \
 		.bf = { 0x0U }                                                 \
 	}
 
-#define cap_rights_vrtc_cast(val_0)                                            \
-	(cap_rights_vrtc_t)                                                    \
+#define cap_rights_watchdog_cast(val_0)                                        \
+	(cap_rights_watchdog_t)                                                \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
-cap_rights_vrtc_raw(cap_rights_vrtc_t bit_field);
-
-_Atomic uint32_t *
-cap_rights_vrtc_atomic_ptr_raw(_Atomic cap_rights_vrtc_t *ptr);
+cap_rights_watchdog_raw(cap_rights_watchdog_t bit_field);
 
 void
-cap_rights_vrtc_init(cap_rights_vrtc_t *bit_field);
+cap_rights_watchdog_init(cap_rights_watchdog_t *bit_field);
 
 // Set all unknown/unnamed fields to their expected default values.
 // Note, this does NOT clean const named fields to default values.
-cap_rights_vrtc_t
-cap_rights_vrtc_clean(cap_rights_vrtc_t bit_field);
+cap_rights_watchdog_t
+cap_rights_watchdog_clean(cap_rights_watchdog_t bit_field);
 
 bool
-cap_rights_vrtc_is_equal(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2);
+cap_rights_watchdog_is_equal(cap_rights_watchdog_t b1,
+			     cap_rights_watchdog_t b2);
 
 bool
-cap_rights_vrtc_is_empty(cap_rights_vrtc_t bit_field);
+cap_rights_watchdog_is_empty(cap_rights_watchdog_t bit_field);
 
 // Check all unknown/unnamed fields have expected default values.
 // Note, this does NOT check whether const named fields have their default
 // values.
 bool
-cap_rights_vrtc_is_clean(cap_rights_vrtc_t bit_field);
+cap_rights_watchdog_is_clean(cap_rights_watchdog_t bit_field);
 
-// Union of boolean fields of two cap_rights_vrtc_t values
-cap_rights_vrtc_t
-cap_rights_vrtc_union(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2);
+// Union of boolean fields of two cap_rights_watchdog_t values
+cap_rights_watchdog_t
+cap_rights_watchdog_union(cap_rights_watchdog_t b1, cap_rights_watchdog_t b2);
 
-// Intersection of boolean fields of two cap_rights_vrtc_t values
-cap_rights_vrtc_t
-cap_rights_vrtc_intersection(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2);
+// Intersection of boolean fields of two cap_rights_watchdog_t values
+cap_rights_watchdog_t
+cap_rights_watchdog_intersection(cap_rights_watchdog_t b1,
+				 cap_rights_watchdog_t b2);
 
-// Invert all boolean fields in a cap_rights_vrtc_t value
-cap_rights_vrtc_t
-cap_rights_vrtc_inverse(cap_rights_vrtc_t b);
+// Invert all boolean fields in a cap_rights_watchdog_t value
+cap_rights_watchdog_t
+cap_rights_watchdog_inverse(cap_rights_watchdog_t b);
 
-// Set difference of boolean fields of two cap_rights_vrtc_t values
-cap_rights_vrtc_t
-cap_rights_vrtc_difference(cap_rights_vrtc_t b1, cap_rights_vrtc_t b2);
+// Set difference of boolean fields of two cap_rights_watchdog_t values
+cap_rights_watchdog_t
+cap_rights_watchdog_difference(cap_rights_watchdog_t b1,
+			       cap_rights_watchdog_t b2);
 
-// Atomically replace a cap_rights_vrtc_t value with the union of its boolean
-// fields with a given cap_rights_vrtc_t value, and return the previous value.
-cap_rights_vrtc_t
-cap_rights_vrtc_atomic_union(_Atomic cap_rights_vrtc_t *b1,
-			     cap_rights_vrtc_t b2, memory_order order);
+// Atomically replace a cap_rights_watchdog_t value with the union of its
+// boolean fields with a given cap_rights_watchdog_t value, and return the
+// previous value.
+cap_rights_watchdog_t
+cap_rights_watchdog_atomic_union(_Atomic cap_rights_watchdog_t *b1,
+				 cap_rights_watchdog_t b2, memory_order order);
 
-// Atomically replace a cap_rights_vrtc_t value with the intersection of its
-// boolean fields with a given cap_rights_vrtc_t value, and return the previous
-// value.
-cap_rights_vrtc_t
-cap_rights_vrtc_atomic_intersection(_Atomic cap_rights_vrtc_t *b1,
-				    cap_rights_vrtc_t b2, memory_order order);
+// Atomically replace a cap_rights_watchdog_t value with the intersection of its
+// boolean fields with a given cap_rights_watchdog_t value, and return the
+// previous value.
+cap_rights_watchdog_t
+cap_rights_watchdog_atomic_intersection(_Atomic cap_rights_watchdog_t *b1,
+					cap_rights_watchdog_t	       b2,
+					memory_order		       order);
 
-// Atomically replace a cap_rights_vrtc_t value with the set difference of its
-// boolean fields and a given cap_rights_vrtc_t value, and return the previous
-// value.
-cap_rights_vrtc_t
-cap_rights_vrtc_atomic_difference(_Atomic cap_rights_vrtc_t *b1,
-				  cap_rights_vrtc_t b2, memory_order order);
-typedef uint32_t virq_t;
+// Atomically replace a cap_rights_watchdog_t value with the set difference of
+// its boolean fields and a given cap_rights_watchdog_t value, and return the
+// previous value.
+cap_rights_watchdog_t
+cap_rights_watchdog_atomic_difference(_Atomic cap_rights_watchdog_t *b1,
+				      cap_rights_watchdog_t	     b2,
+				      memory_order		     order);
 
 typedef enum error_e {
 	ERROR_RETRY			  = -2,
@@ -1413,6 +1729,8 @@ typedef enum error_e {
 	ERROR_ADDR_OVERFLOW		  = 20,
 	ERROR_ADDR_UNDERFLOW		  = 21,
 	ERROR_ADDR_INVALID		  = 22,
+	ERROR_ADDR_OVERLAP		  = 23,
+	ERROR_ADDR_NOTFOUND		  = 24,
 	ERROR_DENIED			  = 30,
 	ERROR_BUSY			  = 31,
 	ERROR_IDLE			  = 32,
@@ -1446,6 +1764,14 @@ typedef enum error_e {
 #define ERROR__MAX ERROR_EXISTING_MAPPING
 #define ERROR__MIN ERROR_RETRY
 
+typedef enum scheduler_variant_e {
+	SCHEDULER_VARIANT_TRIVIAL = 0,
+	SCHEDULER_VARIANT_FPRR	  = 1
+} scheduler_variant_t;
+
+#define SCHEDULER_VARIANT__MAX SCHEDULER_VARIANT_FPRR
+#define SCHEDULER_VARIANT__MIN SCHEDULER_VARIANT_TRIVIAL
+
 // Bitfield: hyp_api_flags0 <uint64_t>
 typedef struct hyp_api_flags0_b {
 	// 0         const bool partition_cspace
@@ -1460,7 +1786,8 @@ typedef struct hyp_api_flags0_b {
 	// 9         const bool virtio_mmio
 	// 10        const bool prng
 	// 11        const bool vcpu_run
-	// 63:32,27:17,15:12 const uint64_t res0_0
+	// 12        const bool trace_profile
+	// 63:32,27:17,15:13 const uint64_t res0_0
 	// 16        const bool reserved_16
 	// 31:28     const scheduler_variant_t scheduler
 	uint64_t bf[1];
@@ -1469,20 +1796,17 @@ typedef struct hyp_api_flags0_b {
 #define hyp_api_flags0_default()                                               \
 	(hyp_api_flags0_t)                                                     \
 	{                                                                      \
-		.bf = { 0x10000effU }                                          \
+		.bf = { 0x10000fffU }                                          \
 	}
 
 #define hyp_api_flags0_cast(val_0)                                             \
 	(hyp_api_flags0_t)                                                     \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 hyp_api_flags0_raw(hyp_api_flags0_t bit_field);
-
-_Atomic uint64_t *
-hyp_api_flags0_atomic_ptr_raw(_Atomic hyp_api_flags0_t *ptr);
 
 void
 hyp_api_flags0_init(hyp_api_flags0_t *bit_field);
@@ -1506,7 +1830,9 @@ hyp_api_flags0_is_clean(hyp_api_flags0_t bit_field);
 
 // Bitfield: hyp_api_flags1 <uint64_t>
 typedef struct hyp_api_flags1_b {
-	// 63:0      const uint64_t res0_0
+	// 0         const bool arm_v82_sve
+	// 1         const bool vgic_ext_spis
+	// 2         const bool vgic_ext_ppis
 	uint64_t bf[1];
 } hyp_api_flags1_t;
 
@@ -1519,14 +1845,11 @@ typedef struct hyp_api_flags1_b {
 #define hyp_api_flags1_cast(val_0)                                             \
 	(hyp_api_flags1_t)                                                     \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 hyp_api_flags1_raw(hyp_api_flags1_t bit_field);
-
-_Atomic uint64_t *
-hyp_api_flags1_atomic_ptr_raw(_Atomic hyp_api_flags1_t *ptr);
 
 void
 hyp_api_flags1_init(hyp_api_flags1_t *bit_field);
@@ -1548,6 +1871,42 @@ hyp_api_flags1_is_empty(hyp_api_flags1_t bit_field);
 bool
 hyp_api_flags1_is_clean(hyp_api_flags1_t bit_field);
 
+// Union of boolean fields of two hyp_api_flags1_t values
+hyp_api_flags1_t
+hyp_api_flags1_union(hyp_api_flags1_t b1, hyp_api_flags1_t b2);
+
+// Intersection of boolean fields of two hyp_api_flags1_t values
+hyp_api_flags1_t
+hyp_api_flags1_intersection(hyp_api_flags1_t b1, hyp_api_flags1_t b2);
+
+// Invert all boolean fields in a hyp_api_flags1_t value
+hyp_api_flags1_t
+hyp_api_flags1_inverse(hyp_api_flags1_t b);
+
+// Set difference of boolean fields of two hyp_api_flags1_t values
+hyp_api_flags1_t
+hyp_api_flags1_difference(hyp_api_flags1_t b1, hyp_api_flags1_t b2);
+
+// Atomically replace a hyp_api_flags1_t value with the union of its boolean
+// fields with a given hyp_api_flags1_t value, and return the previous value.
+hyp_api_flags1_t
+hyp_api_flags1_atomic_union(_Atomic hyp_api_flags1_t *b1, hyp_api_flags1_t b2,
+			    memory_order order);
+
+// Atomically replace a hyp_api_flags1_t value with the intersection of its
+// boolean fields with a given hyp_api_flags1_t value, and return the previous
+// value.
+hyp_api_flags1_t
+hyp_api_flags1_atomic_intersection(_Atomic hyp_api_flags1_t *b1,
+				   hyp_api_flags1_t b2, memory_order order);
+
+// Atomically replace a hyp_api_flags1_t value with the set difference of its
+// boolean fields and a given hyp_api_flags1_t value, and return the previous
+// value.
+hyp_api_flags1_t
+hyp_api_flags1_atomic_difference(_Atomic hyp_api_flags1_t *b1,
+				 hyp_api_flags1_t b2, memory_order order);
+
 // Bitfield: hyp_api_flags2 <uint64_t>
 typedef struct hyp_api_flags2_b {
 	// 63:0      const uint64_t res0_0
@@ -1563,14 +1922,11 @@ typedef struct hyp_api_flags2_b {
 #define hyp_api_flags2_cast(val_0)                                             \
 	(hyp_api_flags2_t)                                                     \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 hyp_api_flags2_raw(hyp_api_flags2_t bit_field);
-
-_Atomic uint64_t *
-hyp_api_flags2_atomic_ptr_raw(_Atomic hyp_api_flags2_t *ptr);
 
 void
 hyp_api_flags2_init(hyp_api_flags2_t *bit_field);
@@ -1619,14 +1975,11 @@ typedef struct hyp_api_info_b {
 #define hyp_api_info_cast(val_0)                                               \
 	(hyp_api_info_t)                                                       \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 hyp_api_info_raw(hyp_api_info_t bit_field);
-
-_Atomic uint64_t *
-hyp_api_info_atomic_ptr_raw(_Atomic hyp_api_info_t *ptr);
 
 void
 hyp_api_info_init(hyp_api_info_t *bit_field);
@@ -1648,23 +2001,20 @@ hyp_api_info_is_empty(hyp_api_info_t bit_field);
 bool
 hyp_api_info_is_clean(hyp_api_info_t bit_field);
 
-typedef enum memextent_memtype_e {
-	MEMEXTENT_MEMTYPE_ANY	   = 0,
-	MEMEXTENT_MEMTYPE_DEVICE   = 1,
-	MEMEXTENT_MEMTYPE_UNCACHED = 2,
-	MEMEXTENT_MEMTYPE_CACHED   = 3
-} memextent_memtype_t;
+typedef uint32_t index_t;
 
-#define MEMEXTENT_MEMTYPE__MAX MEMEXTENT_MEMTYPE_CACHED
-#define MEMEXTENT_MEMTYPE__MIN MEMEXTENT_MEMTYPE_ANY
+typedef enum pgtable_access_e {
+	PGTABLE_ACCESS_NONE = 0,
+	PGTABLE_ACCESS_X    = 1,
+	PGTABLE_ACCESS_W    = 2,
+	PGTABLE_ACCESS_R    = 4,
+	PGTABLE_ACCESS_RX   = 5,
+	PGTABLE_ACCESS_RW   = 6,
+	PGTABLE_ACCESS_RWX  = 7
+} pgtable_access_t;
 
-typedef enum memextent_type_e {
-	MEMEXTENT_TYPE_BASIC  = 0,
-	MEMEXTENT_TYPE_SPARSE = 1
-} memextent_type_t;
-
-#define MEMEXTENT_TYPE__MAX MEMEXTENT_TYPE_SPARSE
-#define MEMEXTENT_TYPE__MIN MEMEXTENT_TYPE_BASIC
+#define PGTABLE_ACCESS__MAX PGTABLE_ACCESS_RWX
+#define PGTABLE_ACCESS__MIN PGTABLE_ACCESS_NONE
 
 // Bitfield: memextent_access_attrs <uint32_t>
 typedef struct memextent_access_attrs_b {
@@ -1683,14 +2033,11 @@ typedef struct memextent_access_attrs_b {
 #define memextent_access_attrs_cast(val_0)                                     \
 	(memextent_access_attrs_t)                                             \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 memextent_access_attrs_raw(memextent_access_attrs_t bit_field);
-
-_Atomic uint32_t *
-memextent_access_attrs_atomic_ptr_raw(_Atomic memextent_access_attrs_t *ptr);
 
 void
 memextent_access_attrs_init(memextent_access_attrs_t *bit_field);
@@ -1713,13 +2060,30 @@ memextent_access_attrs_is_empty(memextent_access_attrs_t bit_field);
 bool
 memextent_access_attrs_is_clean(memextent_access_attrs_t bit_field);
 
+typedef enum memextent_memtype_e {
+	MEMEXTENT_MEMTYPE_ANY	   = 0,
+	MEMEXTENT_MEMTYPE_DEVICE   = 1,
+	MEMEXTENT_MEMTYPE_UNCACHED = 2,
+	MEMEXTENT_MEMTYPE_CACHED   = 3
+} memextent_memtype_t;
+
+#define MEMEXTENT_MEMTYPE__MAX MEMEXTENT_MEMTYPE_CACHED
+#define MEMEXTENT_MEMTYPE__MIN MEMEXTENT_MEMTYPE_ANY
+
+typedef enum memextent_type_e {
+	MEMEXTENT_TYPE_BASIC  = 0,
+	MEMEXTENT_TYPE_SPARSE = 1
+} memextent_type_t;
+
+#define MEMEXTENT_TYPE__MAX MEMEXTENT_TYPE_SPARSE
+#define MEMEXTENT_TYPE__MIN MEMEXTENT_TYPE_BASIC
+
 // Bitfield: memextent_attrs <uint32_t>
 typedef struct memextent_attrs_b {
 	// 2:0       pgtable_access_t access
-	// 30:18,15:10,7:3 const uint64_t res_0
+	// 31:18,15:10,7:3 const uint64_t res_0
 	// 9:8       memextent_memtype_t memtype
 	// 17:16     memextent_type_t type
-	// 31        bool append
 	uint32_t bf[1];
 } memextent_attrs_t;
 
@@ -1732,14 +2096,11 @@ typedef struct memextent_attrs_b {
 #define memextent_attrs_cast(val_0)                                            \
 	(memextent_attrs_t)                                                    \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 memextent_attrs_raw(memextent_attrs_t bit_field);
-
-_Atomic uint32_t *
-memextent_attrs_atomic_ptr_raw(_Atomic memextent_attrs_t *ptr);
 
 void
 memextent_attrs_init(memextent_attrs_t *bit_field);
@@ -1761,61 +2122,15 @@ memextent_attrs_is_empty(memextent_attrs_t bit_field);
 bool
 memextent_attrs_is_clean(memextent_attrs_t bit_field);
 
-// Bitfield: memextent_mapping_attrs <uint32_t>
-typedef struct memextent_mapping_attrs_b {
-	// 2:0       pgtable_access_t user_access
-	// 31:24,15:7,3 const uint64_t res_0
-	// 6:4       pgtable_access_t kernel_access
-	// 23:16     pgtable_vm_memtype_t memtype
-	uint32_t bf[1];
-} memextent_mapping_attrs_t;
-
-#define memextent_mapping_attrs_default()                                      \
-	(memextent_mapping_attrs_t)                                            \
-	{                                                                      \
-		.bf = { 0x0U }                                                 \
-	}
-
-#define memextent_mapping_attrs_cast(val_0)                                    \
-	(memextent_mapping_attrs_t)                                            \
-	{                                                                      \
-		.bf = { val_0 }                                                \
-	}
-
-uint32_t
-memextent_mapping_attrs_raw(memextent_mapping_attrs_t bit_field);
-
-_Atomic uint32_t *
-memextent_mapping_attrs_atomic_ptr_raw(_Atomic memextent_mapping_attrs_t *ptr);
-
-void
-memextent_mapping_attrs_init(memextent_mapping_attrs_t *bit_field);
-
-// Set all unknown/unnamed fields to their expected default values.
-// Note, this does NOT clean const named fields to default values.
-memextent_mapping_attrs_t
-memextent_mapping_attrs_clean(memextent_mapping_attrs_t bit_field);
-
-bool
-memextent_mapping_attrs_is_equal(memextent_mapping_attrs_t b1,
-				 memextent_mapping_attrs_t b2);
-
-bool
-memextent_mapping_attrs_is_empty(memextent_mapping_attrs_t bit_field);
-
-// Check all unknown/unnamed fields have expected default values.
-// Note, this does NOT check whether const named fields have their default
-// values.
-bool
-memextent_mapping_attrs_is_clean(memextent_mapping_attrs_t bit_field);
-
 typedef enum memextent_donate_type_e {
-	MEMEXTENT_DONATE_TYPE_TO_CHILD	 = 0,
-	MEMEXTENT_DONATE_TYPE_TO_PARENT	 = 1,
-	MEMEXTENT_DONATE_TYPE_TO_SIBLING = 2
+	MEMEXTENT_DONATE_TYPE_TO_CHILD	     = 0,
+	MEMEXTENT_DONATE_TYPE_TO_PARENT	     = 1,
+	MEMEXTENT_DONATE_TYPE_TO_SIBLING     = 2,
+	MEMEXTENT_DONATE_TYPE_TO_PROTECTED   = 3,
+	MEMEXTENT_DONATE_TYPE_FROM_PROTECTED = 4
 } memextent_donate_type_t;
 
-#define MEMEXTENT_DONATE_TYPE__MAX MEMEXTENT_DONATE_TYPE_TO_SIBLING
+#define MEMEXTENT_DONATE_TYPE__MAX MEMEXTENT_DONATE_TYPE_FROM_PROTECTED
 #define MEMEXTENT_DONATE_TYPE__MIN MEMEXTENT_DONATE_TYPE_TO_CHILD
 
 // Bitfield: memextent_donate_options <uint32_t>
@@ -1835,14 +2150,11 @@ typedef struct memextent_donate_options_b {
 #define memextent_donate_options_cast(val_0)                                   \
 	(memextent_donate_options_t)                                           \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 memextent_donate_options_raw(memextent_donate_options_t bit_field);
-
-_Atomic uint32_t *
-memextent_donate_options_atomic_ptr_raw(_Atomic memextent_donate_options_t *ptr);
 
 void
 memextent_donate_options_init(memextent_donate_options_t *bit_field);
@@ -1865,11 +2177,76 @@ memextent_donate_options_is_empty(memextent_donate_options_t bit_field);
 bool
 memextent_donate_options_is_clean(memextent_donate_options_t bit_field);
 
+typedef enum pgtable_vm_memtype_e {
+	PGTABLE_VM_MEMTYPE_DEVICE_NGNRNE  = 0,
+	PGTABLE_VM_MEMTYPE_DEVICE_NGNRE	  = 1,
+	PGTABLE_VM_MEMTYPE_DEVICE_NGRE	  = 2,
+	PGTABLE_VM_MEMTYPE_DEVICE_GRE	  = 3,
+	PGTABLE_VM_MEMTYPE_NORMAL_NC	  = 5,
+	PGTABLE_VM_MEMTYPE_NORMAL_ONC_IWT = 6,
+	PGTABLE_VM_MEMTYPE_NORMAL_ONC_IWB = 7,
+	PGTABLE_VM_MEMTYPE_NORMAL_OWT_INC = 9,
+	PGTABLE_VM_MEMTYPE_NORMAL_WT	  = 10,
+	PGTABLE_VM_MEMTYPE_NORMAL_OWT_IWB = 11,
+	PGTABLE_VM_MEMTYPE_NORMAL_OWB_INC = 13,
+	PGTABLE_VM_MEMTYPE_NORMAL_OWB_IWT = 14,
+	PGTABLE_VM_MEMTYPE_NORMAL_WB	  = 15
+} pgtable_vm_memtype_t;
+
+#define PGTABLE_VM_MEMTYPE__MAX PGTABLE_VM_MEMTYPE_NORMAL_WB
+#define PGTABLE_VM_MEMTYPE__MIN PGTABLE_VM_MEMTYPE_DEVICE_NGNRNE
+
+// Bitfield: memextent_mapping_attrs <uint32_t>
+typedef struct memextent_mapping_attrs_b {
+	// 2:0       pgtable_access_t user_access
+	// 31:24,15:7,3 const uint64_t res_0
+	// 6:4       pgtable_access_t kernel_access
+	// 23:16     pgtable_vm_memtype_t memtype
+	uint32_t bf[1];
+} memextent_mapping_attrs_t;
+
+#define memextent_mapping_attrs_default()                                      \
+	(memextent_mapping_attrs_t)                                            \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define memextent_mapping_attrs_cast(val_0)                                    \
+	(memextent_mapping_attrs_t)                                            \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint32_t
+memextent_mapping_attrs_raw(memextent_mapping_attrs_t bit_field);
+
+void
+memextent_mapping_attrs_init(memextent_mapping_attrs_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+memextent_mapping_attrs_t
+memextent_mapping_attrs_clean(memextent_mapping_attrs_t bit_field);
+
+bool
+memextent_mapping_attrs_is_equal(memextent_mapping_attrs_t b1,
+				 memextent_mapping_attrs_t b2);
+
+bool
+memextent_mapping_attrs_is_empty(memextent_mapping_attrs_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+memextent_mapping_attrs_is_clean(memextent_mapping_attrs_t bit_field);
+
 typedef enum memextent_modify_op_e {
 	MEMEXTENT_MODIFY_OP_UNMAP_ALL	      = 0,
 	MEMEXTENT_MODIFY_OP_ZERO_RANGE	      = 1,
 	MEMEXTENT_MODIFY_OP_CACHE_CLEAN_RANGE = 2,
 	MEMEXTENT_MODIFY_OP_CACHE_FLUSH_RANGE = 3,
+	MEMEXTENT_MODIFY_OP_SANITISE_ON_RESET = 4,
 	MEMEXTENT_MODIFY_OP_SYNC_ALL	      = 255
 } memextent_modify_op_t;
 
@@ -1893,14 +2270,11 @@ typedef struct memextent_modify_flags_b {
 #define memextent_modify_flags_cast(val_0)                                     \
 	(memextent_modify_flags_t)                                             \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 memextent_modify_flags_raw(memextent_modify_flags_t bit_field);
-
-_Atomic uint32_t *
-memextent_modify_flags_atomic_ptr_raw(_Atomic memextent_modify_flags_t *ptr);
 
 void
 memextent_modify_flags_init(memextent_modify_flags_t *bit_field);
@@ -1923,6 +2297,7 @@ memextent_modify_flags_is_empty(memextent_modify_flags_t bit_field);
 bool
 memextent_modify_flags_is_clean(memextent_modify_flags_t bit_field);
 
+typedef uint64_t microseconds_t;
 typedef uint64_t milliseconds_t;
 
 // Bitfield: msgqueue_create_info <uint64_t>
@@ -1941,14 +2316,11 @@ typedef struct msgqueue_create_info_b {
 #define msgqueue_create_info_cast(val_0)                                       \
 	(msgqueue_create_info_t)                                               \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 msgqueue_create_info_raw(msgqueue_create_info_t bit_field);
-
-_Atomic uint64_t *
-msgqueue_create_info_atomic_ptr_raw(_Atomic msgqueue_create_info_t *ptr);
 
 void
 msgqueue_create_info_init(msgqueue_create_info_t *bit_field);
@@ -1986,14 +2358,11 @@ typedef struct msgqueue_send_flags_b {
 #define msgqueue_send_flags_cast(val_0)                                        \
 	(msgqueue_send_flags_t)                                                \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 msgqueue_send_flags_raw(msgqueue_send_flags_t bit_field);
-
-_Atomic uint32_t *
-msgqueue_send_flags_atomic_ptr_raw(_Atomic msgqueue_send_flags_t *ptr);
 
 void
 msgqueue_send_flags_init(msgqueue_send_flags_t *bit_field);
@@ -2056,6 +2425,7 @@ msgqueue_send_flags_t
 msgqueue_send_flags_atomic_difference(_Atomic msgqueue_send_flags_t *b1,
 				      msgqueue_send_flags_t	     b2,
 				      memory_order		     order);
+typedef uint64_t register_t;
 
 struct rm_env_data_hdr_s {
 	uint32_t signature;
@@ -2070,6 +2440,7 @@ typedef struct root_env_mmio_range_properties_b {
 	// 31:0      uint32_t num_pages
 	// 34:32     pgtable_access_t access
 	// 47:40     uint8_t res_s2pt_attr
+	// 62        bool pvm_unmapped
 	// 63        bool non_exclusive
 	uint64_t bf[1];
 } root_env_mmio_range_properties_t;
@@ -2083,15 +2454,11 @@ typedef struct root_env_mmio_range_properties_b {
 #define root_env_mmio_range_properties_cast(val_0)                             \
 	(root_env_mmio_range_properties_t)                                     \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 root_env_mmio_range_properties_raw(root_env_mmio_range_properties_t bit_field);
-
-_Atomic uint64_t *
-root_env_mmio_range_properties_atomic_ptr_raw(
-	_Atomic root_env_mmio_range_properties_t *ptr);
 
 void
 root_env_mmio_range_properties_init(root_env_mmio_range_properties_t *bit_field);
@@ -2120,6 +2487,8 @@ struct root_env_mmio_range_descriptor_s {
 	paddr_t				 address;
 	root_env_mmio_range_properties_t attrs;
 };
+
+typedef uint64_t vmaddr_t;
 
 struct rt_env_data_s {
 	uint32_t signature;
@@ -2162,14 +2531,11 @@ typedef struct scheduler_yield_control_b {
 #define scheduler_yield_control_cast(val_0)                                    \
 	(scheduler_yield_control_t)                                            \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 scheduler_yield_control_raw(scheduler_yield_control_t bit_field);
-
-_Atomic uint32_t *
-scheduler_yield_control_atomic_ptr_raw(_Atomic scheduler_yield_control_t *ptr);
 
 void
 scheduler_yield_control_init(scheduler_yield_control_t *bit_field);
@@ -2238,14 +2604,11 @@ typedef struct smccc_function_id_b {
 #define smccc_function_id_cast(val_0)                                          \
 	(smccc_function_id_t)                                                  \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 smccc_function_id_raw(smccc_function_id_t bit_field);
-
-_Atomic uint32_t *
-smccc_function_id_atomic_ptr_raw(_Atomic smccc_function_id_t *ptr);
 
 void
 smccc_function_id_init(smccc_function_id_t *bit_field);
@@ -2312,15 +2675,11 @@ typedef struct smccc_vendor_hyp_function_id_b {
 #define smccc_vendor_hyp_function_id_cast(val_0)                               \
 	(smccc_vendor_hyp_function_id_t)                                       \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint16_t
 smccc_vendor_hyp_function_id_raw(smccc_vendor_hyp_function_id_t bit_field);
-
-_Atomic uint16_t *
-smccc_vendor_hyp_function_id_atomic_ptr_raw(
-	_Atomic smccc_vendor_hyp_function_id_t *ptr);
 
 void
 smccc_vendor_hyp_function_id_init(smccc_vendor_hyp_function_id_t *bit_field);
@@ -2343,7 +2702,34 @@ smccc_vendor_hyp_function_id_is_empty(smccc_vendor_hyp_function_id_t bit_field);
 bool
 smccc_vendor_hyp_function_id_is_clean(smccc_vendor_hyp_function_id_t bit_field);
 
-typedef int64_t sregister_t;
+typedef int64_t	 sregister_t;
+typedef uint64_t ticks_t;
+
+typedef enum trace_class_e {
+	TRACE_CLASS_ERROR	     = 0,
+	TRACE_CLASS_DEBUG	     = 1,
+	TRACE_CLASS_USER	     = 2,
+	TRACE_CLASS_TRACE_LOG_BUFFER = 4,
+	TRACE_CLASS_LOG_BUFFER	     = 5,
+	TRACE_CLASS_INFO	     = 6,
+	TRACE_CLASS_MEMDB	     = 7,
+	TRACE_CLASS_PSCI	     = 16,
+	TRACE_CLASS_VGIC	     = 17,
+	TRACE_CLASS_VGIC_DEBUG	     = 18
+} trace_class_t;
+
+#define TRACE_CLASS__MAX TRACE_CLASS_VGIC_DEBUG
+#define TRACE_CLASS__MIN TRACE_CLASS_ERROR
+
+typedef char *user_ptr_t;
+
+typedef enum vcpu_affinity_type_e {
+	VCPU_AFFINITY_TYPE_CPU_INDEX	      = -1,
+	VCPU_AFFINITY_TYPE_PLATFORM_CPU_INDEX = 0
+} vcpu_affinity_type_t;
+
+#define VCPU_AFFINITY_TYPE__MAX VCPU_AFFINITY_TYPE_PLATFORM_CPU_INDEX
+#define VCPU_AFFINITY_TYPE__MIN VCPU_AFFINITY_TYPE_CPU_INDEX
 
 // Bitfield: vcpu_option_flags <uint64_t>
 typedef struct vcpu_option_flags_b {
@@ -2368,14 +2754,11 @@ typedef struct vcpu_option_flags_b {
 #define vcpu_option_flags_cast(val_0)                                          \
 	(vcpu_option_flags_t)                                                  \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 vcpu_option_flags_raw(vcpu_option_flags_t bit_field);
-
-_Atomic uint64_t *
-vcpu_option_flags_atomic_ptr_raw(_Atomic vcpu_option_flags_t *ptr);
 
 void
 vcpu_option_flags_init(vcpu_option_flags_t *bit_field);
@@ -2434,38 +2817,6 @@ vcpu_option_flags_t
 vcpu_option_flags_atomic_difference(_Atomic vcpu_option_flags_t *b1,
 				    vcpu_option_flags_t b2, memory_order order);
 
-typedef enum vcpu_run_state_e {
-	VCPU_RUN_STATE_READY		     = 0,
-	VCPU_RUN_STATE_EXPECTS_WAKEUP	     = 1,
-	VCPU_RUN_STATE_POWERED_OFF	     = 2,
-	VCPU_RUN_STATE_BLOCKED		     = 3,
-	VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ  = 4,
-	VCPU_RUN_STATE_ADDRSPACE_VMMIO_WRITE = 5,
-	VCPU_RUN_STATE_FAULT		     = 6,
-	VCPU_RUN_STATE_PSCI_SYSTEM_RESET     = 256
-} vcpu_run_state_t;
-
-#define VCPU_RUN_STATE__MAX VCPU_RUN_STATE_PSCI_SYSTEM_RESET
-#define VCPU_RUN_STATE__MIN VCPU_RUN_STATE_READY
-
-typedef enum trace_class_e {
-	TRACE_CLASS_ERROR	     = 0,
-	TRACE_CLASS_DEBUG	     = 1,
-	TRACE_CLASS_USER	     = 2,
-	TRACE_CLASS_TRACE_LOG_BUFFER = 4,
-	TRACE_CLASS_LOG_BUFFER	     = 5,
-	TRACE_CLASS_INFO	     = 6,
-	TRACE_CLASS_MEMDB	     = 7,
-	TRACE_CLASS_PSCI	     = 16,
-	TRACE_CLASS_VGIC	     = 17,
-	TRACE_CLASS_VGIC_DEBUG	     = 18
-} trace_class_t;
-
-#define TRACE_CLASS__MAX TRACE_CLASS_VGIC_DEBUG
-#define TRACE_CLASS__MIN TRACE_CLASS_ERROR
-
-typedef char *user_ptr_t;
-
 // Bitfield: vcpu_poweroff_flags <uint64_t>
 typedef struct vcpu_poweroff_flags_b {
 	// 0         bool last_vcpu
@@ -2481,14 +2832,11 @@ typedef struct vcpu_poweroff_flags_b {
 #define vcpu_poweroff_flags_cast(val_0)                                        \
 	(vcpu_poweroff_flags_t)                                                \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 vcpu_poweroff_flags_raw(vcpu_poweroff_flags_t bit_field);
-
-_Atomic uint64_t *
-vcpu_poweroff_flags_atomic_ptr_raw(_Atomic vcpu_poweroff_flags_t *ptr);
 
 void
 vcpu_poweroff_flags_init(vcpu_poweroff_flags_t *bit_field);
@@ -2568,14 +2916,11 @@ typedef struct vcpu_poweron_flags_b {
 #define vcpu_poweron_flags_cast(val_0)                                         \
 	(vcpu_poweron_flags_t)                                                 \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 vcpu_poweron_flags_raw(vcpu_poweron_flags_t bit_field);
-
-_Atomic uint64_t *
-vcpu_poweron_flags_atomic_ptr_raw(_Atomic vcpu_poweron_flags_t *ptr);
 
 void
 vcpu_poweron_flags_init(vcpu_poweron_flags_t *bit_field);
@@ -2661,14 +3006,11 @@ typedef struct vcpu_run_poweroff_flags_b {
 #define vcpu_run_poweroff_flags_cast(val_0)                                    \
 	(vcpu_run_poweroff_flags_t)                                            \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint32_t
 vcpu_run_poweroff_flags_raw(vcpu_run_poweroff_flags_t bit_field);
-
-_Atomic uint32_t *
-vcpu_run_poweroff_flags_atomic_ptr_raw(_Atomic vcpu_run_poweroff_flags_t *ptr);
 
 void
 vcpu_run_poweroff_flags_init(vcpu_run_poweroff_flags_t *bit_field);
@@ -2734,6 +3076,21 @@ vcpu_run_poweroff_flags_atomic_difference(_Atomic vcpu_run_poweroff_flags_t *b1,
 					  vcpu_run_poweroff_flags_t	     b2,
 					  memory_order order);
 
+typedef enum vcpu_run_state_e {
+	VCPU_RUN_STATE_READY		     = 0,
+	VCPU_RUN_STATE_EXPECTS_WAKEUP	     = 1,
+	VCPU_RUN_STATE_POWERED_OFF	     = 2,
+	VCPU_RUN_STATE_BLOCKED		     = 3,
+	VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ  = 4,
+	VCPU_RUN_STATE_ADDRSPACE_VMMIO_WRITE = 5,
+	VCPU_RUN_STATE_FAULT		     = 6,
+	VCPU_RUN_STATE_ADDRSPACE_PAGE_FAULT  = 7,
+	VCPU_RUN_STATE_PSCI_SYSTEM_RESET     = 256
+} vcpu_run_state_t;
+
+#define VCPU_RUN_STATE__MAX VCPU_RUN_STATE_PSCI_SYSTEM_RESET
+#define VCPU_RUN_STATE__MIN VCPU_RUN_STATE_READY
+
 typedef enum vcpu_run_wakeup_from_state_e {
 	VCPU_RUN_WAKEUP_FROM_STATE_UNSPECIFIED	       = 0,
 	VCPU_RUN_WAKEUP_FROM_STATE_WFI		       = 1,
@@ -2770,14 +3127,11 @@ typedef struct vic_option_flags_b {
 #define vic_option_flags_cast(val_0)                                           \
 	(vic_option_flags_t)                                                   \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 vic_option_flags_raw(vic_option_flags_t bit_field);
-
-_Atomic uint64_t *
-vic_option_flags_atomic_ptr_raw(_Atomic vic_option_flags_t *ptr);
 
 void
 vic_option_flags_init(vic_option_flags_t *bit_field);
@@ -2799,152 +3153,278 @@ vic_option_flags_is_empty(vic_option_flags_t bit_field);
 bool
 vic_option_flags_is_clean(vic_option_flags_t bit_field);
 
-typedef enum virtio_device_type_e {
-	VIRTIO_DEVICE_TYPE_INVALID = 0,
-	VIRTIO_DEVICE_TYPE_INPUT   = 18
-} virtio_device_type_t;
-
-#define VIRTIO_DEVICE_TYPE__MAX VIRTIO_DEVICE_TYPE_INPUT
-#define VIRTIO_DEVICE_TYPE__MIN VIRTIO_DEVICE_TYPE_INVALID
-
-// Bitfield: virtio_mmio_notify_reason <uint64_t>
-typedef struct virtio_mmio_notify_reason_b {
+// Bitfield: virtio_backend_notify_reason <uint64_t>
+typedef struct virtio_backend_notify_reason_b {
 	// 0         bool new_buffer
-	// 1         bool reset_rqst
-	// 2         const bool res0_irq_ack
+	// 1         bool reset_request
+	// 2         const bool res0_2
 	// 3         bool driver_ok
 	// 4         bool failed
 	uint64_t bf[1];
-} virtio_mmio_notify_reason_t;
+} virtio_backend_notify_reason_t;
 
-#define virtio_mmio_notify_reason_default()                                    \
-	(virtio_mmio_notify_reason_t)                                          \
+#define virtio_backend_notify_reason_default()                                 \
+	(virtio_backend_notify_reason_t)                                       \
 	{                                                                      \
 		.bf = { 0x0U }                                                 \
 	}
 
-#define virtio_mmio_notify_reason_cast(val_0)                                  \
-	(virtio_mmio_notify_reason_t)                                          \
+#define virtio_backend_notify_reason_cast(val_0)                               \
+	(virtio_backend_notify_reason_t)                                       \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
-virtio_mmio_notify_reason_raw(virtio_mmio_notify_reason_t bit_field);
-
-_Atomic uint64_t *
-virtio_mmio_notify_reason_atomic_ptr_raw(
-	_Atomic virtio_mmio_notify_reason_t *ptr);
+virtio_backend_notify_reason_raw(virtio_backend_notify_reason_t bit_field);
 
 void
-virtio_mmio_notify_reason_init(virtio_mmio_notify_reason_t *bit_field);
+virtio_backend_notify_reason_init(virtio_backend_notify_reason_t *bit_field);
 
 // Set all unknown/unnamed fields to their expected default values.
 // Note, this does NOT clean const named fields to default values.
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_clean(virtio_mmio_notify_reason_t bit_field);
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_clean(virtio_backend_notify_reason_t bit_field);
 
 bool
-virtio_mmio_notify_reason_is_equal(virtio_mmio_notify_reason_t b1,
-				   virtio_mmio_notify_reason_t b2);
+virtio_backend_notify_reason_is_equal(virtio_backend_notify_reason_t b1,
+				      virtio_backend_notify_reason_t b2);
 
 bool
-virtio_mmio_notify_reason_is_empty(virtio_mmio_notify_reason_t bit_field);
+virtio_backend_notify_reason_is_empty(virtio_backend_notify_reason_t bit_field);
 
 // Check all unknown/unnamed fields have expected default values.
 // Note, this does NOT check whether const named fields have their default
 // values.
 bool
-virtio_mmio_notify_reason_is_clean(virtio_mmio_notify_reason_t bit_field);
+virtio_backend_notify_reason_is_clean(virtio_backend_notify_reason_t bit_field);
 
-// Union of boolean fields of two virtio_mmio_notify_reason_t values
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_union(virtio_mmio_notify_reason_t b1,
-				virtio_mmio_notify_reason_t b2);
+// Union of boolean fields of two virtio_backend_notify_reason_t values
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_union(virtio_backend_notify_reason_t b1,
+				   virtio_backend_notify_reason_t b2);
 
-// Intersection of boolean fields of two virtio_mmio_notify_reason_t values
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_intersection(virtio_mmio_notify_reason_t b1,
-				       virtio_mmio_notify_reason_t b2);
+// Intersection of boolean fields of two virtio_backend_notify_reason_t values
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_intersection(virtio_backend_notify_reason_t b1,
+					  virtio_backend_notify_reason_t b2);
 
-// Invert all boolean fields in a virtio_mmio_notify_reason_t value
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_inverse(virtio_mmio_notify_reason_t b);
+// Invert all boolean fields in a virtio_backend_notify_reason_t value
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_inverse(virtio_backend_notify_reason_t b);
 
-// Set difference of boolean fields of two virtio_mmio_notify_reason_t values
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_difference(virtio_mmio_notify_reason_t b1,
-				     virtio_mmio_notify_reason_t b2);
+// Set difference of boolean fields of two virtio_backend_notify_reason_t values
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_difference(virtio_backend_notify_reason_t b1,
+					virtio_backend_notify_reason_t b2);
 
-// Atomically replace a virtio_mmio_notify_reason_t value with the union of its
-// boolean fields with a given virtio_mmio_notify_reason_t value, and return the
-// previous value.
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_atomic_union(_Atomic virtio_mmio_notify_reason_t *b1,
-				       virtio_mmio_notify_reason_t	    b2,
-				       memory_order order);
-
-// Atomically replace a virtio_mmio_notify_reason_t value with the intersection
-// of its boolean fields with a given virtio_mmio_notify_reason_t value, and
+// Atomically replace a virtio_backend_notify_reason_t value with the union of
+// its boolean fields with a given virtio_backend_notify_reason_t value, and
 // return the previous value.
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_atomic_intersection(
-	_Atomic virtio_mmio_notify_reason_t *b1, virtio_mmio_notify_reason_t b2,
-	memory_order order);
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_atomic_union(
+	_Atomic virtio_backend_notify_reason_t *b1,
+	virtio_backend_notify_reason_t b2, memory_order order);
 
-// Atomically replace a virtio_mmio_notify_reason_t value with the set
-// difference of its boolean fields and a given virtio_mmio_notify_reason_t
+// Atomically replace a virtio_backend_notify_reason_t value with the
+// intersection of its boolean fields with a given
+// virtio_backend_notify_reason_t value, and return the previous value.
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_atomic_intersection(
+	_Atomic virtio_backend_notify_reason_t *b1,
+	virtio_backend_notify_reason_t b2, memory_order order);
+
+// Atomically replace a virtio_backend_notify_reason_t value with the set
+// difference of its boolean fields and a given virtio_backend_notify_reason_t
 // value, and return the previous value.
-virtio_mmio_notify_reason_t
-virtio_mmio_notify_reason_atomic_difference(
-	_Atomic virtio_mmio_notify_reason_t *b1, virtio_mmio_notify_reason_t b2,
-	memory_order order);
+virtio_backend_notify_reason_t
+virtio_backend_notify_reason_atomic_difference(
+	_Atomic virtio_backend_notify_reason_t *b1,
+	virtio_backend_notify_reason_t b2, memory_order order);
 
-// Bitfield: virtio_option_flags <uint64_t>
-typedef struct virtio_option_flags_b {
+// Bitfield: virtio_backend_option_flags <uint64_t>
+typedef struct virtio_backend_option_flags_b {
+	// 0         bool sync_reset
 	// 6         bool valid_device_type
-	// 63:7      uint64_t res0
 	uint64_t bf[1];
-} virtio_option_flags_t;
+} virtio_backend_option_flags_t;
 
-#define virtio_option_flags_default()                                          \
-	(virtio_option_flags_t)                                                \
+#define virtio_backend_option_flags_default()                                  \
+	(virtio_backend_option_flags_t)                                        \
 	{                                                                      \
 		.bf = { 0x0U }                                                 \
 	}
 
-#define virtio_option_flags_cast(val_0)                                        \
-	(virtio_option_flags_t)                                                \
+#define virtio_backend_option_flags_cast(val_0)                                \
+	(virtio_backend_option_flags_t)                                        \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
-virtio_option_flags_raw(virtio_option_flags_t bit_field);
-
-_Atomic uint64_t *
-virtio_option_flags_atomic_ptr_raw(_Atomic virtio_option_flags_t *ptr);
+virtio_backend_option_flags_raw(virtio_backend_option_flags_t bit_field);
 
 void
-virtio_option_flags_init(virtio_option_flags_t *bit_field);
+virtio_backend_option_flags_init(virtio_backend_option_flags_t *bit_field);
 
 // Set all unknown/unnamed fields to their expected default values.
 // Note, this does NOT clean const named fields to default values.
-virtio_option_flags_t
-virtio_option_flags_clean(virtio_option_flags_t bit_field);
+virtio_backend_option_flags_t
+virtio_backend_option_flags_clean(virtio_backend_option_flags_t bit_field);
 
 bool
-virtio_option_flags_is_equal(virtio_option_flags_t b1,
-			     virtio_option_flags_t b2);
+virtio_backend_option_flags_is_equal(virtio_backend_option_flags_t b1,
+				     virtio_backend_option_flags_t b2);
 
 bool
-virtio_option_flags_is_empty(virtio_option_flags_t bit_field);
+virtio_backend_option_flags_is_empty(virtio_backend_option_flags_t bit_field);
 
 // Check all unknown/unnamed fields have expected default values.
 // Note, this does NOT check whether const named fields have their default
 // values.
 bool
-virtio_option_flags_is_clean(virtio_option_flags_t bit_field);
+virtio_backend_option_flags_is_clean(virtio_backend_option_flags_t bit_field);
+
+// Union of boolean fields of two virtio_backend_option_flags_t values
+virtio_backend_option_flags_t
+virtio_backend_option_flags_union(virtio_backend_option_flags_t b1,
+				  virtio_backend_option_flags_t b2);
+
+// Intersection of boolean fields of two virtio_backend_option_flags_t values
+virtio_backend_option_flags_t
+virtio_backend_option_flags_intersection(virtio_backend_option_flags_t b1,
+					 virtio_backend_option_flags_t b2);
+
+// Invert all boolean fields in a virtio_backend_option_flags_t value
+virtio_backend_option_flags_t
+virtio_backend_option_flags_inverse(virtio_backend_option_flags_t b);
+
+// Set difference of boolean fields of two virtio_backend_option_flags_t values
+virtio_backend_option_flags_t
+virtio_backend_option_flags_difference(virtio_backend_option_flags_t b1,
+				       virtio_backend_option_flags_t b2);
+
+// Atomically replace a virtio_backend_option_flags_t value with the union of
+// its boolean fields with a given virtio_backend_option_flags_t value, and
+// return the previous value.
+virtio_backend_option_flags_t
+virtio_backend_option_flags_atomic_union(
+	_Atomic virtio_backend_option_flags_t *b1,
+	virtio_backend_option_flags_t b2, memory_order order);
+
+// Atomically replace a virtio_backend_option_flags_t value with the
+// intersection of its boolean fields with a given virtio_backend_option_flags_t
+// value, and return the previous value.
+virtio_backend_option_flags_t
+virtio_backend_option_flags_atomic_intersection(
+	_Atomic virtio_backend_option_flags_t *b1,
+	virtio_backend_option_flags_t b2, memory_order order);
+
+// Atomically replace a virtio_backend_option_flags_t value with the set
+// difference of its boolean fields and a given virtio_backend_option_flags_t
+// value, and return the previous value.
+virtio_backend_option_flags_t
+virtio_backend_option_flags_atomic_difference(
+	_Atomic virtio_backend_option_flags_t *b1,
+	virtio_backend_option_flags_t b2, memory_order order);
+
+typedef enum virtio_device_type_e {
+	VIRTIO_DEVICE_TYPE_INVALID = 0
+} virtio_device_type_t;
+
+#define VIRTIO_DEVICE_TYPE__MAX VIRTIO_DEVICE_TYPE_INVALID
+#define VIRTIO_DEVICE_TYPE__MIN VIRTIO_DEVICE_TYPE_INVALID
+
+// Bitfield: virtio_status <uint8_t>
+typedef struct virtio_status_b {
+	// 0         bool acknowledge
+	// 1         bool driver
+	// 2         bool driver_ok
+	// 3         bool features_ok
+	// 6         bool device_needs_reset
+	// 7         bool failed
+	uint8_t bf[1];
+} virtio_status_t;
+
+#define virtio_status_default()                                                \
+	(virtio_status_t)                                                      \
+	{                                                                      \
+		.bf = { 0x40U }                                                \
+	}
+
+#define virtio_status_cast(val_0)                                              \
+	(virtio_status_t)                                                      \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint8_t
+virtio_status_raw(virtio_status_t bit_field);
+
+void
+virtio_status_init(virtio_status_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+virtio_status_t
+virtio_status_clean(virtio_status_t bit_field);
+
+bool
+virtio_status_is_equal(virtio_status_t b1, virtio_status_t b2);
+
+bool
+virtio_status_is_empty(virtio_status_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+virtio_status_is_clean(virtio_status_t bit_field);
+
+// Union of boolean fields of two virtio_status_t values
+virtio_status_t
+virtio_status_union(virtio_status_t b1, virtio_status_t b2);
+
+// Intersection of boolean fields of two virtio_status_t values
+virtio_status_t
+virtio_status_intersection(virtio_status_t b1, virtio_status_t b2);
+
+// Invert all boolean fields in a virtio_status_t value
+virtio_status_t
+virtio_status_inverse(virtio_status_t b);
+
+// Set difference of boolean fields of two virtio_status_t values
+virtio_status_t
+virtio_status_difference(virtio_status_t b1, virtio_status_t b2);
+
+// Atomically replace a virtio_status_t value with the union of its boolean
+// fields with a given virtio_status_t value, and return the previous value.
+virtio_status_t
+virtio_status_atomic_union(_Atomic virtio_status_t *b1, virtio_status_t b2,
+			   memory_order order);
+
+// Atomically replace a virtio_status_t value with the intersection of its
+// boolean fields with a given virtio_status_t value, and return the previous
+// value.
+virtio_status_t
+virtio_status_atomic_intersection(_Atomic virtio_status_t *b1,
+				  virtio_status_t b2, memory_order order);
+
+// Atomically replace a virtio_status_t value with the set difference of its
+// boolean fields and a given virtio_status_t value, and return the previous
+// value.
+virtio_status_t
+virtio_status_atomic_difference(_Atomic virtio_status_t *b1, virtio_status_t b2,
+				memory_order order);
+
+typedef enum virtio_transport_type_e {
+	VIRTIO_TRANSPORT_TYPE_MMIO = 0
+} virtio_transport_type_t;
+
+#define VIRTIO_TRANSPORT_TYPE__MAX VIRTIO_TRANSPORT_TYPE_MMIO
+#define VIRTIO_TRANSPORT_TYPE__MIN VIRTIO_TRANSPORT_TYPE_MMIO
+
+typedef uint16_t vmid_t;
 
 // Bitfield: vpm_group_option_flags <uint64_t>
 typedef struct vpm_group_option_flags_b {
@@ -2961,14 +3441,11 @@ typedef struct vpm_group_option_flags_b {
 #define vpm_group_option_flags_cast(val_0)                                     \
 	(vpm_group_option_flags_t)                                             \
 	{                                                                      \
-		.bf = { val_0 }                                                \
+		.bf = {(val_0) }                                               \
 	}
 
 uint64_t
 vpm_group_option_flags_raw(vpm_group_option_flags_t bit_field);
-
-_Atomic uint64_t *
-vpm_group_option_flags_atomic_ptr_raw(_Atomic vpm_group_option_flags_t *ptr);
 
 void
 vpm_group_option_flags_init(vpm_group_option_flags_t *bit_field);
@@ -3044,6 +3521,185 @@ typedef enum vpm_state_e {
 #define VPM_STATE__MAX VPM_STATE_SYSTEM_SUSPENDED
 #define VPM_STATE__MIN VPM_STATE_NO_STATE
 
+// Bitfield: watchdog_bind_option_flags <uint64_t>
+typedef struct watchdog_bind_option_flags_b {
+	// 0         bool bite_virq
+	uint64_t bf[1];
+} watchdog_bind_option_flags_t;
+
+#define watchdog_bind_option_flags_default()                                   \
+	(watchdog_bind_option_flags_t)                                         \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define watchdog_bind_option_flags_cast(val_0)                                 \
+	(watchdog_bind_option_flags_t)                                         \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint64_t
+watchdog_bind_option_flags_raw(watchdog_bind_option_flags_t bit_field);
+
+void
+watchdog_bind_option_flags_init(watchdog_bind_option_flags_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_clean(watchdog_bind_option_flags_t bit_field);
+
+bool
+watchdog_bind_option_flags_is_equal(watchdog_bind_option_flags_t b1,
+				    watchdog_bind_option_flags_t b2);
+
+bool
+watchdog_bind_option_flags_is_empty(watchdog_bind_option_flags_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+watchdog_bind_option_flags_is_clean(watchdog_bind_option_flags_t bit_field);
+
+// Union of boolean fields of two watchdog_bind_option_flags_t values
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_union(watchdog_bind_option_flags_t b1,
+				 watchdog_bind_option_flags_t b2);
+
+// Intersection of boolean fields of two watchdog_bind_option_flags_t values
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_intersection(watchdog_bind_option_flags_t b1,
+					watchdog_bind_option_flags_t b2);
+
+// Invert all boolean fields in a watchdog_bind_option_flags_t value
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_inverse(watchdog_bind_option_flags_t b);
+
+// Set difference of boolean fields of two watchdog_bind_option_flags_t values
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_difference(watchdog_bind_option_flags_t b1,
+				      watchdog_bind_option_flags_t b2);
+
+// Atomically replace a watchdog_bind_option_flags_t value with the union of its
+// boolean fields with a given watchdog_bind_option_flags_t value, and return
+// the previous value.
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_atomic_union(_Atomic watchdog_bind_option_flags_t *b1,
+					watchdog_bind_option_flags_t b2,
+					memory_order		     order);
+
+// Atomically replace a watchdog_bind_option_flags_t value with the intersection
+// of its boolean fields with a given watchdog_bind_option_flags_t value, and
+// return the previous value.
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_atomic_intersection(
+	_Atomic watchdog_bind_option_flags_t *b1,
+	watchdog_bind_option_flags_t b2, memory_order order);
+
+// Atomically replace a watchdog_bind_option_flags_t value with the set
+// difference of its boolean fields and a given watchdog_bind_option_flags_t
+// value, and return the previous value.
+watchdog_bind_option_flags_t
+watchdog_bind_option_flags_atomic_difference(
+	_Atomic watchdog_bind_option_flags_t *b1,
+	watchdog_bind_option_flags_t b2, memory_order order);
+
+typedef enum watchdog_manage_op_e {
+	WATCHDOG_MANAGE_OP_FREEZE	    = 0,
+	WATCHDOG_MANAGE_OP_FREEZE_AND_RESET = 1,
+	WATCHDOG_MANAGE_OP_UNFREEZE	    = 2
+} watchdog_manage_op_t;
+
+#define WATCHDOG_MANAGE_OP__MAX WATCHDOG_MANAGE_OP_UNFREEZE
+#define WATCHDOG_MANAGE_OP__MIN WATCHDOG_MANAGE_OP_FREEZE
+
+// Bitfield: watchdog_option_flags <uint64_t>
+typedef struct watchdog_option_flags_b {
+	// 0         bool critical_bite
+	uint64_t bf[1];
+} watchdog_option_flags_t;
+
+#define watchdog_option_flags_default()                                        \
+	(watchdog_option_flags_t)                                              \
+	{                                                                      \
+		.bf = { 0x0U }                                                 \
+	}
+
+#define watchdog_option_flags_cast(val_0)                                      \
+	(watchdog_option_flags_t)                                              \
+	{                                                                      \
+		.bf = {(val_0) }                                               \
+	}
+
+uint64_t
+watchdog_option_flags_raw(watchdog_option_flags_t bit_field);
+
+void
+watchdog_option_flags_init(watchdog_option_flags_t *bit_field);
+
+// Set all unknown/unnamed fields to their expected default values.
+// Note, this does NOT clean const named fields to default values.
+watchdog_option_flags_t
+watchdog_option_flags_clean(watchdog_option_flags_t bit_field);
+
+bool
+watchdog_option_flags_is_equal(watchdog_option_flags_t b1,
+			       watchdog_option_flags_t b2);
+
+bool
+watchdog_option_flags_is_empty(watchdog_option_flags_t bit_field);
+
+// Check all unknown/unnamed fields have expected default values.
+// Note, this does NOT check whether const named fields have their default
+// values.
+bool
+watchdog_option_flags_is_clean(watchdog_option_flags_t bit_field);
+
+// Union of boolean fields of two watchdog_option_flags_t values
+watchdog_option_flags_t
+watchdog_option_flags_union(watchdog_option_flags_t b1,
+			    watchdog_option_flags_t b2);
+
+// Intersection of boolean fields of two watchdog_option_flags_t values
+watchdog_option_flags_t
+watchdog_option_flags_intersection(watchdog_option_flags_t b1,
+				   watchdog_option_flags_t b2);
+
+// Invert all boolean fields in a watchdog_option_flags_t value
+watchdog_option_flags_t
+watchdog_option_flags_inverse(watchdog_option_flags_t b);
+
+// Set difference of boolean fields of two watchdog_option_flags_t values
+watchdog_option_flags_t
+watchdog_option_flags_difference(watchdog_option_flags_t b1,
+				 watchdog_option_flags_t b2);
+
+// Atomically replace a watchdog_option_flags_t value with the union of its
+// boolean fields with a given watchdog_option_flags_t value, and return the
+// previous value.
+watchdog_option_flags_t
+watchdog_option_flags_atomic_union(_Atomic watchdog_option_flags_t *b1,
+				   watchdog_option_flags_t	    b2,
+				   memory_order			    order);
+
+// Atomically replace a watchdog_option_flags_t value with the intersection of
+// its boolean fields with a given watchdog_option_flags_t value, and return the
+// previous value.
+watchdog_option_flags_t
+watchdog_option_flags_atomic_intersection(_Atomic watchdog_option_flags_t *b1,
+					  watchdog_option_flags_t	   b2,
+					  memory_order order);
+
+// Atomically replace a watchdog_option_flags_t value with the set difference of
+// its boolean fields and a given watchdog_option_flags_t value, and return the
+// previous value.
+watchdog_option_flags_t
+watchdog_option_flags_atomic_difference(_Atomic watchdog_option_flags_t *b1,
+					watchdog_option_flags_t		 b2,
+					memory_order			 order);
+
 #include <guest_hypresult.h>
 
 void
@@ -3069,6 +3725,72 @@ vgic_gicr_attach_flags_copy_last(vgic_gicr_attach_flags_t	*bit_field_dst,
 				 const vgic_gicr_attach_flags_t *bit_field_src);
 
 void
+addrspace_info_area_entry_data_info_set_size(
+	addrspace_info_area_entry_data_info_t *bit_field, size_t val);
+
+size_t
+addrspace_info_area_entry_data_info_get_size(
+	const addrspace_info_area_entry_data_info_t *bit_field);
+
+void
+addrspace_info_area_entry_data_info_copy_size(
+	addrspace_info_area_entry_data_info_t	    *bit_field_dst,
+	const addrspace_info_area_entry_data_info_t *bit_field_src);
+
+void
+addrspace_info_area_entry_data_info_set_alignment(
+	addrspace_info_area_entry_data_info_t *bit_field, size_t val);
+
+size_t
+addrspace_info_area_entry_data_info_get_alignment(
+	const addrspace_info_area_entry_data_info_t *bit_field);
+
+void
+addrspace_info_area_entry_data_info_copy_alignment(
+	addrspace_info_area_entry_data_info_t	    *bit_field_dst,
+	const addrspace_info_area_entry_data_info_t *bit_field_src);
+
+void
+addrspace_info_area_entry_flags_set_valid(
+	addrspace_info_area_entry_flags_t *bit_field, bool val);
+
+bool
+addrspace_info_area_entry_flags_get_valid(
+	const addrspace_info_area_entry_flags_t *bit_field);
+
+void
+addrspace_info_area_entry_flags_copy_valid(
+	addrspace_info_area_entry_flags_t	*bit_field_dst,
+	const addrspace_info_area_entry_flags_t *bit_field_src);
+
+void
+addrspace_info_area_entry_type_set_id(
+	addrspace_info_area_entry_type_t *bit_field, uint32_t val);
+
+uint32_t
+addrspace_info_area_entry_type_get_id(
+	const addrspace_info_area_entry_type_t *bit_field);
+
+void
+addrspace_info_area_entry_type_copy_id(
+	addrspace_info_area_entry_type_t       *bit_field_dst,
+	const addrspace_info_area_entry_type_t *bit_field_src);
+
+void
+addrspace_info_area_entry_type_set_owner(
+	addrspace_info_area_entry_type_t *bit_field,
+	addrspace_info_area_id_owner_t	  val);
+
+addrspace_info_area_id_owner_t
+addrspace_info_area_entry_type_get_owner(
+	const addrspace_info_area_entry_type_t *bit_field);
+
+void
+addrspace_info_area_entry_type_copy_owner(
+	addrspace_info_area_entry_type_t       *bit_field_dst,
+	const addrspace_info_area_entry_type_t *bit_field_src);
+
+void
 addrspace_map_flags_set_partial(addrspace_map_flags_t *bit_field, bool val);
 
 bool
@@ -3077,6 +3799,26 @@ addrspace_map_flags_get_partial(const addrspace_map_flags_t *bit_field);
 void
 addrspace_map_flags_copy_partial(addrspace_map_flags_t	     *bit_field_dst,
 				 const addrspace_map_flags_t *bit_field_src);
+
+void
+addrspace_map_flags_set_private(addrspace_map_flags_t *bit_field, bool val);
+
+bool
+addrspace_map_flags_get_private(const addrspace_map_flags_t *bit_field);
+
+void
+addrspace_map_flags_copy_private(addrspace_map_flags_t	     *bit_field_dst,
+				 const addrspace_map_flags_t *bit_field_src);
+
+void
+addrspace_map_flags_set_vmmio(addrspace_map_flags_t *bit_field, bool val);
+
+bool
+addrspace_map_flags_get_vmmio(const addrspace_map_flags_t *bit_field);
+
+void
+addrspace_map_flags_copy_vmmio(addrspace_map_flags_t	   *bit_field_dst,
+			       const addrspace_map_flags_t *bit_field_src);
 
 void
 addrspace_map_flags_set_no_sync(addrspace_map_flags_t *bit_field, bool val);
@@ -3088,8 +3830,44 @@ void
 addrspace_map_flags_copy_no_sync(addrspace_map_flags_t	     *bit_field_dst,
 				 const addrspace_map_flags_t *bit_field_src);
 
-uint64_t
-addrspace_map_flags_get_res0_0(const addrspace_map_flags_t *bit_field);
+void
+addrspace_modify_pages_flags_set_unlock(
+	addrspace_modify_pages_flags_t *bit_field, bool val);
+
+bool
+addrspace_modify_pages_flags_get_unlock(
+	const addrspace_modify_pages_flags_t *bit_field);
+
+void
+addrspace_modify_pages_flags_copy_unlock(
+	addrspace_modify_pages_flags_t	     *bit_field_dst,
+	const addrspace_modify_pages_flags_t *bit_field_src);
+
+void
+addrspace_modify_pages_flags_set_sanitise(
+	addrspace_modify_pages_flags_t *bit_field, bool val);
+
+bool
+addrspace_modify_pages_flags_get_sanitise(
+	const addrspace_modify_pages_flags_t *bit_field);
+
+void
+addrspace_modify_pages_flags_copy_sanitise(
+	addrspace_modify_pages_flags_t	     *bit_field_dst,
+	const addrspace_modify_pages_flags_t *bit_field_src);
+
+void
+addrspace_modify_pages_flags_set_no_sync_unlock(
+	addrspace_modify_pages_flags_t *bit_field, bool val);
+
+bool
+addrspace_modify_pages_flags_get_no_sync_unlock(
+	const addrspace_modify_pages_flags_t *bit_field);
+
+void
+addrspace_modify_pages_flags_copy_no_sync_unlock(
+	addrspace_modify_pages_flags_t	     *bit_field_dst,
+	const addrspace_modify_pages_flags_t *bit_field_src);
 
 void
 cap_rights_addrspace_set_attach(cap_rights_addrspace_t *bit_field, bool val);
@@ -3122,17 +3900,52 @@ cap_rights_addrspace_copy_lookup(cap_rights_addrspace_t	      *bit_field_dst,
 				 const cap_rights_addrspace_t *bit_field_src);
 
 void
-cap_rights_addrspace_set_add_vmmio_range(cap_rights_addrspace_t *bit_field,
+cap_rights_addrspace_set_configure_range(cap_rights_addrspace_t *bit_field,
 					 bool			 val);
 
 bool
-cap_rights_addrspace_get_add_vmmio_range(
+cap_rights_addrspace_get_configure_range(
 	const cap_rights_addrspace_t *bit_field);
 
 void
-cap_rights_addrspace_copy_add_vmmio_range(
+cap_rights_addrspace_copy_configure_range(
 	cap_rights_addrspace_t	     *bit_field_dst,
 	const cap_rights_addrspace_t *bit_field_src);
+
+void
+cap_rights_addrspace_set_map_protected(cap_rights_addrspace_t *bit_field,
+				       bool		       val);
+
+bool
+cap_rights_addrspace_get_map_protected(const cap_rights_addrspace_t *bit_field);
+
+void
+cap_rights_addrspace_copy_map_protected(
+	cap_rights_addrspace_t	     *bit_field_dst,
+	const cap_rights_addrspace_t *bit_field_src);
+
+void
+cap_rights_addrspace_set_modify_protected(cap_rights_addrspace_t *bit_field,
+					  bool			  val);
+
+bool
+cap_rights_addrspace_get_modify_protected(
+	const cap_rights_addrspace_t *bit_field);
+
+void
+cap_rights_addrspace_copy_modify_protected(
+	cap_rights_addrspace_t	     *bit_field_dst,
+	const cap_rights_addrspace_t *bit_field_src);
+
+void
+cap_rights_addrspace_set_add_info(cap_rights_addrspace_t *bit_field, bool val);
+
+bool
+cap_rights_addrspace_get_add_info(const cap_rights_addrspace_t *bit_field);
+
+void
+cap_rights_addrspace_copy_add_info(cap_rights_addrspace_t	*bit_field_dst,
+				   const cap_rights_addrspace_t *bit_field_src);
 
 void
 cap_rights_addrspace_set_object_activate(cap_rights_addrspace_t *bit_field,
@@ -3332,6 +4145,43 @@ cap_rights_memextent_copy_donate(cap_rights_memextent_t	      *bit_field_dst,
 				 const cap_rights_memextent_t *bit_field_src);
 
 void
+cap_rights_memextent_set_protected_host(cap_rights_memextent_t *bit_field,
+					bool			val);
+
+bool
+cap_rights_memextent_get_protected_host(const cap_rights_memextent_t *bit_field);
+
+void
+cap_rights_memextent_copy_protected_host(
+	cap_rights_memextent_t	     *bit_field_dst,
+	const cap_rights_memextent_t *bit_field_src);
+
+void
+cap_rights_memextent_set_protected_guest(cap_rights_memextent_t *bit_field,
+					 bool			 val);
+
+bool
+cap_rights_memextent_get_protected_guest(
+	const cap_rights_memextent_t *bit_field);
+
+void
+cap_rights_memextent_copy_protected_guest(
+	cap_rights_memextent_t	     *bit_field_dst,
+	const cap_rights_memextent_t *bit_field_src);
+
+void
+cap_rights_memextent_set_map_private(cap_rights_memextent_t *bit_field,
+				     bool		     val);
+
+bool
+cap_rights_memextent_get_map_private(const cap_rights_memextent_t *bit_field);
+
+void
+cap_rights_memextent_copy_map_private(
+	cap_rights_memextent_t	     *bit_field_dst,
+	const cap_rights_memextent_t *bit_field_src);
+
+void
 cap_rights_memextent_set_object_activate(cap_rights_memextent_t *bit_field,
 					 bool			 val);
 
@@ -3434,16 +4284,6 @@ cap_rights_partition_copy_object_activate(
 	const cap_rights_partition_t *bit_field_src);
 
 void
-cap_rights_thread_set_yield_to(cap_rights_thread_t *bit_field, bool val);
-
-bool
-cap_rights_thread_get_yield_to(const cap_rights_thread_t *bit_field);
-
-void
-cap_rights_thread_copy_yield_to(cap_rights_thread_t	  *bit_field_dst,
-				const cap_rights_thread_t *bit_field_src);
-
-void
 cap_rights_thread_set_power(cap_rights_thread_t *bit_field, bool val);
 
 bool
@@ -3482,6 +4322,16 @@ cap_rights_thread_get_timeslice(const cap_rights_thread_t *bit_field);
 void
 cap_rights_thread_copy_timeslice(cap_rights_thread_t	   *bit_field_dst,
 				 const cap_rights_thread_t *bit_field_src);
+
+void
+cap_rights_thread_set_yield_to(cap_rights_thread_t *bit_field, bool val);
+
+bool
+cap_rights_thread_get_yield_to(const cap_rights_thread_t *bit_field);
+
+void
+cap_rights_thread_copy_yield_to(cap_rights_thread_t	  *bit_field_dst,
+				const cap_rights_thread_t *bit_field_src);
 
 void
 cap_rights_thread_set_bind_virq(cap_rights_thread_t *bit_field, bool val);
@@ -3584,68 +4434,69 @@ cap_rights_vic_copy_object_activate(cap_rights_vic_t	   *bit_field_dst,
 				    const cap_rights_vic_t *bit_field_src);
 
 void
-cap_rights_virtio_mmio_set_bind_backend_virq(
-	cap_rights_virtio_mmio_t *bit_field, bool val);
+cap_rights_virtio_backend_set_bind_virq(cap_rights_virtio_backend_t *bit_field,
+					bool			     val);
 
 bool
-cap_rights_virtio_mmio_get_bind_backend_virq(
-	const cap_rights_virtio_mmio_t *bit_field);
+cap_rights_virtio_backend_get_bind_virq(
+	const cap_rights_virtio_backend_t *bit_field);
 
 void
-cap_rights_virtio_mmio_copy_bind_backend_virq(
-	cap_rights_virtio_mmio_t       *bit_field_dst,
-	const cap_rights_virtio_mmio_t *bit_field_src);
+cap_rights_virtio_backend_copy_bind_virq(
+	cap_rights_virtio_backend_t	  *bit_field_dst,
+	const cap_rights_virtio_backend_t *bit_field_src);
 
 void
-cap_rights_virtio_mmio_set_bind_frontend_virq(
-	cap_rights_virtio_mmio_t *bit_field, bool val);
+cap_rights_virtio_backend_set_bind_mmio_frontend_virq(
+	cap_rights_virtio_backend_t *bit_field, bool val);
 
 bool
-cap_rights_virtio_mmio_get_bind_frontend_virq(
-	const cap_rights_virtio_mmio_t *bit_field);
+cap_rights_virtio_backend_get_bind_mmio_frontend_virq(
+	const cap_rights_virtio_backend_t *bit_field);
 
 void
-cap_rights_virtio_mmio_copy_bind_frontend_virq(
-	cap_rights_virtio_mmio_t       *bit_field_dst,
-	const cap_rights_virtio_mmio_t *bit_field_src);
+cap_rights_virtio_backend_copy_bind_mmio_frontend_virq(
+	cap_rights_virtio_backend_t	  *bit_field_dst,
+	const cap_rights_virtio_backend_t *bit_field_src);
 
 void
-cap_rights_virtio_mmio_set_assert_virq(cap_rights_virtio_mmio_t *bit_field,
-				       bool			 val);
+cap_rights_virtio_backend_set_assert_virq(
+	cap_rights_virtio_backend_t *bit_field, bool val);
 
 bool
-cap_rights_virtio_mmio_get_assert_virq(
-	const cap_rights_virtio_mmio_t *bit_field);
+cap_rights_virtio_backend_get_assert_virq(
+	const cap_rights_virtio_backend_t *bit_field);
 
 void
-cap_rights_virtio_mmio_copy_assert_virq(
-	cap_rights_virtio_mmio_t       *bit_field_dst,
-	const cap_rights_virtio_mmio_t *bit_field_src);
+cap_rights_virtio_backend_copy_assert_virq(
+	cap_rights_virtio_backend_t	  *bit_field_dst,
+	const cap_rights_virtio_backend_t *bit_field_src);
 
 void
-cap_rights_virtio_mmio_set_config(cap_rights_virtio_mmio_t *bit_field,
-				  bool			    val);
+cap_rights_virtio_backend_set_config(cap_rights_virtio_backend_t *bit_field,
+				     bool			  val);
 
 bool
-cap_rights_virtio_mmio_get_config(const cap_rights_virtio_mmio_t *bit_field);
+cap_rights_virtio_backend_get_config(
+	const cap_rights_virtio_backend_t *bit_field);
 
 void
-cap_rights_virtio_mmio_copy_config(
-	cap_rights_virtio_mmio_t       *bit_field_dst,
-	const cap_rights_virtio_mmio_t *bit_field_src);
+cap_rights_virtio_backend_copy_config(
+	cap_rights_virtio_backend_t	  *bit_field_dst,
+	const cap_rights_virtio_backend_t *bit_field_src);
 
 void
-cap_rights_virtio_mmio_set_object_activate(cap_rights_virtio_mmio_t *bit_field,
-					   bool			     val);
+cap_rights_virtio_backend_set_object_activate(
+	cap_rights_virtio_backend_t *bit_field, bool val);
 
 bool
-cap_rights_virtio_mmio_get_object_activate(
-	const cap_rights_virtio_mmio_t *bit_field);
+cap_rights_virtio_backend_get_object_activate(
+	const cap_rights_virtio_backend_t *bit_field);
 
 void
-cap_rights_virtio_mmio_copy_object_activate(
-	cap_rights_virtio_mmio_t       *bit_field_dst,
-	const cap_rights_virtio_mmio_t *bit_field_src);
+cap_rights_virtio_backend_copy_object_activate(
+	cap_rights_virtio_backend_t	  *bit_field_dst,
+	const cap_rights_virtio_backend_t *bit_field_src);
 
 void
 cap_rights_vpm_group_set_attach_vcpu(cap_rights_vpm_group_t *bit_field,
@@ -3693,56 +4544,49 @@ cap_rights_vpm_group_copy_object_activate(
 	const cap_rights_vpm_group_t *bit_field_src);
 
 void
-cap_rights_vrtc_set_configure(cap_rights_vrtc_t *bit_field, bool val);
+cap_rights_watchdog_set_attach_vcpu(cap_rights_watchdog_t *bit_field, bool val);
 
 bool
-cap_rights_vrtc_get_configure(const cap_rights_vrtc_t *bit_field);
+cap_rights_watchdog_get_attach_vcpu(const cap_rights_watchdog_t *bit_field);
 
 void
-cap_rights_vrtc_copy_configure(cap_rights_vrtc_t       *bit_field_dst,
-			       const cap_rights_vrtc_t *bit_field_src);
+cap_rights_watchdog_copy_attach_vcpu(cap_rights_watchdog_t *bit_field_dst,
+				     const cap_rights_watchdog_t *bit_field_src);
 
 void
-cap_rights_vrtc_set_attach_addrspace(cap_rights_vrtc_t *bit_field, bool val);
+cap_rights_watchdog_set_bind_virq(cap_rights_watchdog_t *bit_field, bool val);
 
 bool
-cap_rights_vrtc_get_attach_addrspace(const cap_rights_vrtc_t *bit_field);
+cap_rights_watchdog_get_bind_virq(const cap_rights_watchdog_t *bit_field);
 
 void
-cap_rights_vrtc_copy_attach_addrspace(cap_rights_vrtc_t	      *bit_field_dst,
-				      const cap_rights_vrtc_t *bit_field_src);
+cap_rights_watchdog_copy_bind_virq(cap_rights_watchdog_t       *bit_field_dst,
+				   const cap_rights_watchdog_t *bit_field_src);
 
 void
-cap_rights_vrtc_set_set_time_base(cap_rights_vrtc_t *bit_field, bool val);
+cap_rights_watchdog_set_manage(cap_rights_watchdog_t *bit_field, bool val);
 
 bool
-cap_rights_vrtc_get_set_time_base(const cap_rights_vrtc_t *bit_field);
+cap_rights_watchdog_get_manage(const cap_rights_watchdog_t *bit_field);
 
 void
-cap_rights_vrtc_copy_set_time_base(cap_rights_vrtc_t	   *bit_field_dst,
-				   const cap_rights_vrtc_t *bit_field_src);
+cap_rights_watchdog_copy_manage(cap_rights_watchdog_t	    *bit_field_dst,
+				const cap_rights_watchdog_t *bit_field_src);
 
 void
-cap_rights_vrtc_set_object_activate(cap_rights_vrtc_t *bit_field, bool val);
+cap_rights_watchdog_set_object_activate(cap_rights_watchdog_t *bit_field,
+					bool		       val);
 
 bool
-cap_rights_vrtc_get_object_activate(const cap_rights_vrtc_t *bit_field);
+cap_rights_watchdog_get_object_activate(const cap_rights_watchdog_t *bit_field);
 
 void
-cap_rights_vrtc_copy_object_activate(cap_rights_vrtc_t	     *bit_field_dst,
-				     const cap_rights_vrtc_t *bit_field_src);
+cap_rights_watchdog_copy_object_activate(
+	cap_rights_watchdog_t	    *bit_field_dst,
+	const cap_rights_watchdog_t *bit_field_src);
 
 bool
-hyp_api_flags0_get_watchdog(const hyp_api_flags0_t *bit_field);
-
-bool
-hyp_api_flags0_get_reserved_16(const hyp_api_flags0_t *bit_field);
-
-scheduler_variant_t
-hyp_api_flags0_get_scheduler(const hyp_api_flags0_t *bit_field);
-
-uint64_t
-hyp_api_flags0_get_res0_0(const hyp_api_flags0_t *bit_field);
+hyp_api_flags0_get_partition_cspace(const hyp_api_flags0_t *bit_field);
 
 bool
 hyp_api_flags0_get_doorbell(const hyp_api_flags0_t *bit_field);
@@ -3751,34 +4595,52 @@ bool
 hyp_api_flags0_get_msgqueue(const hyp_api_flags0_t *bit_field);
 
 bool
-hyp_api_flags0_get_partition_cspace(const hyp_api_flags0_t *bit_field);
-
-bool
-hyp_api_flags0_get_trace_ctrl(const hyp_api_flags0_t *bit_field);
-
-bool
-hyp_api_flags0_get_vcpu_run(const hyp_api_flags0_t *bit_field);
-
-bool
 hyp_api_flags0_get_vic(const hyp_api_flags0_t *bit_field);
-
-bool
-hyp_api_flags0_get_virtio_mmio(const hyp_api_flags0_t *bit_field);
 
 bool
 hyp_api_flags0_get_vpm(const hyp_api_flags0_t *bit_field);
 
 bool
+hyp_api_flags0_get_vcpu(const hyp_api_flags0_t *bit_field);
+
+bool
 hyp_api_flags0_get_memextent(const hyp_api_flags0_t *bit_field);
+
+bool
+hyp_api_flags0_get_trace_ctrl(const hyp_api_flags0_t *bit_field);
+
+bool
+hyp_api_flags0_get_watchdog(const hyp_api_flags0_t *bit_field);
+
+bool
+hyp_api_flags0_get_virtio_mmio(const hyp_api_flags0_t *bit_field);
 
 bool
 hyp_api_flags0_get_prng(const hyp_api_flags0_t *bit_field);
 
 bool
-hyp_api_flags0_get_vcpu(const hyp_api_flags0_t *bit_field);
+hyp_api_flags0_get_vcpu_run(const hyp_api_flags0_t *bit_field);
+
+bool
+hyp_api_flags0_get_trace_profile(const hyp_api_flags0_t *bit_field);
 
 uint64_t
-hyp_api_flags1_get_res0_0(const hyp_api_flags1_t *bit_field);
+hyp_api_flags0_get_res0_0(const hyp_api_flags0_t *bit_field);
+
+bool
+hyp_api_flags0_get_reserved_16(const hyp_api_flags0_t *bit_field);
+
+scheduler_variant_t
+hyp_api_flags0_get_scheduler(const hyp_api_flags0_t *bit_field);
+
+bool
+hyp_api_flags1_get_arm_v82_sve(const hyp_api_flags1_t *bit_field);
+
+bool
+hyp_api_flags1_get_vgic_ext_spis(const hyp_api_flags1_t *bit_field);
+
+bool
+hyp_api_flags1_get_vgic_ext_ppis(const hyp_api_flags1_t *bit_field);
 
 uint64_t
 hyp_api_flags2_get_res0_0(const hyp_api_flags2_t *bit_field);
@@ -3808,6 +4670,9 @@ memextent_access_attrs_copy_user_access(
 	memextent_access_attrs_t       *bit_field_dst,
 	const memextent_access_attrs_t *bit_field_src);
 
+uint64_t
+memextent_access_attrs_get_res_0(const memextent_access_attrs_t *bit_field);
+
 void
 memextent_access_attrs_set_kernel_access(memextent_access_attrs_t *bit_field,
 					 pgtable_access_t	   val);
@@ -3821,9 +4686,6 @@ memextent_access_attrs_copy_kernel_access(
 	memextent_access_attrs_t       *bit_field_dst,
 	const memextent_access_attrs_t *bit_field_src);
 
-uint64_t
-memextent_access_attrs_get_res_0(const memextent_access_attrs_t *bit_field);
-
 void
 memextent_attrs_set_access(memextent_attrs_t *bit_field, pgtable_access_t val);
 
@@ -3833,6 +4695,9 @@ memextent_attrs_get_access(const memextent_attrs_t *bit_field);
 void
 memextent_attrs_copy_access(memextent_attrs_t	    *bit_field_dst,
 			    const memextent_attrs_t *bit_field_src);
+
+uint64_t
+memextent_attrs_get_res_0(const memextent_attrs_t *bit_field);
 
 void
 memextent_attrs_set_memtype(memextent_attrs_t  *bit_field,
@@ -3854,60 +4719,6 @@ memextent_attrs_get_type(const memextent_attrs_t *bit_field);
 void
 memextent_attrs_copy_type(memextent_attrs_t	  *bit_field_dst,
 			  const memextent_attrs_t *bit_field_src);
-
-void
-memextent_attrs_set_append(memextent_attrs_t *bit_field, bool val);
-
-bool
-memextent_attrs_get_append(const memextent_attrs_t *bit_field);
-
-void
-memextent_attrs_copy_append(memextent_attrs_t	    *bit_field_dst,
-			    const memextent_attrs_t *bit_field_src);
-
-uint64_t
-memextent_attrs_get_res_0(const memextent_attrs_t *bit_field);
-
-void
-memextent_mapping_attrs_set_user_access(memextent_mapping_attrs_t *bit_field,
-					pgtable_access_t	   val);
-
-pgtable_access_t
-memextent_mapping_attrs_get_user_access(
-	const memextent_mapping_attrs_t *bit_field);
-
-void
-memextent_mapping_attrs_copy_user_access(
-	memextent_mapping_attrs_t	*bit_field_dst,
-	const memextent_mapping_attrs_t *bit_field_src);
-
-void
-memextent_mapping_attrs_set_kernel_access(memextent_mapping_attrs_t *bit_field,
-					  pgtable_access_t	     val);
-
-pgtable_access_t
-memextent_mapping_attrs_get_kernel_access(
-	const memextent_mapping_attrs_t *bit_field);
-
-void
-memextent_mapping_attrs_copy_kernel_access(
-	memextent_mapping_attrs_t	*bit_field_dst,
-	const memextent_mapping_attrs_t *bit_field_src);
-
-void
-memextent_mapping_attrs_set_memtype(memextent_mapping_attrs_t *bit_field,
-				    pgtable_vm_memtype_t       val);
-
-pgtable_vm_memtype_t
-memextent_mapping_attrs_get_memtype(const memextent_mapping_attrs_t *bit_field);
-
-void
-memextent_mapping_attrs_copy_memtype(
-	memextent_mapping_attrs_t	*bit_field_dst,
-	const memextent_mapping_attrs_t *bit_field_src);
-
-uint64_t
-memextent_mapping_attrs_get_res_0(const memextent_mapping_attrs_t *bit_field);
 
 void
 memextent_donate_options_set_type(memextent_donate_options_t *bit_field,
@@ -3936,6 +4747,47 @@ void
 memextent_donate_options_copy_no_sync(
 	memextent_donate_options_t	 *bit_field_dst,
 	const memextent_donate_options_t *bit_field_src);
+
+void
+memextent_mapping_attrs_set_user_access(memextent_mapping_attrs_t *bit_field,
+					pgtable_access_t	   val);
+
+pgtable_access_t
+memextent_mapping_attrs_get_user_access(
+	const memextent_mapping_attrs_t *bit_field);
+
+void
+memextent_mapping_attrs_copy_user_access(
+	memextent_mapping_attrs_t	*bit_field_dst,
+	const memextent_mapping_attrs_t *bit_field_src);
+
+uint64_t
+memextent_mapping_attrs_get_res_0(const memextent_mapping_attrs_t *bit_field);
+
+void
+memextent_mapping_attrs_set_kernel_access(memextent_mapping_attrs_t *bit_field,
+					  pgtable_access_t	     val);
+
+pgtable_access_t
+memextent_mapping_attrs_get_kernel_access(
+	const memextent_mapping_attrs_t *bit_field);
+
+void
+memextent_mapping_attrs_copy_kernel_access(
+	memextent_mapping_attrs_t	*bit_field_dst,
+	const memextent_mapping_attrs_t *bit_field_src);
+
+void
+memextent_mapping_attrs_set_memtype(memextent_mapping_attrs_t *bit_field,
+				    pgtable_vm_memtype_t       val);
+
+pgtable_vm_memtype_t
+memextent_mapping_attrs_get_memtype(const memextent_mapping_attrs_t *bit_field);
+
+void
+memextent_mapping_attrs_copy_memtype(
+	memextent_mapping_attrs_t	*bit_field_dst,
+	const memextent_mapping_attrs_t *bit_field_src);
 
 void
 memextent_modify_flags_set_op(memextent_modify_flags_t *bit_field,
@@ -4037,6 +4889,19 @@ root_env_mmio_range_properties_copy_res_s2pt_attr(
 	const root_env_mmio_range_properties_t *bit_field_src);
 
 void
+root_env_mmio_range_properties_set_pvm_unmapped(
+	root_env_mmio_range_properties_t *bit_field, bool val);
+
+bool
+root_env_mmio_range_properties_get_pvm_unmapped(
+	const root_env_mmio_range_properties_t *bit_field);
+
+void
+root_env_mmio_range_properties_copy_pvm_unmapped(
+	root_env_mmio_range_properties_t       *bit_field_dst,
+	const root_env_mmio_range_properties_t *bit_field_src);
+
+void
 root_env_mmio_range_properties_set_non_exclusive(
 	root_env_mmio_range_properties_t *bit_field, bool val);
 
@@ -4131,6 +4996,19 @@ smccc_function_id_copy_is_fast(smccc_function_id_t	 *bit_field_dst,
 			       const smccc_function_id_t *bit_field_src);
 
 void
+smccc_vendor_hyp_function_id_set_function(
+	smccc_vendor_hyp_function_id_t *bit_field, uint16_t val);
+
+uint16_t
+smccc_vendor_hyp_function_id_get_function(
+	const smccc_vendor_hyp_function_id_t *bit_field);
+
+void
+smccc_vendor_hyp_function_id_copy_function(
+	smccc_vendor_hyp_function_id_t	     *bit_field_dst,
+	const smccc_vendor_hyp_function_id_t *bit_field_src);
+
+void
 smccc_vendor_hyp_function_id_set_call_class(
 	smccc_vendor_hyp_function_id_t	 *bit_field,
 	smccc_vendor_hyp_function_class_t val);
@@ -4145,19 +5023,6 @@ smccc_vendor_hyp_function_id_copy_call_class(
 	const smccc_vendor_hyp_function_id_t *bit_field_src);
 
 void
-smccc_vendor_hyp_function_id_set_function(
-	smccc_vendor_hyp_function_id_t *bit_field, uint16_t val);
-
-uint16_t
-smccc_vendor_hyp_function_id_get_function(
-	const smccc_vendor_hyp_function_id_t *bit_field);
-
-void
-smccc_vendor_hyp_function_id_copy_function(
-	smccc_vendor_hyp_function_id_t	     *bit_field_dst,
-	const smccc_vendor_hyp_function_id_t *bit_field_src);
-
-void
 vcpu_option_flags_set_pinned(vcpu_option_flags_t *bit_field, bool val);
 
 bool
@@ -4166,16 +5031,6 @@ vcpu_option_flags_get_pinned(const vcpu_option_flags_t *bit_field);
 void
 vcpu_option_flags_copy_pinned(vcpu_option_flags_t	*bit_field_dst,
 			      const vcpu_option_flags_t *bit_field_src);
-
-void
-vcpu_option_flags_set_critical(vcpu_option_flags_t *bit_field, bool val);
-
-bool
-vcpu_option_flags_get_critical(const vcpu_option_flags_t *bit_field);
-
-void
-vcpu_option_flags_copy_critical(vcpu_option_flags_t	  *bit_field_dst,
-				const vcpu_option_flags_t *bit_field_src);
 
 void
 vcpu_option_flags_set_ras_error_handler(vcpu_option_flags_t *bit_field,
@@ -4233,14 +5088,14 @@ vcpu_option_flags_copy_trace_allowed(vcpu_option_flags_t       *bit_field_dst,
 				     const vcpu_option_flags_t *bit_field_src);
 
 void
-vcpu_option_flags_set_hlos_vm(vcpu_option_flags_t *bit_field, bool val);
+vcpu_option_flags_set_critical(vcpu_option_flags_t *bit_field, bool val);
 
 bool
-vcpu_option_flags_get_hlos_vm(const vcpu_option_flags_t *bit_field);
+vcpu_option_flags_get_critical(const vcpu_option_flags_t *bit_field);
 
 void
-vcpu_option_flags_copy_hlos_vm(vcpu_option_flags_t	 *bit_field_dst,
-			       const vcpu_option_flags_t *bit_field_src);
+vcpu_option_flags_copy_critical(vcpu_option_flags_t	  *bit_field_dst,
+				const vcpu_option_flags_t *bit_field_src);
 
 void
 vcpu_option_flags_set_vcpu_run_scheduled(vcpu_option_flags_t *bit_field,
@@ -4253,6 +5108,16 @@ void
 vcpu_option_flags_copy_vcpu_run_scheduled(
 	vcpu_option_flags_t	  *bit_field_dst,
 	const vcpu_option_flags_t *bit_field_src);
+
+void
+vcpu_option_flags_set_hlos_vm(vcpu_option_flags_t *bit_field, bool val);
+
+bool
+vcpu_option_flags_get_hlos_vm(const vcpu_option_flags_t *bit_field);
+
+void
+vcpu_option_flags_copy_hlos_vm(vcpu_option_flags_t	 *bit_field_dst,
+			       const vcpu_option_flags_t *bit_field_src);
 
 void
 vcpu_poweroff_flags_set_last_vcpu(vcpu_poweroff_flags_t *bit_field, bool val);
@@ -4334,83 +5199,146 @@ vic_option_flags_copy_res0_0(vic_option_flags_t	      *bit_field_dst,
 			     const vic_option_flags_t *bit_field_src);
 
 void
-virtio_mmio_notify_reason_set_new_buffer(virtio_mmio_notify_reason_t *bit_field,
-					 bool			      val);
+virtio_backend_notify_reason_set_new_buffer(
+	virtio_backend_notify_reason_t *bit_field, bool val);
 
 bool
-virtio_mmio_notify_reason_get_new_buffer(
-	const virtio_mmio_notify_reason_t *bit_field);
+virtio_backend_notify_reason_get_new_buffer(
+	const virtio_backend_notify_reason_t *bit_field);
 
 void
-virtio_mmio_notify_reason_copy_new_buffer(
-	virtio_mmio_notify_reason_t	  *bit_field_dst,
-	const virtio_mmio_notify_reason_t *bit_field_src);
+virtio_backend_notify_reason_copy_new_buffer(
+	virtio_backend_notify_reason_t	     *bit_field_dst,
+	const virtio_backend_notify_reason_t *bit_field_src);
 
 void
-virtio_mmio_notify_reason_set_reset_rqst(virtio_mmio_notify_reason_t *bit_field,
-					 bool			      val);
+virtio_backend_notify_reason_set_reset_request(
+	virtio_backend_notify_reason_t *bit_field, bool val);
 
 bool
-virtio_mmio_notify_reason_get_reset_rqst(
-	const virtio_mmio_notify_reason_t *bit_field);
+virtio_backend_notify_reason_get_reset_request(
+	const virtio_backend_notify_reason_t *bit_field);
 
 void
-virtio_mmio_notify_reason_copy_reset_rqst(
-	virtio_mmio_notify_reason_t	  *bit_field_dst,
-	const virtio_mmio_notify_reason_t *bit_field_src);
+virtio_backend_notify_reason_copy_reset_request(
+	virtio_backend_notify_reason_t	     *bit_field_dst,
+	const virtio_backend_notify_reason_t *bit_field_src);
 
 bool
-virtio_mmio_notify_reason_get_res0_irq_ack(
-	const virtio_mmio_notify_reason_t *bit_field);
+virtio_backend_notify_reason_get_res0_2(
+	const virtio_backend_notify_reason_t *bit_field);
 
 void
-virtio_mmio_notify_reason_set_driver_ok(virtio_mmio_notify_reason_t *bit_field,
-					bool			     val);
+virtio_backend_notify_reason_set_driver_ok(
+	virtio_backend_notify_reason_t *bit_field, bool val);
 
 bool
-virtio_mmio_notify_reason_get_driver_ok(
-	const virtio_mmio_notify_reason_t *bit_field);
+virtio_backend_notify_reason_get_driver_ok(
+	const virtio_backend_notify_reason_t *bit_field);
 
 void
-virtio_mmio_notify_reason_copy_driver_ok(
-	virtio_mmio_notify_reason_t	  *bit_field_dst,
-	const virtio_mmio_notify_reason_t *bit_field_src);
+virtio_backend_notify_reason_copy_driver_ok(
+	virtio_backend_notify_reason_t	     *bit_field_dst,
+	const virtio_backend_notify_reason_t *bit_field_src);
 
 void
-virtio_mmio_notify_reason_set_failed(virtio_mmio_notify_reason_t *bit_field,
-				     bool			  val);
+virtio_backend_notify_reason_set_failed(
+	virtio_backend_notify_reason_t *bit_field, bool val);
 
 bool
-virtio_mmio_notify_reason_get_failed(
-	const virtio_mmio_notify_reason_t *bit_field);
+virtio_backend_notify_reason_get_failed(
+	const virtio_backend_notify_reason_t *bit_field);
 
 void
-virtio_mmio_notify_reason_copy_failed(
-	virtio_mmio_notify_reason_t	  *bit_field_dst,
-	const virtio_mmio_notify_reason_t *bit_field_src);
+virtio_backend_notify_reason_copy_failed(
+	virtio_backend_notify_reason_t	     *bit_field_dst,
+	const virtio_backend_notify_reason_t *bit_field_src);
 
 void
-virtio_option_flags_set_valid_device_type(virtio_option_flags_t *bit_field,
-					  bool			 val);
+virtio_backend_option_flags_set_sync_reset(
+	virtio_backend_option_flags_t *bit_field, bool val);
 
 bool
-virtio_option_flags_get_valid_device_type(
-	const virtio_option_flags_t *bit_field);
+virtio_backend_option_flags_get_sync_reset(
+	const virtio_backend_option_flags_t *bit_field);
 
 void
-virtio_option_flags_copy_valid_device_type(
-	virtio_option_flags_t	    *bit_field_dst,
-	const virtio_option_flags_t *bit_field_src);
+virtio_backend_option_flags_copy_sync_reset(
+	virtio_backend_option_flags_t	    *bit_field_dst,
+	const virtio_backend_option_flags_t *bit_field_src);
 
 void
-virtio_option_flags_set_res0(virtio_option_flags_t *bit_field, uint64_t val);
+virtio_backend_option_flags_set_valid_device_type(
+	virtio_backend_option_flags_t *bit_field, bool val);
 
-uint64_t
-virtio_option_flags_get_res0(const virtio_option_flags_t *bit_field);
+bool
+virtio_backend_option_flags_get_valid_device_type(
+	const virtio_backend_option_flags_t *bit_field);
 
 void
-virtio_option_flags_copy_res0(virtio_option_flags_t	  *bit_field_dst,
-			      const virtio_option_flags_t *bit_field_src);
+virtio_backend_option_flags_copy_valid_device_type(
+	virtio_backend_option_flags_t	    *bit_field_dst,
+	const virtio_backend_option_flags_t *bit_field_src);
+
+void
+virtio_status_set_acknowledge(virtio_status_t *bit_field, bool val);
+
+bool
+virtio_status_get_acknowledge(const virtio_status_t *bit_field);
+
+void
+virtio_status_copy_acknowledge(virtio_status_t	     *bit_field_dst,
+			       const virtio_status_t *bit_field_src);
+
+void
+virtio_status_set_driver(virtio_status_t *bit_field, bool val);
+
+bool
+virtio_status_get_driver(const virtio_status_t *bit_field);
+
+void
+virtio_status_copy_driver(virtio_status_t	*bit_field_dst,
+			  const virtio_status_t *bit_field_src);
+
+void
+virtio_status_set_driver_ok(virtio_status_t *bit_field, bool val);
+
+bool
+virtio_status_get_driver_ok(const virtio_status_t *bit_field);
+
+void
+virtio_status_copy_driver_ok(virtio_status_t	   *bit_field_dst,
+			     const virtio_status_t *bit_field_src);
+
+void
+virtio_status_set_features_ok(virtio_status_t *bit_field, bool val);
+
+bool
+virtio_status_get_features_ok(const virtio_status_t *bit_field);
+
+void
+virtio_status_copy_features_ok(virtio_status_t	     *bit_field_dst,
+			       const virtio_status_t *bit_field_src);
+
+void
+virtio_status_set_device_needs_reset(virtio_status_t *bit_field, bool val);
+
+bool
+virtio_status_get_device_needs_reset(const virtio_status_t *bit_field);
+
+void
+virtio_status_copy_device_needs_reset(virtio_status_t	    *bit_field_dst,
+				      const virtio_status_t *bit_field_src);
+
+void
+virtio_status_set_failed(virtio_status_t *bit_field, bool val);
+
+bool
+virtio_status_get_failed(const virtio_status_t *bit_field);
+
+void
+virtio_status_copy_failed(virtio_status_t	*bit_field_dst,
+			  const virtio_status_t *bit_field_src);
 
 void
 vpm_group_option_flags_set_no_aggregation(vpm_group_option_flags_t *bit_field,
@@ -4424,3 +5352,29 @@ void
 vpm_group_option_flags_copy_no_aggregation(
 	vpm_group_option_flags_t       *bit_field_dst,
 	const vpm_group_option_flags_t *bit_field_src);
+
+void
+watchdog_bind_option_flags_set_bite_virq(
+	watchdog_bind_option_flags_t *bit_field, bool val);
+
+bool
+watchdog_bind_option_flags_get_bite_virq(
+	const watchdog_bind_option_flags_t *bit_field);
+
+void
+watchdog_bind_option_flags_copy_bite_virq(
+	watchdog_bind_option_flags_t	   *bit_field_dst,
+	const watchdog_bind_option_flags_t *bit_field_src);
+
+void
+watchdog_option_flags_set_critical_bite(watchdog_option_flags_t *bit_field,
+					bool			 val);
+
+bool
+watchdog_option_flags_get_critical_bite(
+	const watchdog_option_flags_t *bit_field);
+
+void
+watchdog_option_flags_copy_critical_bite(
+	watchdog_option_flags_t	      *bit_field_dst,
+	const watchdog_option_flags_t *bit_field_src);

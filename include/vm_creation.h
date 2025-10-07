@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-#define MAX_CAPS    1024
-#define GIC_SPI_NUM 988
-#define GIC_LPI_NUM 8192
+#ifndef INCLUDE_VM_CREATION_H_
+#define INCLUDE_VM_CREATION_H_
+
+#define MAX_CAPS 1024U
 
 error_t
 rm_vm_create(const rm_env_data_t *env_data);
@@ -21,10 +22,10 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 			 uint64_t image_offset, uint64_t image_size,
 			 uint64_t dt_offset, uint64_t dt_size);
 
-typedef struct vm_auth_param {
+struct vm_auth_param {
 	uint32_t auth_param_type;
 	uint32_t auth_param;
-} vm_auth_param_t;
+};
 
 rm_error_t
 vm_creation_auth(vm_t *vm, count_t num_auth_params,
@@ -49,8 +50,6 @@ vm_creation_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 error_t
 vm_creation_process_resource(vm_t *vm);
 
-typedef struct memparcel memparcel_t;
-
 error_t
 vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp);
 
@@ -62,7 +61,7 @@ error_t
 unmap_dtb(uint32_t mp_handle);
 
 error_t
-vm_creation_config_vm_info_area(vm_config_t *vmcfg);
+vm_creation_config_vm_info_area(cap_id_t as_cap, vm_config_t *vmcfg);
 
 error_t
 vm_creation_map_vm_info_area(vm_config_t *vmcfg);
@@ -75,3 +74,9 @@ vm_reset_handle_cleanup(vm_t *vm);
 
 bool
 vm_reset_handle_destroy(vm_t *vm);
+
+#else
+
+#error multiple include of vm_creation.h
+
+#endif

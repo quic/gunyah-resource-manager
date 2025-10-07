@@ -15,6 +15,7 @@
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wextra-semi"
+#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
 #include <libfdt.h>
 #pragma clang diagnostic pop
 
@@ -23,14 +24,17 @@
 
 #include <util.h>
 #include <utils/list.h>
-#include <utils/vector.h>
 
 #include <cache.h>
 #include <dt_linux.h>
 #include <dt_overlay.h>
 #include <event.h>
+#include <guest_interface.h>
+#include <mem_region.h>
 #include <memextent.h>
+#include <memparcel.h>
 #include <memparcel_msg.h>
+#include <panic.h>
 #include <platform.h>
 #include <platform_dt.h>
 #include <platform_vm_config.h>
@@ -43,6 +47,35 @@
 #include <vm_memory.h>
 #include <vm_mgnt.h>
 
+#if defined(PLATFORM_QCOM_WDT_VREG_HLOS) && PLATFORM_QCOM_WDT_VREG_HLOS
+static error_t
+vm_dt_add_wdt_vreg(dto_t *dto, const struct vdevice_watchdog *wdt,
+		   char (*wdt_node_name)[23], uint32_t	      wdt_addr)
+{
+	error_t err;
+
+	int32_t snprintf_ret = snprintf(*wdt_node_name, sizeof(*wdt_node_name),
+					"/soc/qcom,wdt@%08x", wdt_addr);
+
+	if ((snprintf_ret < 0) ||
+	    (snprintf_ret >= (int32_t)sizeof(*wdt_node_name))) {
+		err = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	CHECK_DTO(err, dto_modify_begin_by_path(dto, *wdt_node_name));
+	uint32_t wdt_reg[2] = { wdt_addr, PAGE_SIZE };
+	CHECK_DTO(err, dto_property_add_u32array(dto, "reg", wdt_reg, 2));
+	CHECK_DTO(err, dto_property_add_string(dto, "reg-names", "wdt-base"));
+	CHECK_DTO(err, dto_property_add_interrupts_array(dto, "interrupts",
+							 &wdt->bark_virq, 1));
+	CHECK_DTO(err, dto_modify_end_by_path(dto, *wdt_node_name));
+
+	err = OK;
+out:
+	return err;
+}
+#endif
 
 #if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
 static error_t
@@ -53,7 +86,15 @@ vm_dt_add_sbsa_wdt(dto_t *dto, const struct vdevice_watchdog *wdt,
 
 	// Add the SBSA watchdog
 	CHECK_DTO(err, dto_modify_begin_by_path(dto, "/soc/"));
-	(void)snprintf(*wdt_node_name, 23, "watchdog@%08x", wdt_addr);
+	int32_t snprintf_ret = snprintf(*wdt_node_name, sizeof(*wdt_node_name),
+					"watchdog@%08x", wdt_addr);
+
+	if ((snprintf_ret < 0) ||
+	    (snprintf_ret >= (int32_t)sizeof(*wdt_node_name))) {
+		err = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
 	CHECK_DTO(err, dto_node_begin(dto, *wdt_node_name));
 	const char *wdt_compat[1] = { "arm,sbsa-gwdt" };
 	CHECK_DTO(err, dto_property_add_stringlist(dto, "compatible",
@@ -73,7 +114,6 @@ out:
 }
 #endif
 
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
 static error_t
 vm_dt_create_hlos_wdt(dto_t *dto, const struct vdevice_watchdog *wdt)
 {
@@ -90,17 +130,51 @@ vm_dt_create_hlos_wdt(dto_t *dto, const struct vdevice_watchdog *wdt)
 		}
 #endif
 
-		// Using SBSA disable the existing watchdog
-		(void)snprintf(wdt_node_name, 23, "/soc/qcom,wdt@%08x",
-			       wdt_addr);
+#if defined(PLATFORM_QCOM_WDT_VREG_HLOS) && PLATFORM_QCOM_WDT_VREG_HLOS
+		// Using virtual register emulation on QCOM watchdog. Patch the
+		// watchdog properties
+		err = vm_dt_add_wdt_vreg(dto, wdt, &wdt_node_name, wdt_addr);
+		if (err != OK) {
+			goto out;
+		}
+#else
+		// Using SBSA or QCOM SMC-based watchdog. Disable the existing
+		// watchdog
+		int32_t snprintf_ret = snprintf(wdt_node_name,
+						sizeof(wdt_node_name),
+						"/soc/qcom,wdt@%08x", wdt_addr);
+		if ((snprintf_ret < 0) ||
+		    (snprintf_ret >= (int32_t)sizeof(wdt_node_name))) {
+			err = ERROR_ARGUMENT_INVALID;
+			goto out;
+		}
+
 		CHECK_DTO(err, dto_modify_begin_by_path(dto, wdt_node_name));
 		const char *pwdt_status[1] = { "disabled" };
 		CHECK_DTO(err, dto_property_add_stringlist(dto, "status",
 							   pwdt_status, 1));
 		CHECK_DTO(err, dto_modify_end_by_path(dto, wdt_node_name));
+#endif
 	}
 
 	err = OK;
+out:
+	return err;
+}
+
+#if defined(CONFIG_TZ_RM_LOG) && !defined(PLATFORM_DISABLE_TZ_DT_PATCH)
+static error_t
+vm_dt_map_rm_logs(dto_t *dto, vmaddr_t log_ipa, size_t log_size)
+{
+	error_t err = OK;
+
+	CHECK_DTO(err, dto_modify_begin(dto, "qcom_tzlog"));
+	CHECK_DTO(err, dto_property_add_u32(dto, "rmlog-address",
+					    (uint32_t)log_ipa));
+	CHECK_DTO(err,
+		  dto_property_add_u32(dto, "rmlog-size", (uint32_t)log_size));
+	CHECK_DTO(err, dto_modify_end(dto, "qcom_tzlog"));
+
 out:
 	return err;
 }
@@ -132,7 +206,7 @@ vm_dt_split(void *base, size_t size, dto_t **dto, size_t *offset)
 	*offset += util_balign_up(dto_size, 8U);
 
 	// Start the second DTBO immediately after the first.
-	*dto = dto_init((char *)base + (*offset), size - (*offset));
+	*dto = dto_init((char *)base + (*offset), size - (*offset), NULL);
 	if (*dto == NULL) {
 		ret = ERROR_NOMEM;
 		goto out;
@@ -177,9 +251,16 @@ vm_dt_generate_rm_rpc_node(dto_t *dto, const vdevice_node_t *node,
 {
 	error_t err = OK;
 
-	char node_name[128];
-	(void)snprintf(node_name, 128, "qcom,resource-manager-rpc@%016lx",
-		       msgq_pair->tx_vm_cap);
+	char	node_name[128];
+	int32_t snprintf_ret = snprintf(node_name, sizeof(node_name),
+					"qcom,resource-manager-rpc@%016lx",
+					msgq_pair->tx_vm_cap);
+
+	if ((snprintf_ret < 0) ||
+	    (snprintf_ret >= (int32_t)sizeof(node_name))) {
+		err = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
 
 	CHECK_DTO(err, dto_node_begin(dto, node_name));
 	const char *rpc_compat[8];
@@ -199,7 +280,7 @@ vm_dt_generate_rm_rpc_node(dto_t *dto, const vdevice_node_t *node,
 					   msgq_pair->rx_vm_virq };
 	CHECK_DTO(err, dto_property_add_interrupts_array(
 			       dto, "interrupts", interrupts,
-			       util_array_size(interrupts)));
+			       (count_t)util_array_size(interrupts)));
 
 	// dto_property_add_empty(dto, "qcom,console-dev");	// for SVM
 	err = vm_dt_add_rm_overlay_support(dto, msgq_pair);
@@ -225,8 +306,7 @@ vm_dt_rm_rpc_node(const vm_t *hlos, dto_t *dto)
 	loop_list(node, &hlos->vm_config->vdevice_nodes, vdevice_)
 	{
 		if (node->type == VDEV_RM_RPC) {
-			msgq_pair =
-				(struct vdevice_msg_queue_pair *)node->config;
+			msgq_pair = node->config.msg_queue_pair;
 			if (msgq_pair->peer == VMID_RM) {
 				break;
 			}
@@ -241,7 +321,6 @@ vm_dt_rm_rpc_node(const vm_t *hlos, dto_t *dto)
 	return err;
 }
 
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
 typedef struct {
 	struct vdevice_watchdog *wdt;
 	error_t			 err;
@@ -258,11 +337,14 @@ vm_dt_find_watchdog_node(const vm_t *hlos, dto_t *dto)
 	loop_list(node, &hlos->vm_config->vdevice_nodes, vdevice_)
 	{
 		if (node->type == VDEV_WATCHDOG) {
-			wdt = (struct vdevice_watchdog *)node->config;
+			wdt = node->config.watchdog;
 			break;
 		}
 	}
 
+#if (!defined(PLATFORM_SBSA_WDT) || !PLATFORM_SBSA_WDT) &&                     \
+	(!defined(PLATFORM_QCOM_WDT_VREG_HLOS) ||                              \
+	 !PLATFORM_QCOM_WDT_VREG_HLOS)
 	if (wdt != NULL) {
 		// Using QCOM SMSC-based watchdog
 		// Insert the watchdog node into the device tree
@@ -276,13 +358,15 @@ vm_dt_find_watchdog_node(const vm_t *hlos, dto_t *dto)
 	}
 
 out:
+#else
+	(void)dto;
+#endif
 
 	return (vm_dt_wdt_info){
 		.err = err,
 		.wdt = wdt,
 	};
 }
-#endif
 
 static error_t
 vm_dt_generate_root_properties(dto_t *dto)
@@ -337,7 +421,6 @@ vm_dt_create_hlos_hypervisor_node(dto_t *dto)
 	assert(hlos != NULL);
 	assert(hlos->vm_config != NULL);
 
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
 	// Find the watchdog node
 	vm_dt_wdt_info wdt_info = vm_dt_find_watchdog_node(hlos, dto);
 	err			= wdt_info.err;
@@ -345,7 +428,6 @@ vm_dt_create_hlos_hypervisor_node(dto_t *dto)
 	if (err != OK) {
 		goto out;
 	}
-#endif
 
 	err = vm_dt_rm_rpc_node(hlos, dto);
 	if (err != OK) {
@@ -370,7 +452,7 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 	vm_dt_create_hlos_ret_t ret = { .err = OK };
 	error_t			e;
 
-	dto_t *dto = dto_init(base, size);
+	dto_t *dto = dto_init(base, size, NULL);
 	if (dto == NULL) {
 		ret.err = ERROR_NOMEM;
 		goto out;
@@ -378,9 +460,7 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 
 	vm_dt_hyp_info hyp_info	     = vm_dt_create_hlos_hypervisor_node(dto);
 	vm_t	      *hlos	     = hyp_info.hlos;
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
 	struct vdevice_watchdog *wdt = hyp_info.wdt;
-#endif
 	ret.err			     = hyp_info.err;
 	if (ret.err != OK) {
 		goto out;
@@ -413,12 +493,10 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 	(void)log_size;
 #endif
 
-#if defined(CAP_RIGHTS_WATCHDOG_ALL)
 	ret.err = vm_dt_create_hlos_wdt(dto, wdt);
 	if (ret.err != OK) {
 		goto out;
 	}
-#endif
 
 	e = platform_dto_finalise(dto, hlos, base);
 	if (e != OK) {
@@ -463,7 +541,7 @@ vm_dt_apply_hlos_overlay(vm_t *hlos_vm, paddr_t hlos_dtb, size_t dtb_size)
 	cap_ret.e = memextent_map_partial(vm_me, rm_get_rm_addrspace(),
 					  orig_dtb_addr, orig_dtb_addr,
 					  dtb_region_size, PGTABLE_ACCESS_RW,
-					  PGTABLE_VM_MEMTYPE_NORMAL_WB);
+					  PGTABLE_VM_MEMTYPE_NORMAL_WB, false);
 	if (cap_ret.e != OK) {
 		err = ERROR_DENIED;
 		goto out;
@@ -520,21 +598,25 @@ vm_dt_apply_hlos_overlay(vm_t *hlos_vm, paddr_t hlos_dtb, size_t dtb_size)
 		++cnt;
 	}
 
-	fdt_pack(dtb_process_buf);
+	(void)fdt_pack(dtb_process_buf);
 
 	size_t new_dtb_size = fdt_totalsize(dtb_process_buf);
 	assert(new_dtb_size <= dtb_region_size);
 
-	(void)memcpy((void *)orig_dtb_addr, dtb_process_buf, new_dtb_size);
+	(void)memscpy((void *)orig_dtb_addr, dtb_region_size, dtb_process_buf,
+		      new_dtb_size);
 	cache_clean_by_va((void *)orig_dtb_addr, new_dtb_size);
 
 	hlos_vm->dt_size = new_dtb_size;
 
 out:
 	if (cap_ret.e == OK) {
-		memextent_unmap_partial(rm_get_me(), rm_get_rm_addrspace(),
-					orig_dtb_addr, orig_dtb_addr,
-					dtb_region_size);
+		error_t e = memextent_unmap_partial(
+			vm_me, rm_get_rm_addrspace(), orig_dtb_addr,
+			orig_dtb_addr, dtb_region_size);
+		if (e != OK) {
+			panic("memextent_unmap_partial function failed\n");
+		}
 	}
 
 	if (overlay_dtbo != NULL) {

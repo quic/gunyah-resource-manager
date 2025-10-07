@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <utils/list.h>
+
 #include <errno.h>
 #include <event.h>
 #include <preempt.h>
@@ -18,16 +20,11 @@
 
 #define NS_PER_S 1000000000
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpadded"
-
 struct event_data_s {
 	event_t *head;
-	event_t *tail;
 	bool	 exit_loop;
+	uint8_t	 pad_to_end[7];
 };
-
-#pragma clang diagnostic pop
 
 static struct event_data_s event_data;
 
@@ -42,20 +39,11 @@ flush_pending_list(void)
 {
 	assert_preempt_disabled();
 
-	while (event_data.head != NULL) {
-		event_t *ev   = event_data.head;
-		event_t *next = ev->next;
+	while (!is_empty(event_data.head)) {
+		event_t *ev = event_data.head;
+		list_remove(event_t, &event_data.head, ev, );
 
-		assert(ev->prev == NULL);
-
-		event_data.head = next;
-
-		if (next != NULL) {
-			next->prev = NULL;
-		} else {
-			event_data.tail = NULL;
-		}
-
+		ev->prev    = NULL;
 		ev->next    = NULL;
 		ev->pending = false;
 
@@ -90,9 +78,9 @@ do_event_wait(int32_t timeout)
 
 		// If we were interrupted but no event
 		// was triggered, retry the wait.
-	} while ((event_data.head == NULL) && (ret == -EINTR));
+	} while (is_empty(event_data.head) && (ret == -EINTR));
 
-	return event_data.head != NULL;
+	return !is_empty(event_data.head);
 }
 
 static void
@@ -145,7 +133,7 @@ event_is_pending(void)
 	bool pending;
 
 	preempt_disable();
-	pending = event_data.head != NULL;
+	pending = !is_empty(event_data.head);
 	preempt_enable();
 
 	return pending;
@@ -165,7 +153,7 @@ event_wait_pending(int32_t timeout)
 	bool pending;
 
 	preempt_disable();
-	pending = (event_data.head != NULL) || do_event_wait(timeout);
+	pending = !is_empty(event_data.head) || do_event_wait(timeout);
 	preempt_enable();
 
 	return pending;
@@ -211,21 +199,7 @@ event_deregister(event_t *event)
 	bool was_pending = event->pending;
 
 	if (was_pending) {
-		event_t *next = event->next;
-		event_t *prev = event->prev;
-
-		if (next != NULL) {
-			next->prev = prev;
-		} else {
-			event_data.tail = prev;
-		}
-
-		if (prev != NULL) {
-			prev->next = next;
-		} else {
-			event_data.head = next;
-		}
-
+		list_remove(event_t, &event_data.head, event, );
 		event->next    = NULL;
 		event->prev    = NULL;
 		event->pending = false;
@@ -248,17 +222,25 @@ event_trigger(event_t *event)
 	bool was_pending = event->pending;
 
 	if (!was_pending) {
-		event_t *tail = event_data.tail;
+		list_append(event_t, &event_data.head, event, );
+		event->pending = true;
+	}
 
-		if (tail != NULL) {
-			tail->next = event;
-		} else {
-			event_data.head = event;
-		}
+	preempt_enable();
 
-		event->prev	= tail;
-		event_data.tail = event;
-		event->pending	= true;
+	return was_pending;
+}
+
+bool
+event_untrigger(event_t *event)
+{
+	preempt_disable();
+
+	bool was_pending = event->pending;
+
+	if (was_pending) {
+		list_remove(event_t, &event_data.head, event, );
+		event->pending = false;
 	}
 
 	preempt_enable();

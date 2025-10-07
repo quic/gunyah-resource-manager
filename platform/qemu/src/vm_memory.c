@@ -15,13 +15,16 @@
 #include <rm_types.h>
 #include <util.h>
 #include <utils/address_range_allocator.h>
+#include <utils/vector.h>
 
 #include <event.h>
 #include <guest_interface.h>
 #include <irq_manager.h>
+#include <mem_region.h>
 #include <memextent.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
+#include <platform.h>
 #include <platform_vm_config.h>
 #include <platform_vm_memory.h>
 #include <resource-manager.h>
@@ -51,8 +54,31 @@ struct vm_acl_info {
 
 static cap_id_t parent_ddr_me = CSPACE_CAP_INVALID;
 
-static bool batch_me_ops  = false;
-static bool batch_me_sync = false;
+static paddr_t device_addr_limit = 0U;
+
+static cap_id_t batch_me_cap  = CSPACE_CAP_INVALID;
+static bool	batch_me_sync = false;
+
+static void
+maybe_sync(cap_id_t memextent_cap)
+{
+	if (memextent_cap == CSPACE_CAP_INVALID) {
+		// Given extent is not valid; this is only possible after
+		// donation from a partition, so there is no need to sync.
+	} else if (memextent_cap == batch_me_cap) {
+		// We are in a batch job for the given extent; trigger a sync at
+		// the end of the job.
+		batch_me_sync = true;
+	} else if (batch_me_cap != CSPACE_CAP_INVALID) {
+		// We are in a batch job for a different extent; sync and start
+		// a new batch job.
+		memextent_sync_all(batch_me_cap);
+		batch_me_cap = memextent_cap;
+	} else {
+		// No batch job in progress; sync immediately.
+		memextent_sync_all(memextent_cap);
+	}
+}
 
 static bool
 is_mapped_direct(vm_t *vm, vm_memuse_t memuse)
@@ -70,6 +96,7 @@ is_mapped_direct(vm_t *vm, vm_memuse_t memuse)
 	case VM_MEMUSE_BOOTINFO:
 		ret = (vm->vmid == VMID_HLOS) || vm->vm_config->mem_map_direct;
 		break;
+	case VM_MEMUSE_PROTECTED:
 	case VM_MEMUSE_VDEVICE:
 	case VM_MEMUSE_PLATFORM_VDEVICE:
 	default:
@@ -82,15 +109,30 @@ is_mapped_direct(vm_t *vm, vm_memuse_t memuse)
 static bool
 is_device_mapping(vm_memuse_t memuse, vmaddr_t ipa, size_t size)
 {
-	paddr_t dev_base = rm_get_device_me_base();
-	paddr_t dev_size = rm_get_device_me_size();
-
 	// Platform vdevices are based on real devices, so allow them to overlap
 	// with device extent IPAs. It is the VM's responsibility to ensure
 	// these vdevices don't conflict with other device mappings.
-	return (memuse == VM_MEMUSE_PLATFORM_VDEVICE) &&
-	       (ipa != INVALID_ADDRESS) && (ipa >= dev_base) &&
-	       ((ipa + size) <= (dev_base + dev_size));
+	bool ret = false;
+
+	if ((memuse != VM_MEMUSE_PLATFORM_VDEVICE) ||
+	    (ipa == INVALID_ADDRESS)) {
+		goto out;
+	}
+
+	paddr_t dev_base;
+	size_t	dev_size;
+
+	count_t device_ranges_count = rm_get_device_ranges_count();
+	for (index_t i = 0U; i < device_ranges_count; i++) {
+		rm_get_device_ranges(i, &dev_base, &dev_size);
+		if (ipa >= dev_base &&
+		    ((ipa + size) <= (dev_base + dev_size))) {
+			ret = true;
+			break;
+		}
+	}
+out:
+	return ret;
 }
 
 static cap_id_result_t
@@ -104,11 +146,9 @@ create_ddr_me(cap_id_t parent)
 static cap_id_result_t
 create_device_me(void)
 {
-	cap_id_result_t ret = memextent_create(0U, rm_get_device_me_size(),
-					       MEMEXTENT_TYPE_SPARSE,
-					       PGTABLE_ACCESS_RW,
-					       MEMEXTENT_MEMTYPE_DEVICE,
-					       rm_get_device_me_cap());
+	cap_id_result_t ret = memextent_create(
+		0U, device_addr_limit, MEMEXTENT_TYPE_SPARSE, PGTABLE_ACCESS_RW,
+		MEMEXTENT_MEMTYPE_DEVICE, rm_get_device_me_cap());
 	if (ret.e != OK) {
 		goto out;
 	}
@@ -134,6 +174,24 @@ vm_memory_init(void)
 		parent_ddr_me = ret.r;
 	}
 
+	// Get the device address limit
+	paddr_t addr_limit_tmp	    = 0U;
+	count_t device_ranges_count = rm_get_device_ranges_count();
+	for (index_t i = 0U; i < device_ranges_count; i++) {
+		paddr_t dev_base;
+		size_t	dev_size;
+		paddr_t dev_addr_limit;
+
+		rm_get_device_ranges(i, &dev_base, &dev_size);
+		dev_addr_limit = dev_base + dev_size;
+
+		if (dev_addr_limit > addr_limit_tmp) {
+			addr_limit_tmp = dev_addr_limit;
+		}
+	}
+
+	device_addr_limit = addr_limit_tmp;
+
 	return ret.e;
 }
 
@@ -143,6 +201,9 @@ vm_memory_setup(vm_t *vm)
 	error_t err = OK;
 
 	assert(vm != NULL);
+
+	vm->private_paged_ddr_me = CSPACE_CAP_INVALID;
+	vm->shared_paged_ddr_me	 = CSPACE_CAP_INVALID;
 
 	vm->owned_ddr_me    = CSPACE_CAP_INVALID;
 	vm->owned_device_me = CSPACE_CAP_INVALID;
@@ -171,6 +232,42 @@ out:
 	return err;
 }
 
+error_t
+vm_memory_vm_start(vm_t *vm)
+{
+	error_t err;
+	if (vm->sensitive) {
+		err = memextent_set_sanitise_on_reset(vm->owned_ddr_me);
+	} else {
+		err = OK;
+	}
+	return err;
+}
+
+void
+vm_memory_sanitise(const vm_t *vm)
+{
+	bool has_protected = vm->vm_config->mem_demand_paging &&
+			     vm->mem_private;
+
+	if (vm->vm_config->addrspace == CSPACE_CAP_INVALID) {
+		// nothing to sanitise
+	} else if (has_protected) {
+		addrspace_modify_pages_flags_t flags =
+			addrspace_modify_pages_flags_default();
+		addrspace_modify_pages_flags_set_unlock(&flags, true);
+		addrspace_modify_pages_flags_set_sanitise(&flags, true);
+		gunyah_hyp_addrspace_modify_pages_result_t ret =
+			gunyah_hyp_addrspace_modify_pages(
+				vm->vm_config->addrspace, 0U,
+				util_bit(SVM_ADDRESS_SPACE_BITS), flags);
+		assert((ret.error == OK) && (ret.size_remaining == 0U));
+	} else {
+		// Not protected or not demand-paged; any required sanitisation
+		// will be done during memparcel reclaim.
+	}
+}
+
 void
 vm_memory_teardown(vm_t *vm)
 {
@@ -180,6 +277,14 @@ vm_memory_teardown(vm_t *vm)
 
 	if (vm->owned_device_me != CSPACE_CAP_INVALID) {
 		memextent_delete(vm->owned_device_me);
+	}
+
+	if (vm->private_paged_ddr_me != CSPACE_CAP_INVALID) {
+		memextent_delete(vm->private_paged_ddr_me);
+	}
+
+	if (vm->shared_paged_ddr_me != CSPACE_CAP_INVALID) {
+		memextent_delete(vm->shared_paged_ddr_me);
 	}
 }
 
@@ -196,7 +301,11 @@ vm_memory_map(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap, vmaddr_t ipa,
 
 	cap_id_t addrspace = vm->vm_config->addrspace;
 
-	err = memextent_map(me_cap, addrspace, ipa, access, map_memtype);
+	err = memextent_map(me_cap, addrspace, ipa, access, map_memtype,
+			    memuse == VM_MEMUSE_PROTECTED);
+	if (err == OK) {
+		maybe_sync(me_cap);
+	}
 
 	return err;
 }
@@ -216,7 +325,11 @@ vm_memory_map_partial(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap,
 	cap_id_t addrspace = vm->vm_config->addrspace;
 
 	err = memextent_map_partial(me_cap, addrspace, ipa, offset, size,
-				    access, map_memtype);
+				    access, map_memtype,
+				    memuse == VM_MEMUSE_PROTECTED);
+	if (err == OK) {
+		maybe_sync(me_cap);
+	}
 
 	return err;
 }
@@ -234,6 +347,9 @@ vm_memory_unmap(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap, vmaddr_t ipa)
 	cap_id_t addrspace = vm->vm_config->addrspace;
 
 	err = memextent_unmap(me_cap, addrspace, ipa);
+	if (err == OK) {
+		maybe_sync(me_cap);
+	}
 
 	return err;
 }
@@ -252,6 +368,9 @@ vm_memory_unmap_partial(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap,
 	cap_id_t addrspace = vm->vm_config->addrspace;
 
 	err = memextent_unmap_partial(me_cap, addrspace, ipa, offset, size);
+	if (err == OK) {
+		maybe_sync(me_cap);
+	}
 
 	return err;
 }
@@ -281,6 +400,9 @@ vm_memory_remap(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap, vmaddr_t ipa,
 	cap_id_t addrspace = vm->vm_config->addrspace;
 
 	err = memextent_update_access(me_cap, addrspace, ipa, new_access);
+	if (err == OK) {
+		maybe_sync(me_cap);
+	}
 
 out:
 	return err;
@@ -314,6 +436,9 @@ vm_memory_remap_partial(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap,
 
 	err = memextent_update_access_partial(me_cap, addrspace, ipa, offset,
 					      size, new_access);
+	if (err == OK) {
+		maybe_sync(me_cap);
+	}
 
 out:
 	return err;
@@ -337,30 +462,31 @@ vm_memory_create_and_map(vm_t *vm, vm_memuse_t memuse, cap_id_t parent_me,
 
 	ret = memextent_create_and_map(addrspace, offset, ipa, size, access,
 				       me_memtype, map_memtype, parent_me);
+	if (ret.e == OK) {
+		maybe_sync(parent_me);
+	}
 
 	return ret;
 }
 
 void
-vm_memory_batch_start(void)
+vm_memory_batch_start(cap_id_t me_cap)
 {
-	assert(!batch_me_ops);
+	assert(batch_me_cap == CSPACE_CAP_INVALID);
 	assert(!batch_me_sync);
 
-	batch_me_ops = true;
+	batch_me_cap = me_cap;
 }
 
 void
 vm_memory_batch_end(void)
 {
-	assert(batch_me_ops);
-
 	if (batch_me_sync) {
-		memextent_sync_all(parent_ddr_me);
+		memextent_sync_all(batch_me_cap);
 		batch_me_sync = false;
 	}
 
-	batch_me_ops = false;
+	batch_me_cap = CSPACE_CAP_INVALID;
 }
 
 vm_memory_result_t
@@ -391,7 +517,7 @@ vm_memory_lookup(vm_t *vm, vm_memuse_t memuse, vmaddr_t ipa, size_t size)
 		goto out;
 	}
 
-	ret.phys   = vm_memory_get_extent_base(mem_type) + lookup_ret.offset;
+	ret.phys   = lookup_ret.offset;
 	ret.size   = lookup_ret.size;
 	ret.access = memextent_mapping_attrs_get_kernel_access(
 		&lookup_ret.map_attrs);
@@ -429,11 +555,24 @@ vm_address_range_init(vm_t *vm)
 	if (vm->vmid != VMID_HLOS) {
 		// Reserve the device memory range.
 		address_range_allocator_ret_t as_ret;
-		as_ret = address_range_allocator_alloc(
-			vm->as_allocator, rm_get_device_me_base(),
-			rm_get_device_me_size(), ADDRESS_RANGE_NO_ALIGNMENT);
+
+		paddr_t dev_base;
+		size_t	dev_size;
+
+		count_t device_ranges_count = rm_get_device_ranges_count();
+		for (index_t i = 0U; i < device_ranges_count; i++) {
+			rm_get_device_ranges(i, &dev_base, &dev_size);
+
+			as_ret = address_range_allocator_alloc(
+				vm->as_allocator, dev_base, dev_size,
+				ADDRESS_RANGE_NO_ALIGNMENT);
+			if (as_ret.err != OK) {
+				break;
+			}
+		}
+
 		if (as_ret.err != OK) {
-			vm_address_range_destroy(vm);
+			address_range_allocator_deinit(vm->as_allocator);
 			ret = size_result_error(as_ret.err);
 			goto out;
 		}
@@ -450,10 +589,7 @@ vm_address_range_destroy(vm_t *vm)
 {
 	assert(vm != NULL);
 
-	if (vm->as_allocator != NULL) {
-		address_range_allocator_deinit(vm->as_allocator);
-		vm->as_allocator = NULL;
-	}
+	address_range_allocator_deinit(vm->as_allocator);
 }
 
 vm_address_range_result_t
@@ -588,21 +724,19 @@ out:
 }
 
 vm_acl_info_result_t
-vm_memory_get_acl_info(vm_t *vm, uint8_t mem_type, uint8_t trans_type,
-		       acl_entry_t *acl, uint32_t acl_entries, bool vm_init)
+vm_memory_get_acl_info(vm_t *vm, uint8_t mem_type, cap_id_t mp_me_cap,
+		       uint8_t trans_type, acl_entry_t *acl,
+		       uint32_t acl_entries, bool vm_init)
 {
-	vm_acl_info_result_t ret = { .err = OK };
-
 	(void)mem_type;
+	(void)mp_me_cap;
 	(void)trans_type;
 	(void)acl;
 	(void)acl_entries;
 	(void)vm_init;
 	(void)vm;
 
-	ret.info = NULL;
-
-	return ret;
+	return (vm_acl_info_result_t){ .err = OK };
 }
 
 void
@@ -621,7 +755,7 @@ vm_memory_create_extent(uint8_t mem_type)
 }
 
 cap_id_t
-vm_memory_get_owned_extent(vm_t *vm, uint8_t mem_type)
+vm_memory_get_owned_extent(const vm_t *vm, uint8_t mem_type)
 {
 	cap_id_t me_cap;
 
@@ -632,10 +766,79 @@ vm_memory_get_owned_extent(vm_t *vm, uint8_t mem_type)
 	return me_cap;
 }
 
-paddr_t
-vm_memory_get_extent_base(uint8_t mem_type)
+error_t
+vm_memory_setup_paged_extents(vm_t *vm)
 {
-	return (mem_type == MEM_TYPE_IO) ? rm_get_device_me_base() : 0U;
+	error_t ret;
+
+	if ((vm->shared_paged_ddr_me != CSPACE_CAP_INVALID) ||
+	    (vm->private_paged_ddr_me != CSPACE_CAP_INVALID)) {
+		ret = ERROR_BUSY;
+		goto out;
+	}
+
+	vm_t *owner_vm = vm_lookup(vm->owner);
+	assert(owner_vm != NULL);
+
+	acl_entry_t acl_unprotected[] = {
+		{ .vmid = vm->owner, .rights = MEM_RIGHTS_RWX },
+		{ .vmid = vm->vmid, .rights = MEM_RIGHTS_RWX },
+	};
+	cap_id_t unprotected_host_extent = vm_memory_get_source_extent(
+		owner_vm, MEM_TYPE_NORMAL, acl_unprotected,
+		util_array_size(acl_unprotected));
+
+	cap_id_result_t shared_me = create_ddr_me(unprotected_host_extent);
+	if (shared_me.e != OK) {
+		ret = shared_me.e;
+		goto out;
+	}
+	vm->shared_paged_ddr_me = shared_me.r;
+
+	if (vm->mem_private) {
+		acl_entry_t acl_protected[] = {
+			{ .vmid = vm->vmid, .rights = MEM_RIGHTS_RWX },
+		};
+		cap_id_t protected_host_extent = vm_memory_get_source_extent(
+			owner_vm, MEM_TYPE_NORMAL, acl_protected,
+			util_array_size(acl_protected));
+
+		cap_id_result_t private_me =
+			create_ddr_me(protected_host_extent);
+		if (private_me.e != OK) {
+			ret = private_me.e;
+			goto out;
+		}
+
+		ret = memextent_unmap_all(private_me.r);
+		if (ret != OK) {
+			goto out;
+		}
+
+		vm->private_paged_ddr_me = private_me.r;
+	}
+
+	ret = OK;
+
+out:
+	return ret;
+}
+
+cap_id_t
+vm_memory_get_paged_extent(const vm_t *vm, bool is_private)
+{
+	assert(vm != NULL);
+
+	return is_private ? vm->private_paged_ddr_me : vm->shared_paged_ddr_me;
+}
+
+cap_id_t
+vm_memory_get_source_extent(const vm_t *vm, uint8_t mem_type, acl_entry_t *acl,
+			    uint32_t acl_entries)
+{
+	(void)acl;
+	(void)acl_entries;
+	return vm_memory_get_owned_extent(vm, mem_type);
 }
 
 error_t
@@ -645,7 +848,7 @@ vm_memory_donate_extent(vm_t *vm, uint8_t mem_type, vm_acl_info_t *acl_info,
 {
 	error_t	 err;
 	cap_id_t owner_me_cap;
-	size_t	 offset = phys - vm_memory_get_extent_base(mem_type);
+	size_t	 offset = phys;
 
 	assert(vm != NULL);
 	(void)acl_info;
@@ -657,6 +860,34 @@ vm_memory_donate_extent(vm_t *vm, uint8_t mem_type, vm_acl_info_t *acl_info,
 					       size);
 	} else {
 		err = memextent_donate_sibling(mp_me_cap, owner_me_cap, offset,
+					       size);
+	}
+	if (err == OK) {
+		maybe_sync(to_mp ? owner_me_cap : mp_me_cap);
+	}
+
+	return err;
+}
+
+error_t
+vm_memory_add_to_paged_extent(const vm_t *vm, cap_id_t mp_me_cap, paddr_t phys,
+			      size_t size, bool is_private, bool reclaim)
+{
+	error_t err;
+	size_t	offset = phys;
+
+	cap_id_t paged_ddr_me = is_private ? vm->private_paged_ddr_me
+					   : vm->shared_paged_ddr_me;
+
+	if (is_private && !vm->mem_private) {
+		// The VM is unpratected and does not have distinct private and
+		// shared DDR MEs. It is not possible to add private memory.
+		err = ERROR_DENIED;
+	} else if (reclaim) {
+		err = memextent_donate_sibling(paged_ddr_me, mp_me_cap, offset,
+					       size);
+	} else {
+		err = memextent_donate_sibling(mp_me_cap, paged_ddr_me, offset,
 					       size);
 	}
 

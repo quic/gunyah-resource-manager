@@ -74,20 +74,19 @@ cbuf_write(cbuf_t *cbuf, const void *data, size_t data_len)
 
 	// check if remaining space (to the end of buf) fits the data
 	size_t sz_to_buf_end = cbuf->capacity - cbuf->write_idx;
-	if (sz_to_buf_end >= write_len) {
-		// if so, write to the remaining space
-		memcpy(cbuf->data + cbuf->write_idx, start, write_len);
+	// if not, write first part to the remaining space
+	size_t first_part = memscpy(cbuf->data + cbuf->write_idx, sz_to_buf_end,
+				    start, write_len);
 
-		cbuf->write_idx += write_len;
-	} else {
-		// if not, write first part to the remaining space
-		memcpy(cbuf->data + cbuf->write_idx, start, sz_to_buf_end);
+	// write the second part to the wrap space
+	size_t rest = write_len - first_part;
+	if (rest > 0U) {
+		memscpy(cbuf->data, cbuf->capacity, start + first_part, rest);
+	}
 
-		// write the second part to the wrap space
-		size_t rest = write_len - sz_to_buf_end;
-		memcpy(cbuf->data, start + sz_to_buf_end, rest);
-
-		cbuf->write_idx = (index_t)rest;
+	cbuf->write_idx += write_len;
+	if (cbuf->write_idx >= cbuf->capacity) {
+		cbuf->write_idx -= cbuf->capacity;
 	}
 
 	// set read idx base on if overwrite
@@ -113,20 +112,19 @@ cbuf_read(cbuf_t *cbuf, void *output, size_t output_len)
 
 	// check if need to wrap the buffer
 	size_t sz_to_buf_end = cbuf->capacity - cbuf->read_idx;
-	if (sz_to_buf_end >= read_len) {
-		// if not, read to buffer
-		memcpy(output, start + cbuf->read_idx, read_len);
+	// if so, read the fist part to the end of the buf
+	size_t first_part = memscpy(start, read_len,
+				    cbuf->data + cbuf->read_idx, sz_to_buf_end);
 
-		cbuf->read_idx += read_len;
-	} else {
-		// if so, read the fist part to the end of the buf
-		memcpy(start, cbuf->data + cbuf->read_idx, sz_to_buf_end);
+	// read the seconf part from the start of the buf
+	size_t rest = read_len - first_part;
+	if (rest > 0U) {
+		memscpy(start + first_part, rest, cbuf->data, cbuf->capacity);
+	}
 
-		// read the seconf part from the start of the buf
-		size_t rest = read_len - sz_to_buf_end;
-		memcpy(start + sz_to_buf_end, cbuf->data, rest);
-
-		cbuf->read_idx = (index_t)rest;
+	cbuf->read_idx += read_len;
+	if (cbuf->read_idx >= cbuf->capacity) {
+		cbuf->read_idx -= cbuf->capacity;
 	}
 
 	return read_len;

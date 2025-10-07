@@ -11,13 +11,12 @@
 #include <string.h>
 
 #include <rm_types.h>
-#include <utils/address_range_allocator.h>
-#include <utils/vector.h>
 
 #include <event.h>
 #include <guest_interface.h>
 #include <log.h>
 #include <memextent.h>
+#include <platform.h>
 #include <platform_vm_config.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>
@@ -29,9 +28,9 @@
 #include <vm_mgnt.h>
 
 error_t
-vm_creation_config_vm_info_area(vm_config_t *vmcfg)
+vm_creation_config_vm_info_area(cap_id_t as_cap, vm_config_t *vmcfg)
 {
-	error_t ret = OK;
+	error_t ret;
 
 	// We need to dynamically allocate some pages for the info area and
 	// attach them to a memextent. For this, we have to derive a memextent
@@ -42,11 +41,14 @@ vm_creation_config_vm_info_area(vm_config_t *vmcfg)
 	// FIXME:
 	size_t size = PAGE_SIZE;
 
-	vmcfg->vm->vm_info_area_size   = 0;
+	vmcfg->vm->vm_info_area_size   = 0U;
 	vmcfg->vm->vm_info_area_ipa    = ~0UL;
 	vmcfg->vm->vm_info_area_rm_ipa = ~0UL;
 	vmcfg->vm_info_area_me_cap     = CSPACE_CAP_INVALID;
 
+	// We need to update the VM loading API to support getting this memory
+	// from the VM owner instead of RM's heap.
+	// FIXME:
 	void *rm_ipa = aligned_alloc(PAGE_SIZE, size);
 	if (rm_ipa == NULL) {
 		ret = ERROR_NOMEM;
@@ -62,6 +64,15 @@ vm_creation_config_vm_info_area(vm_config_t *vmcfg)
 	if (me_ret.e != OK) {
 		ret = me_ret.e;
 		goto error_free_rm_ipa;
+	}
+
+	// The derived extent is still mapped in RM; we unmap to prevent
+	// accidental use.
+	error_t err = memextent_unmap_all(me_ret.r);
+	if (err != OK) {
+		memextent_delete(me_ret.r);
+		ret = err;
+		goto out;
 	}
 
 	// Allocate IPA
@@ -82,6 +93,12 @@ vm_creation_config_vm_info_area(vm_config_t *vmcfg)
 	vmcfg->vm->vm_info_area_size   = size;
 	vmcfg->vm_info_area_me_cap     = me_ret.r;
 
+	ret = gunyah_hyp_addrspace_configure_info_area(
+		as_cap, vmcfg->vm_info_area_me_cap,
+		vmcfg->vm->vm_info_area_ipa);
+	if (ret != OK) {
+		goto out;
+	}
 	goto out;
 
 error_delete_me_cap:
@@ -128,10 +145,15 @@ vm_creation_vm_info_area_teardown(vm_config_t *vmcfg)
 
 		if (vmcfg->vm_info_area_me_cap != CSPACE_CAP_INVALID) {
 			memextent_delete(vmcfg->vm_info_area_me_cap);
+			memextent_sync_all(rm_get_me());
 		}
 
 		if (vmcfg->vm->vm_info_area_rm_ipa != ~0UL) {
 			free((void *)vmcfg->vm->vm_info_area_rm_ipa);
 		}
+
+		vmcfg->vm->vm_info_area_ipa    = ~0UL;
+		vmcfg->vm->vm_info_area_rm_ipa = ~0UL;
+		vmcfg->vm->vm_info_area_size   = 0U;
 	}
 }

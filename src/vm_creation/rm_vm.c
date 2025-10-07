@@ -11,11 +11,11 @@
 
 #include <rm_types.h>
 #include <util.h>
-#include <utils/address_range_allocator.h>
-#include <utils/vector.h>
 
 #include <event.h>
+#include <guest_interface.h>
 #include <log.h>
+#include <platform.h>
 #include <platform_vm_config.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
@@ -26,7 +26,6 @@
 #include <vm_creation.h>
 #include <vm_memory.h>
 #include <vm_mgnt.h>
-#include <vm_vcpu.h>
 
 error_t
 rm_vm_create(const rm_env_data_t *env_data)
@@ -75,7 +74,20 @@ rm_vm_create(const rm_env_data_t *env_data)
 	// Reserve one page at 0 (if it wasn't already reserved for the root
 	// application or device MEs) to ensure that NULL doesn't get allocated
 	// as a valid address in the RM address space
-	if ((env_data->me_ipa_base != 0U) && (env_data->device_me_base != 0U)) {
+
+	bool	device_include_null = false;
+	count_t device_ranges_count = rm_get_device_ranges_count();
+	for (index_t i = 0U; i < device_ranges_count; i++) {
+		paddr_t dev_base;
+		size_t	dev_size;
+
+		rm_get_device_ranges(i, &dev_base, &dev_size);
+		if (dev_base == 0U) {
+			device_include_null = true;
+			break;
+		}
+	}
+	if ((env_data->me_ipa_base != 0U) && !device_include_null) {
 		ret = vm_address_range_alloc(rm, VM_MEMUSE_NORMAL, 0U, 0U,
 					     PAGE_SIZE, PAGE_SIZE)
 			      .err;

@@ -9,6 +9,7 @@
 #include <rm_types.h>
 
 #include <dt_overlay.h>
+#include <guest_interface.h>
 #include <platform_vm_config.h>
 #include <resource-manager.h>
 #include <rm-rpc.h>

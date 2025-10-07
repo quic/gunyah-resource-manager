@@ -2,9 +2,14 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
+#ifndef INCLUDE_RM_ENV_DATA_H_
+#define INCLUDE_RM_ENV_DATA_H_
+
+#define VIC_HWIRQ_SIZE 5120U
+
 typedef struct rm_irq_env_data_s {
-	cap_id_t vic_hwirq[1020];
-	cap_id_t vic_msi_source[16];
+	cap_id_t *vic_hwirq;
+	cap_id_t  vic_msi_source[16];
 } rm_irq_env_data_t;
 
 // This structure is used only locally in RM as shared temporary data
@@ -20,8 +25,8 @@ RM_PADDED(struct rm_env_data_s {
 	cap_id_t	      vcpu_capid;
 	vmaddr_t	      entry_hlos;
 	cap_id_t	      device_me_capid;
-	paddr_t		      device_me_base;
-	size_t		      device_me_size;
+	count_t		      device_ranges_count;
+	boot_env_phys_range_t device_ranges[16];
 	vmaddr_t	      mpd_region_addr;
 	size_t		      mpd_region_size;
 	paddr_t		      wdt_address;
@@ -31,13 +36,20 @@ RM_PADDED(struct rm_env_data_s {
 	vmaddr_t	      me_ipa_base;
 	size_t		      me_size;
 	uintptr_t	      ipa_offset;
-	uint64_t	      usable_cores;
 	paddr_t		      hlos_dt_base;
 	paddr_t		      hlos_vm_base;
 	size_t		      hlos_vm_size;
 	paddr_t		      hlos_ramfs_base;
-	cap_id_t	      smc_wqs[2];
+	count_t		      smc_wqs_count;
+	cap_id_t	      smc_wqs[1];
 	cap_id_t	      vic;
+	count_t		      vic_max_virqs;
+
+	// We're currently limited to supporting cpu ids 0..63.
+	// The cores 64..127 here are included for CBOR parsing only.
+	// FIXME:
+	uint64_t usable_cores[2];
+	count_t	 max_cores;
 
 	rm_irq_env_data_t *irq_env;
 
@@ -50,3 +62,9 @@ RM_PADDED(struct rm_env_data_s {
 })
 
 typedef struct rm_env_data_s rm_env_data_t;
+
+#else
+
+#error multiple include of rm_env_data.h
+
+#endif

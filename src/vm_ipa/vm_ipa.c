@@ -9,11 +9,11 @@
 #include <stdlib.h>
 
 #include <rm_types.h>
-#include <utils/address_range_allocator.h>
-#include <utils/vector.h>
 
 #include <event.h>
+#include <guest_interface.h>
 #include <log.h>
+#include <platform.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
 #include <rm-rpc.h>
@@ -24,7 +24,7 @@
 #include <vm_memory.h>
 #include <vm_mgnt.h>
 
-#define MAX_LIST_ENTRIES 30U
+#define RM_RPC_MAX_ENTRIES 30U
 
 static rm_error_t
 reserve_alloc_list(vm_t *vm, ipa_reserve_req_alloc_list_t *list,
@@ -33,7 +33,7 @@ reserve_alloc_list(vm_t *vm, ipa_reserve_req_alloc_list_t *list,
 {
 	rm_error_t err = RM_OK;
 
-	*size = sizeof(ipa_reserve_alloc_resp_t) + entries * sizeof(vmaddr_t);
+	*size = sizeof(ipa_reserve_alloc_resp_t) + (entries * sizeof(vmaddr_t));
 	*resp = calloc(1U, *size);
 	if (*resp == NULL) {
 		LOG_LOC("alloc");
@@ -133,9 +133,12 @@ reserve_ipa(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 
 	ipa_reserve_req_t *req = (ipa_reserve_req_t *)(uintptr_t)buf;
 
-	ipa_reserve_req_type_t alloc_type = req->alloc_type;
-	if ((alloc_type != IPA_RESERVE_REQ_ALLOC_LIST) &&
-	    (alloc_type != IPA_RESERVE_REQ_FIXED_LIST)) {
+	ipa_reserve_req_type_t alloc_type;
+	if (req->alloc_type == 0U) {
+		alloc_type = IPA_RESERVE_REQ_FIXED_LIST;
+	} else if (req->alloc_type == 1U) {
+		alloc_type = IPA_RESERVE_REQ_ALLOC_LIST;
+	} else {
 		LOG_LOC("inv msg");
 		err = RM_ERROR_MSG_INVALID;
 		goto failed;
@@ -167,14 +170,14 @@ reserve_ipa(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 
 	size_t list_offset = offsetof(ipa_reserve_req_t, entries);
 	err = rm_rpc_read_list(buf + list_offset, len - list_offset, &entries,
-			       MAX_LIST_ENTRIES, &list_address, element_size,
+			       RM_RPC_MAX_ENTRIES, &list_address, element_size,
 			       &next_buf);
 	if (err != RM_OK) {
 		LOG_LOC("bad list");
 		goto failed;
 	}
 
-	if (len != (size_t)(next_buf - buf)) {
+	if (len != ((uintptr_t)next_buf - (uintptr_t)buf)) {
 		LOG_LOC("bad msg len");
 		err = RM_ERROR_MSG_INVALID;
 		goto failed;

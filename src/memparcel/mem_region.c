@@ -10,12 +10,8 @@
 
 #include <rm_types.h>
 #include <util.h>
-#include <utils/vector.h>
 
-#include <memparcel.h>
-#include <rm-rpc.h>
-
-#include "mem_region.h"
+#include <mem_region.h>
 
 #define MAX_L1_BITS 14U
 
@@ -30,14 +26,19 @@ struct region_list_s {
 	uint8_t	       pad_to_end[2];
 };
 
+struct ipa_list_s {
+	uint32_t **ipas;
+	count_t	   len;
+	uint8_t	   pad_to_end[4];
+};
+
 mem_region_t
 mem_region_init(paddr_t phys, size_t size, vmaddr_t owner_ipa)
 {
 	return (mem_region_t){
-		.phys_pn	       = (uint32_t)(phys >> PAGE_BITS),
-		.size_pn	       = (uint32_t)(size >> PAGE_BITS),
-		.ipa_pn		       = (uint32_t)(owner_ipa >> PAGE_BITS),
-		.mpd_sanitise_refcount = 0,
+		.phys_pn = (uint32_t)(phys >> PAGE_BITS),
+		.size_pn = (uint32_t)(size >> PAGE_BITS),
+		.ipa_pn	 = (uint32_t)(owner_ipa >> PAGE_BITS),
 	};
 }
 
@@ -59,49 +60,6 @@ mem_region_get_owner_ipa(mem_region_t region)
 	return (vmaddr_t)region.ipa_pn << PAGE_BITS;
 }
 
-ipa_region_t
-ipa_region_init(vmaddr_t ipa)
-{
-	return (ipa_region_t){
-		.ipa_pn = (uint32_t)(ipa >> PAGE_BITS),
-	};
-}
-
-vmaddr_t
-ipa_region_get_ipa(ipa_region_t region)
-{
-	return (vmaddr_t)region.ipa_pn << PAGE_BITS;
-}
-
-uint32_t
-mem_region_get_mpd_sanitise_refcount(const mem_region_t *region)
-{
-	assert(region != NULL);
-	return region->mpd_sanitise_refcount;
-}
-
-// The refcount functions below should be moved to a platform-specific file for
-// memparcel extensions during RM clean-up.
-// FIXME:
-void
-mem_region_increment_mpd_sanitise_refcount(mem_region_t *region)
-{
-	assert(region != NULL);
-	// Since the number of allowed minidump regions is orders of magnitude
-	// smaller than the maximum refcount value (uint32), no need to worry
-	// about overflows.
-	region->mpd_sanitise_refcount++;
-}
-
-void
-mem_region_decrement_mpd_sanitise_refcount(mem_region_t *region)
-{
-	assert(region != NULL);
-	assert(region->mpd_sanitise_refcount != 0);
-
-	region->mpd_sanitise_refcount--;
-}
-
 static index_t
 get_l1_idx(index_t i)
 {
@@ -111,7 +69,7 @@ get_l1_idx(index_t i)
 static index_t
 get_l2_idx(index_t i)
 {
-	return i & util_mask(L2_TABLE_BITS);
+	return i & (index_t)util_mask(L2_TABLE_BITS);
 }
 
 static count_t
@@ -121,14 +79,9 @@ get_l1_alloc_count(region_list_t *list)
 }
 
 static count_t
-get_l1_used_count(region_list_t *list)
+get_l1_used_count(count_t len)
 {
-	index_t l1_idx = get_l1_idx(list->total_len);
-	index_t l2_idx = get_l2_idx(list->total_len);
-
-	// If the l2 idx is non-zero, we have allocated a l2 table at the
-	// current l1 idx. We must account for this in the final count.
-	return (l2_idx != 0U) ? l1_idx + 1U : l1_idx;
+	return (count_t)(util_p2align_up(len, L2_TABLE_BITS) >> L2_TABLE_BITS);
 }
 
 region_list_t *
@@ -155,7 +108,7 @@ region_list_destroy(region_list_t *list)
 {
 	assert(list != NULL);
 
-	count_t l1_count = get_l1_used_count(list);
+	count_t l1_count = get_l1_used_count(list->total_len);
 
 	for (index_t i = 0U; i < l1_count; i++) {
 		free(list->regions[i]);
@@ -300,7 +253,7 @@ region_list_finalize(region_list_t *list)
 	index_t l2_idx = get_l2_idx(list->total_len);
 
 	count_t l1_alloc_count = get_l1_alloc_count(list);
-	count_t l1_used_count  = get_l1_used_count(list);
+	count_t l1_used_count  = get_l1_used_count(list->total_len);
 
 	if (l1_used_count < l1_alloc_count) {
 		// We can reduce the size of the l1 table.
@@ -369,4 +322,100 @@ region_list_at_ptr(region_list_t *list, index_t i)
 
 out:
 	return region;
+}
+
+ipa_list_t *
+ipa_list_init(count_t len)
+{
+	ipa_list_t *list = NULL;
+
+	count_t l1_size = get_l1_used_count(len);
+	if (l1_size > util_bit(MAX_L1_BITS)) {
+		goto out;
+	}
+
+	list = calloc(1U, sizeof(*list));
+	if (list == NULL) {
+		goto out;
+	}
+
+	list->len  = len;
+	list->ipas = calloc(l1_size, sizeof(*list->ipas));
+	if (list->ipas == NULL) {
+		free(list);
+		list = NULL;
+		goto out;
+	}
+
+	count_t rem = len;
+	for (index_t i = 0U; i < l1_size; i++) {
+		count_t l2_size = (count_t)util_min(rem, L2_TABLE_SIZE);
+		assert(l2_size > 0U);
+
+		list->ipas[i] = calloc(l2_size, sizeof(**list->ipas));
+		if (list->ipas[i] == NULL) {
+			ipa_list_destroy(list);
+			list = NULL;
+			goto out;
+		}
+
+		rem -= l2_size;
+	}
+
+	assert(rem == 0U);
+
+out:
+	return list;
+}
+
+void
+ipa_list_destroy(ipa_list_t *list)
+{
+	assert(list != NULL);
+
+	count_t l1_size = get_l1_used_count(list->len);
+	for (index_t i = 0U; i < l1_size; i++) {
+		free(list->ipas[i]);
+	}
+
+	free(list->ipas);
+	free(list);
+}
+
+count_t
+ipa_list_len(const ipa_list_t *list)
+{
+	assert(list != NULL);
+
+	return list->len;
+}
+
+static uint32_t *
+ipa_list_at(ipa_list_t *list, index_t i)
+{
+	assert(list != NULL);
+	assert(i < list->len);
+
+	index_t l1_idx = get_l1_idx(i);
+	index_t l2_idx = get_l2_idx(i);
+
+	return &list->ipas[l1_idx][l2_idx];
+}
+
+vmaddr_t
+ipa_list_get(ipa_list_t *list, index_t i)
+{
+	uint32_t *ipa_ptr = ipa_list_at(list, i);
+	assert(ipa_ptr != NULL);
+
+	return (vmaddr_t)*ipa_ptr << PAGE_BITS;
+}
+
+void
+ipa_list_set(ipa_list_t *list, index_t i, vmaddr_t ipa)
+{
+	uint32_t *ipa_ptr = ipa_list_at(list, i);
+	assert(ipa_ptr != NULL);
+
+	*ipa_ptr = (uint32_t)(ipa >> PAGE_BITS);
 }
