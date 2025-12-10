@@ -1937,7 +1937,17 @@ parse_vcpus(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		}
 	}
 
+	vd->no_timer_wakeups =
+		fdt_getprop_bool(fdt, node_ofs, "no-timer-wakeups");
+
 	if (vd->affinity != VM_CONFIG_AFFINITY_PROXY) {
+		if (vd->no_timer_wakeups) {
+			(void)printf(
+				"parse_vcpus: \"no-timer-wakeups\" set for non-proxy vcpu\n");
+			ret = RET_ERROR;
+			goto out;
+		}
+
 		// read sched time slice
 		if (fdt_getprop_u32(fdt, node_ofs, "sched-timeslice",
 				    &vd->sched_time_slice) != OK) {

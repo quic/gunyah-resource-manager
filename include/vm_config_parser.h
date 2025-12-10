@@ -339,6 +339,7 @@ struct dtb_parser_data_s {
 	int32_t	 sched_priority;
 
 	vm_config_affinity_t affinity;
+	bool		     no_timer_wakeups;
 
 	size_t	     affinity_map_cnt;
 	cpu_index_t *affinity_map;

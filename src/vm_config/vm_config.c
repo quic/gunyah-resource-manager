@@ -4596,6 +4596,9 @@ handle_vcpu(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 		vcpu_option_flags_set_sdei_allowed(&vcpu_options, true);
 	}
 
+	vcpu_option_flags_set_vcpu_run_no_timer_wakeup(&vcpu_options,
+						       data->no_timer_wakeups);
+
 	ret = handle_vcpu_creation(vmcfg, data, vcpu_count, priority, timeslice,
 				   vcpu_options, owner_vm);
 
