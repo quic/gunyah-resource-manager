@@ -5619,7 +5619,7 @@ out:
 static error_t
 vm_config_init_addrspace(vm_config_t *vmcfg)
 {
-	error_t err;
+	error_t ret;
 
 	assert(vmcfg != NULL);
 
@@ -5632,8 +5632,8 @@ vm_config_init_addrspace(vm_config_t *vmcfg)
 	// Init address range allocator
 	size_result_t ar_ret = vm_address_range_init(vm);
 	if (ar_ret.e != OK) {
-		err = ar_ret.e;
-		LOG_ERR(err);
+		ret = ar_ret.e;
+		LOG_ERR(ret);
 		goto out;
 	}
 	vm->as_size = ar_ret.r;
@@ -5643,20 +5643,22 @@ vm_config_init_addrspace(vm_config_t *vmcfg)
 	as = gunyah_hyp_partition_create_addrspace(rm_partition_cap,
 						   rm_cspace_cap);
 	if (as.error != OK) {
-		err = as.error;
-		LOG_ERR(err);
+		ret = as.error;
+		LOG_ERR(ret);
 		goto out;
 	}
 
-	err = gunyah_hyp_addrspace_configure(as.new_cap, vm->vmid);
+	error_t err = gunyah_hyp_addrspace_configure(as.new_cap, vm->vmid);
 	if (err != OK) {
-		LOG_ERR(err);
+		ret = err;
+		LOG_ERR(ret);
 		goto out_destroy_addrspace;
 	}
 
 	err = vm_creation_config_vm_info_area(as.new_cap, vmcfg);
 	if (err != OK) {
-		LOG_ERR(err);
+		ret = err;
+		LOG_ERR(ret);
 		goto out_destroy_addrspace;
 	}
 
@@ -5673,33 +5675,39 @@ vm_config_init_addrspace(vm_config_t *vmcfg)
 			as.new_cap, r->base, r->size,
 			ADDRSPACE_RANGE_CONFIGURE_OP_ADD_PRIVATE);
 		if (err != OK) {
-			LOG_ERR(err);
+			ret = err;
+			LOG_ERR(ret);
 			goto out_destroy_addrspace;
 		}
 	}
 
 	err = gunyah_hyp_object_activate(as.new_cap);
 	if (err != OK) {
-		LOG_ERR(err);
+		ret = err;
+		LOG_ERR(ret);
 		goto out_destroy_addrspace;
 	}
 	vmcfg->addrspace = as.new_cap;
 
 	err = vm_creation_map_vm_info_area(vmcfg);
 	if (err != OK) {
-		LOG_ERR(err);
+		ret = err;
+		LOG_ERR(ret);
 		goto out;
 	}
 
-	goto out;
+	ret = OK;
 
 out_destroy_addrspace:
-	err = gunyah_hyp_cspace_delete_cap_from(rm_cspace_cap, as.new_cap);
-	assert(err == OK);
+	if (ret != OK) {
+		err = gunyah_hyp_cspace_delete_cap_from(rm_cspace_cap,
+							as.new_cap);
+		assert(err == OK);
 
-	vm_creation_vm_info_area_teardown(vmcfg);
+		vm_creation_vm_info_area_teardown(vmcfg);
+	}
 out:
-	return err;
+	return ret;
 }
 
 static error_t
