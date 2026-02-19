@@ -881,9 +881,13 @@ dto_fixup_ref_external(dto_t *dto, const char *property_name,
 	fixup_t *cur_fixup = NULL;
 	loop_list(cur_fixup, &dto->fixup_list, fixup_)
 	{
+		// len + 1 so strcmp doesn't match if one string is a
+		// prefix of the other
+		size_t target_len = strlen(target_label) + 1U;
+		size_t label_len  = strnlen(cur_fixup->label, target_len) + 1U;
 		if (strncmp(target_label, cur_fixup->label,
-			    strlen(target_label)) == 0) {
-			// Label found add another path to this entry
+			    util_min(target_len, label_len)) == 0) {
+			// Label found, add another path to this entry
 			fixup	  = cur_fixup;
 			new_fixup = false;
 			break;
