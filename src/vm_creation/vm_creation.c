@@ -2086,14 +2086,6 @@ create_dtbo(vm_t *vm, void *dtbo_buffer, size_t max_size, const void *base_dtb)
 		LOG_LOC("/hypervisor node already exists");
 	}
 
-#if defined(PLATFORM_PATCH_LAGVM_BOOTDEVICES) &&                               \
-	PLATFORM_PATCH_LAGVM_BOOTDEVICES
-	ret.err = platform_patch_bootdevices_node(dto, vm, base_dtb);
-	if (ret.err != OK) {
-		goto out;
-	}
-#endif
-
 	ret.err = vm_creation_patch_chosen_node(dto, vm, base_dtb);
 	if (ret.err != OK) {
 		goto out;
