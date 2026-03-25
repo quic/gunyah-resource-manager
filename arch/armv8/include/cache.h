@@ -1,4 +1,4 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -14,7 +14,7 @@ void
 cache_clean_by_va(const void *va, size_t size);
 
 // Ensure that all data accesses to the specified memory range by any VM with
-// any cache attribute are visible to accesses by RM through the specifed
+// any cache attribute are visible to accesses by RM through the specified
 // pointer. This is typically used before accessing data provided by another VM.
 void
 cache_flush_by_va(const void *va, size_t size);

@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -39,12 +39,9 @@ vm_config_hlos_vdevices_setup(vm_config_t *vmcfg, cap_id_t vic);
 void
 vm_config_add_vdevices(vm_config_t *vmcfg);
 
-rm_error_t
-vm_config_parse_dt(vm_config_t *vmcfg, void *fdt);
-
 error_t
-vm_config_add_vcpu(vm_config_t *vmcfg, cap_id_t rm_cap, uint32_t affinity_index,
-		   bool boot_vcpu, const char *patch);
+vm_config_add_vcpu(vm_config_t *vmcfg, cap_id_t rm_cap, index_t address_index,
+		   index_t affinity_index, bool boot_vcpu, const char *patch);
 
 error_t
 vm_config_add_defective_vcpu(vm_config_t *vmcfg, char *patch);
@@ -104,14 +101,17 @@ vm_config_flush_rm_rpc(vmid_t self);
 dtb_parser_ops_t *
 vm_config_parser_get_ops(void);
 
-vm_config_parser_params_t
-vm_config_parser_get_params(const vm_t *vm);
+vm_config_parser_data_t *
+vm_config_parser_alloc_data(const vm_t *vm);
 
 error_t
 vm_config_update_parsed(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 
 error_t
 vm_config_create_vdevices(vm_config_t *vmcfg, vm_config_parser_data_t *data);
+
+void
+vm_config_parser_free_data(vm_config_parser_data_t *vd);
 
 void
 vm_config_destroy_vm_objects(vm_t *vm);
@@ -137,6 +137,9 @@ error_t
 vm_config_vrtc_set_time_base(vm_t *vm, uint64_t time_base,
 			     uint64_t sys_timer_ref);
 
+error_t
+vm_config_configure_vpm_group(const vm_config_t		    *vmcfg,
+			      const vm_config_parser_data_t *data);
 #else
 
 #error multiple include of vm_config.h

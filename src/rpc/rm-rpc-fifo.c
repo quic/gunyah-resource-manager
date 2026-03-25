@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -389,7 +389,7 @@ rm_reply_error(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		rm_rpc_fifo_reply(client_id, msg_id, seq_num, out_buf, size);
 	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
-		(void)printf("rm_reply: err(%d)\n", rpc_err);
+		(void)printf("%s: err(%d)\n", __func__, rpc_err);
 		exit(1);
 	}
 }
@@ -414,10 +414,13 @@ rm_notify(vmid_t client_id, uint32_t notif_id, void *data, size_t len)
 
 	rm_error_t rpc_err = rm_rpc_fifo_send_notification(client_id, notif_id,
 							   out_buf, len, true);
-	// We cannot recover from errors here
 	if (rpc_err != RM_OK) {
-		(void)printf("rm_reply: err(%d)\n", rpc_err);
-		exit(1);
+		(void)printf("%s: err(%d)\n", __func__, rpc_err);
+		if (rpc_err != RM_ERROR_VMID_INVALID) {
+			// We cannot recover from failure to send
+			// to a valid VMID at this point.
+			exit(1);
+		}
 	}
 }
 

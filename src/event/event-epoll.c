@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -204,7 +204,7 @@ event_loop_common(int timeout)
 
 		int ret = do_epoll_wait(timeout);
 		if (ret == 0) {
-			// FIXME:
+			// FIXME: QC RM issue #1
 			// Implement PSCI CPU suspend call
 			(void)do_epoll_wait(-1);
 		}

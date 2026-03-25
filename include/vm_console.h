@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -9,7 +9,7 @@ rm_error_t
 vm_console_init(void);
 
 vm_console_t *
-vm_console_create(vm_t *vm);
+vm_console_create(vm_t *vm, vmid_t owner);
 
 bool
 vm_console_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,

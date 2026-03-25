@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -14,6 +14,7 @@
 // Interrupt specifier cell 2
 #define DT_GIC_IRQ_TYPE_EDGE_RISING 1U
 #define DT_GIC_IRQ_TYPE_LEVEL_HIGH  4U
+#define DT_GIC_IRQ_TYPE_LEVEL_LOW   8U
 
 #else
 

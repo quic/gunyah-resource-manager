@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -16,6 +16,7 @@
 
 #include <event.h>
 #include <guest_interface.h>
+#include <heap_mgnt.h>
 #include <log.h>
 #include <mem_region.h>
 #include <memextent.h>
@@ -32,10 +33,6 @@
 #define TIOCSETBUF 0x547f // Non-standard IOCTL!!
 
 #define RM_GET_LOG_ID_RM_LOG 0U
-
-#if ((LOG_AREA_ALIGN - 1) & LOG_AREA_ALIGN) != 0
-#error LOG_AREA_ALIGN must be a power of 2
-#endif
 
 // Our non-standard buffer control message
 struct tty_set_buffer_req {
@@ -99,14 +96,12 @@ log_reconfigure(uintptr_t *log_buf, size_t size)
 	rm_error_t ret = RM_OK;
 
 	assert(log_buf != NULL);
-	assert(size >= 256U);
+	assert(util_is_baligned(size, PAGE_SIZE));
 
 	// Allocate a new buffer
-	rm_log_area = aligned_alloc(LOG_AREA_ALIGN, size);
+	rm_log_area = util_alloc_pages(size);
 	rm_log_size = size;
 	if (rm_log_area != NULL) {
-		(void)memset(rm_log_area, 0, size);
-
 		struct tty_set_buffer_req req = { (uintptr_t)rm_log_area,
 						  size };
 
@@ -135,11 +130,12 @@ log_expose_to_hlos(uintptr_t log_buf, size_t size)
 	vm_t *hlos = vm_lookup(VMID_HLOS);
 	assert(hlos != NULL);
 
-	paddr_t paddr = rm_ipa_to_pa(log_buf);
+	heap_lookup_me_ret_t lookup_ret = heap_mgnt_lookup_rm_me(log_buf);
+	assert(lookup_ret.err == OK);
 
-	// assume it's always 1:1 mapping
-	assert(paddr == log_buf);
-	vmaddr_t ipa = paddr;
+	// Map 1:1 in HLOS.
+	paddr_t	 paddr = lookup_ret.phys;
+	vmaddr_t ipa   = paddr;
 
 	vm_address_range_result_t as_ret =
 		vm_address_range_alloc(hlos, VM_MEMUSE_BOOTINFO, ipa, paddr,
@@ -149,10 +145,11 @@ log_expose_to_hlos(uintptr_t log_buf, size_t size)
 		goto out;
 	}
 
-	size_t offset = log_buf - rm_get_me_ipa_base();
+	size_t	 offset = lookup_ret.offset;
+	cap_id_t rm_me	= lookup_ret.me_cap;
 
 	cap_id_result_t cap_ret = vm_memory_create_and_map(
-		hlos, VM_MEMUSE_BOOTINFO, rm_get_me(), offset, size, ipa,
+		hlos, VM_MEMUSE_BOOTINFO, rm_me, offset, size, ipa,
 		MEMEXTENT_MEMTYPE_ANY, PGTABLE_ACCESS_R,
 		PGTABLE_VM_MEMTYPE_NORMAL_WB);
 	if (cap_ret.e != OK) {

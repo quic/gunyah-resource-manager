@@ -1,6 +1,6 @@
 # coding: utf-8
 #
-# © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 # Global generated headers depends
 version_header = os.path.join('include', 'rmversion.h')
 version_file = os.path.join('include', 'version.h')
+
+true_strings = ('true', 't', '1', 'yes', 'y')
+false_strings = ('false', 'f', '0', 'no', 'n')
 
 
 class Configuration:
@@ -66,7 +69,7 @@ class Configuration:
     * link script: link_script armv8 file
     specify link specify file for a specific architecture
 
-    * program: programe binary_name
+    * program: program binary_name
     specify the binary name as current compilation target.
     It could trigger a new variant, and a new build graph to work on. And it's
     configuration file to link these two target together.
@@ -75,7 +78,7 @@ class Configuration:
     indicates that all the configurations for current program are collected.
 
     * static library: static_lib name
-    specifiy the name of static library, the final name is "libname.a".
+    specify the name of static library, the final name is "libname.a".
 
     * mark for end of lib: end_static_lib
     indicates that all the configurations for current static library are
@@ -113,6 +116,7 @@ class Configuration:
         # cc_wrapper which prepends to cc
         self.cc_wrapper = []
         self.shvars_re = re.compile(r'\$((\w+)\b|{(\w+)})')
+        self.objects_ast_json = set()
         # env should be set before set any source
         self.local_env = {}
         self.compdb_file_name = "compile_commands.json"
@@ -122,6 +126,10 @@ class Configuration:
         self._quality_dir = os.path.join(self._config_dir, 'quality')
         self._platform_dir = os.path.join(self._config_dir, 'platform')
         self._arch_dir = os.path.join(self._config_dir, 'arch')
+
+        # check for whether need to generate unreachable functions list
+        self.gen_callgraph = self.graph.get_argument(
+            "callgraph", 'false').lower() in true_strings
 
     def process(self):
         """
@@ -193,6 +201,9 @@ class Configuration:
                         # Add the version header file as a dependency
                         self._add_source(
                             cur_dir, w, self.version_header, self.local_env)
+                elif words[0] == "device_tree":
+                    for w in words[1:]:
+                        self._add_dtb(cur_dir, w, self.local_env)
                 elif words[0] == "include":
                     for w in words[1:]:
                         d = self._relpath(os.path.join(cur_dir, w))
@@ -232,6 +243,9 @@ class Configuration:
                 elif words[0] == "program":
                     assert self.binary_name is None
                     self.binary_name = words[1]
+                    self.map_file = os.path.join(
+                        os.getcwd(), self.graph.build_dir,
+                        self.binary_name+".map")
                     # FIXME: the add_variant API is not work as expected, need
                     # double check if this program is helpful
                     #
@@ -246,6 +260,8 @@ class Configuration:
                     # just need to implement a stack
                     assert self.binary_name is not None
                     self._set_program()
+                    if self.gen_callgraph:
+                        self._gen_callgraph()
                 elif words[0] == "static_lib":
                     self.binary_name = "lib" + words[0] + ".a"
                 elif words[0] == "end_static_lib":
@@ -290,17 +306,29 @@ class Configuration:
         # Use a QC prebuilt LLVM
         self.graph.add_env('CLANG', os.path.join(llvm_root, 'bin', 'clang'))
 
+        # Use a QC prebuilt DTC, if it is configured
+        try:
+            dtc_root = self.graph.get_env('QCOM_DTC')
+            self.graph.append_env('DTC', os.path.join(dtc_root, 'bin', 'dtc'))
+        except KeyError:
+            self.graph.append_env('DTC', 'dtc')
+
         # On scons builds, the abs path may be put into the commandline,
         # strip it out of the __FILE__ macro.
         root = os.path.abspath(os.curdir) + os.sep
         self.graph.append_env('CFLAGS',
                               '-fmacro-prefix-map={:s}={:s}'.format(root, ''))
 
+        # Use a libc provided by the local sysroot if available.
+        # Otherwise, fall back to the libc provided by LLVM.
+        libc_sysroot = os.path.join(local_sysroot, self.target_triple, 'libc')
+        if not os.path.exists(libc_sysroot):
+            libc_sysroot = os.path.join(llvm_root, self.target_triple, 'libc')
+
         # FIXME: manually add the toolchain header file. Remove it.
         self.graph.append_env('CFLAGS', "-isystem " + os.path.join(
-            llvm_root,
-            self.target_triple,
-            "libc/include"))
+            libc_sysroot,
+            "include"))
 
         self.graph.append_env('CFLAGS', "-I " + os.path.join(
             local_sysroot,
@@ -328,6 +356,13 @@ class Configuration:
         self.graph.add_env('TEST_CC', '${CLANG} -target ${TARGET_TRIPLE}')
         self.graph.add_env('TARGET_AR',
                            os.path.join(llvm_root, 'bin', 'llvm-ar'))
+        self.unreach_func_gen_script = os.path.join(
+            'tools', 'cpptest', 'get_unreachable_functions.py')
+        self.graph.add_env('GEN_UNREACHABLE_FUNCTIONS',
+                           self._relpath(self.unreach_func_gen_script))
+
+        # LDFLAGS to create crt map file
+        self.graph.append_env("LDFLAGS", '-Wl,-Map,' + self.map_file)
 
         # Use Clang with LLD to link.
         self.graph.add_env('TARGET_LD', '${TARGET_CC} -fuse-ld=lld')
@@ -336,14 +371,19 @@ class Configuration:
         # Use Clang to preprocess DSL files.
         self.graph.add_env('CPP', '${CLANG}-cpp -target ${TARGET_TRIPLE}')
 
-        sysroot = llvm_root + '/' + self.target_triple + '/libc/'
-        self.graph.append_env("LDFLAGS", '--sysroot=' + sysroot)
+        self.graph.append_env("LDFLAGS", '--sysroot=' + libc_sysroot)
 
         logger.warn("Test programs are disabled by default")
 
     def _add_source_file(self, src, obj, requires, local_env):
         self.graph.add_target([obj], 'cc', [src], requires=requires,
                               **local_env)
+        if self.gen_callgraph and src.endswith(".c"):
+            ast_json = obj + '.ast.json.gz'
+            self.graph.add_target([ast_json], 'cc_ast_json', [src],
+                                  requires=requires, depends=[obj],
+                                  **local_env)
+            self.objects_ast_json.add(ast_json)
 
     def _add_source(self, file_dir, src, requires, local_env):
         """
@@ -354,6 +394,17 @@ class Configuration:
         o = os.path.join(out_dir, src + '.o')
         self._add_source_file(i, o, requires, local_env)
         self.objects.add(o)
+
+    def _add_dtb(self, file_dir, src, local_env):
+        out_dir = os.path.join(self.graph.build_dir, 'dtb')
+        pp_dir = os.path.join(self.graph.build_dir, file_dir)
+        i = os.path.join(file_dir, src)
+        pp = os.path.join(pp_dir, src + '.pp')
+        o = os.path.join(
+            out_dir, os.path.splitext(os.path.basename(src))[0] + '.dtb')
+        self.graph.add_target([pp], 'cpp-dsl', [i], **local_env)
+        self.graph.add_target([o], 'dtc', [pp], **local_env)
+        self.graph.add_default_target(o)
 
     def _add_include_dir(self, d, local_env):
         if 'LOCAL_CPPFLAGS' in local_env:
@@ -394,8 +445,16 @@ class Configuration:
             deps = [self.linker_script]
         assert len(self.objects) != 0
         self.graph.add_target([bin_file], 'ld', sorted(self.objects),
-                              depends=deps)
+                              depends=deps, byproducts=self.map_file)
         self.graph.add_default_target(bin_file)
+
+    def _gen_callgraph(self):
+        exclusion_symbol_file = os.path.join(
+            self.graph.build_dir, 'excludeSymbols.psrc')
+        self.graph.add_target([exclusion_symbol_file], 'gen_unreachable_psrc',
+                              sorted(self.objects_ast_json), MAP=self.map_file,
+                              depends=[self.map_file])
+        self.graph.add_default_target(exclusion_symbol_file)
 
     def _set_static_lib(self):
         bin_file = os.path.join(self.graph.build_dir, self.binary_name)
@@ -415,7 +474,7 @@ class Configuration:
                 'version_copy',
                 [version_file])
         else:
-            script = "cd {:s} && tools/build/gen_ver.sh".format(
+            script = "(cd {:s} && tools/build/gen_ver.sh)".format(
                 self._relpath('.'))
             self.graph.add_rule('version_gen', script + ' > ${out}')
             import subprocess
@@ -435,9 +494,23 @@ class Configuration:
                             '$TARGET_CPPFLAGS $LOCAL_CFLAGS $LOCAL_CPPFLAGS '
                             ' -MD -MF ${out}.d -c -o ${out} ${in}',
                             depfile='${out}.d', compdbs=[compdb_file])
+        # Generate a JSON format AST dump for each source file. The dumps are
+        # very large so we gzip them.
+        self.graph.add_rule('cc_ast_json',
+                            '$TARGET_CC $CFLAGS $CPPFLAGS $TARGET_CFLAGS '
+                            '$TARGET_CPPFLAGS $LOCAL_CFLAGS $LOCAL_CPPFLAGS '
+                            ' -fsyntax-only -Xclang -ast-dump=json ${in} '
+                            '| gzip -9 > ${out}')
+        # Generate callgraph from AST dumps and then use it to find out a list
+        # of unreachable functions. Output is generated in the format expected
+        # by Parasoft tools.
+        self.graph.add_rule('gen_unreachable_psrc',
+                            'python $GEN_UNREACHABLE_FUNCTIONS ${in} -m $MAP '
+                            '-o ${out}')
         # Preprocess a DSL file.
         self.graph.add_rule('cpp-dsl', '${CPP} $CPPFLAGS $TARGET_CPPFLAGS '
-                            '$LOCAL_CPPFLAGS -undef $DSL_DEFINES -x c '
+                            '$LOCAL_CPPFLAGS -undef $DSL_DEFINES '
+                            '-x assembler-with-cpp '
                             '-P -MD -MF ${out}.d -MT ${out} ${in} > ${out}',
                             depfile='${out}.d')
         # Link a target binary.
@@ -445,3 +518,5 @@ class Configuration:
                             '$LOCAL_LDFLAGS ${in} -o ${out}')
         # Static library
         self.graph.add_rule('ar', '$TARGET_AR rc ${out} ${in}')
+        # Device tree blob
+        self.graph.add_rule('dtc', '$DTC -@ -I dts -O dtb -o ${out} ${in}')

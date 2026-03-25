@@ -1,11 +1,11 @@
-// © 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
 #ifndef ARCH_ARMv8_VM_FIRMWARE_ARCH_H_
 #define ARCH_ARMv8_VM_FIRMWARE_ARCH_H_
 
-typedef enum {
+typedef enum arch_register_set_e {
 	ARCH_REG_SET_X	= 0,
 	ARCH_REG_SET_PC = 1,
 	ARCH_REG_SET_SP = 2,

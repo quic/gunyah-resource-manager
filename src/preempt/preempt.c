@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -13,7 +13,7 @@
 
 #include <preempt.h>
 
-// FIXME:
+// FIXME: QC RM issue #3
 static uint32_t preempt_disable_count;
 
 void

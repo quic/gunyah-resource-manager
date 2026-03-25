@@ -1,4 +1,4 @@
-// © 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -82,6 +82,9 @@ typedef struct vdevice_node vdevice_node_t;
 
 typedef uint32_t label_t;
 
+struct rm_smmu_env_data_s;
+typedef struct rm_smmu_env_data_s rm_smmu_env_data_t;
+
 typedef enum {
 	VM_ID_TYPE_GUID	     = 0,
 	VM_ID_TYPE_URI	     = 1,
@@ -91,21 +94,39 @@ typedef enum {
 
 typedef enum {
 	VM_AUTH_TYPE_NONE     = 0,
-	VM_AUTH_TYPE_PLATFORM = 1,
+	VM_AUTH_TYPE_PLATFORM = 1, // Platform-specific
 	VM_AUTH_TYPE_ANDROID  = 2, // Android pVM
 } vm_auth_type_t;
+
+typedef enum {
+	VM_FW_TYPE_NONE	    = 0,
+	VM_FW_TYPE_PLATFORM = 1, // Platform-specific
+	VM_FW_TYPE_PVMFW    = 2, // Android pVM (binary with DICE keys)
+} vm_fw_type_t;
 
 RM_PADDED(typedef struct interrupt_data {
 	virq_t irq;
 	bool   is_cpu_local;
 	bool   is_edge_triggering;
+	bool   is_sdei;
 } interrupt_data_t)
+
+RM_PADDED(typedef struct {
+	uint32_t id_start;
+	uint32_t count;
+} stream_id_range_t)
 
 typedef uint32_t address_range_tag_t;
 
 #define ADDRESS_RANGE_NO_TAG (address_range_tag_t)0UL
 
 typedef uint32_t rm_error_t;
+
+// Generic range type
+RM_PADDED(typedef struct {
+	uint64_t base;
+	uint64_t size;
+} rm_range64_t)
 
 #define RM_OK			  ((rm_error_t)0x0U)
 #define RM_ERROR_UNIMPLEMENTED	  ((rm_error_t)0xffffffffU)
@@ -127,6 +148,8 @@ typedef uint32_t rm_error_t;
 #define RM_ERROR_IRQ_INUSE	  ((rm_error_t)0x10U)
 #define RM_ERROR_IRQ_RELEASED	  ((rm_error_t)0x11U)
 #define RM_ERROR_VM_STATE	  ((rm_error_t)0x14U)
+#define RM_ERROR_HYP_NOMEM	  ((rm_error_t)0x15U)
+#define RM_ERROR_RM_NOMEM	  ((rm_error_t)0x16U)
 
 #else
 

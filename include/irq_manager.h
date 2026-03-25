@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -45,9 +45,22 @@ irq_manager_hwirq_add(uint32_t hw_irq_number, cap_id_t capid, vmid_t owner);
 error_t
 irq_manager_hwirq_donate(uint32_t hw_irq_number, vmid_t from, vmid_t to);
 
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+// Donate a device IRQ to another VMID
+// The device IRQ must not be mapped or currently lending
+error_t
+irq_manager_devirq_donate(uint32_t dev_irq_number, vmid_t from, vmid_t to);
+#endif
+
 // Lookup the owner of a HW global IRQ
 vmid_result_t
 irq_manager_hwirq_get_owner(uint32_t hw_irq_number);
+
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+// Lookup the owner of a device IRQ
+vmid_result_t
+irq_manager_devirq_get_owner(uint32_t dev_irq_number);
+#endif
 
 // Initialize the irq_manager structures for a VM
 error_t
@@ -67,6 +80,14 @@ irq_manager_vm_deinit(vm_t *vm);
 // interrupts.
 uint32_result_t
 irq_manager_vm_alloc_global(const vm_t *vm);
+
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+// Allocate and reserve a device IRQ number in the VM. A reserved IRQ won't be
+// available for subsequent allocation, however it may be used when mapping
+// interrupts.
+uint32_result_t
+irq_manager_vm_alloc_devirq(const vm_t *vm, uint32_t irq_numb);
+#endif
 
 // Reserve a global IRQ number in the VM. A reserved IRQ won't be available for
 // subsequent allocation, however it may be used when mapping interrupts.
@@ -93,6 +114,19 @@ error_t
 irq_manager_vm_hwirq_map(const vm_t *vm, uint32_t irq_number,
 			 uint32_t hw_irq_number, bool alloc);
 
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+// Map a device IRQ to the VM.
+// If `alloc` is true, the irq_number is assumed to be unused and is allocated.
+// If false, it is assumed that the IRQ number has been previously allocated,
+// such as via this function.
+// Note, If an IRQ was previously mapped as hwirq or virq, it must first be
+// freed using the corresponding interface, e.g. irq_manager_vm_hwirq_unmap for
+// hwirqs.
+error_t
+irq_manager_vm_devirq_map(const vm_t *vm, uint32_t irq_number,
+			  uint32_t hw_irq_number, bool alloc, bool owner);
+#endif
+
 // Unmap a HW IRQ from a VM.
 // If `free_irq` is true, the irq_number is deallocated. If false, the IRQ
 // number becomes reserved.
@@ -100,6 +134,15 @@ irq_manager_vm_hwirq_map(const vm_t *vm, uint32_t irq_number,
 // specific.
 error_t
 irq_manager_vm_hwirq_unmap(const vm_t *vm, uint32_t irq_number, bool free_irq);
+
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+// Unmap a deviceIRQ from a VM.
+// If `free_irq` is true, the irq_number is deallocated. If false, the IRQ
+// number becomes reserved.
+error_t
+irq_manager_vm_devirq_unmap(const vm_t *vm, uint32_t irq_number, bool free_irq,
+			    bool owner);
+#endif
 
 // Add a virq to the VM's irq_manager tracking.
 // If `alloc` is true, the irq_number is assumed to be unused and is allocated.

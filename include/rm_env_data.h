@@ -1,4 +1,4 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -9,11 +9,17 @@
 
 typedef struct rm_irq_env_data_s {
 	cap_id_t *vic_hwirq;
-	cap_id_t  vic_msi_source[16];
 } rm_irq_env_data_t;
 
+typedef struct rm_smmu_env_data_s {
+	paddr_t	 smmu_addr;
+	cap_id_t smmuv2_cap;
+} rm_smmu_env_data_t;
+
 // This structure is used only locally in RM as shared temporary data
-RM_PADDED(struct rm_env_data_s {
+RM_PADDED_BEGIN
+
+struct rm_env_data_s {
 	platform_env_data_t *platform_env;
 
 	cap_id_t	      addrspace_capid;
@@ -44,22 +50,47 @@ RM_PADDED(struct rm_env_data_s {
 	cap_id_t	      smc_wqs[1];
 	cap_id_t	      vic;
 	count_t		      vic_max_virqs;
+	nanoseconds_t	      scheduler_default_timeslice;
+	cap_id_t	      trace_dbl_capid;
+	cap_id_t	      trace_me_capid;
+	paddr_t		      trace_phys;
+	size_t		      trace_size;
+	cap_id_t	      system_power_capid;
+	bool		      system_suspend;
 
 	// We're currently limited to supporting cpu ids 0..63.
 	// The cores 64..127 here are included for CBOR parsing only.
-	// FIXME:
+	// FIXME: QC RM issue #51
 	uint64_t usable_cores[2];
 	count_t	 max_cores;
 
-	rm_irq_env_data_t *irq_env;
+	rm_irq_env_data_t  *irq_env;
+	count_t		    num_v2_smmu;
+	rm_smmu_env_data_t *smmuv2_env;
+	cap_id_t	    its_caps[16];
+	cap_id_t	    smmuv3_caps[1];
 
 	cap_id_t		 uart_me_capid;
 	cpu_index_t		 boot_core;
 	bool			 sve_supported;
+	bool			 sme_supported;
 	bool			 watchdog_supported;
 	bool			 hlos_handles_ras;
+	bool			 sdei_supported;
 	vm_device_assignments_t *device_assignments;
-})
+
+	paddr_t	     gicd_base;
+	size_t	     gicr_stride;
+	count_t	     gicr_ranges_count;
+	rm_range64_t gicr_ranges[2];
+	size_t	     gits_stride;
+	count_t	     gits_ranges_count;
+	rm_range64_t gits_ranges[2];
+	count_t	     gic_xlate_me_count;
+	cap_id_t     gic_xlate_me[16];
+};
+
+RM_PADDED_END
 
 typedef struct rm_env_data_s rm_env_data_t;
 

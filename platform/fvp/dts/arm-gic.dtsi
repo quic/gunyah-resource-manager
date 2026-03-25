@@ -1,0 +1,21 @@
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
+//
+// SPDX-License-Identifier: BSD-3-Clause
+
+/*
+ * This header provides constants for the ARM GICv3 binding
+ */
+
+#ifndef _ARM_GIC_DTSI
+#define _ARM_GIC_DTSI
+
+// Definitions from Linux headers
+#define GIC_IRQ_TYPE_SPI  0
+#define GIC_IRQ_TYPE_PPI  1
+#define GIC_IRQ_TYPE_ESPI 2
+#define GIC_IRQ_TYPE_EPPI 3
+
+#define GIC_IRQ_MODE_EDGE  1
+#define GIC_IRQ_MODE_LEVEL 4
+
+#endif

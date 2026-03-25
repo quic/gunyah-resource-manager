@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -12,8 +12,12 @@
 
 #include <rm_types.h>
 #include <util.h>
+#include <utils/address_range_allocator.h>
 #include <utils/vector.h>
 
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+#include <device_manager.h>
+#endif
 #include <event.h>
 #include <guest_interface.h>
 #include <guest_rights.h>
@@ -25,11 +29,13 @@
 #include <memparcel.h>
 #include <memparcel_msg.h>
 #include <platform.h>
+#include <platform_msi.h>
 #include <platform_vm_config.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
+#include <virq.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
 #include <vm_creation.h>
@@ -39,8 +45,7 @@
 #include <vm_passthrough_config.h>
 #include <vm_vcpu.h>
 
-#define HLOS_VCPU_PRIORITY  ROOTVM_PRIORITY
-#define HLOS_VCPU_TIMESLICE (SCHEDULER_DEFAULT_TIMESLICE)
+#define HLOS_VCPU_PRIORITY ROOTVM_PRIORITY
 
 static error_t
 hlos_vm_create_secondary_vcpus(const vm_config_t *vmcfg, cap_id_t partition_cap,
@@ -84,13 +89,6 @@ hlos_vm_create_secondary_vcpus(const vm_config_t *vmcfg, cap_id_t partition_cap,
 
 		ret = gunyah_hyp_vcpu_set_priority(vcpu.new_cap,
 						   HLOS_VCPU_PRIORITY);
-		if (ret != OK) {
-			LOG_ERR(ret);
-			goto out;
-		}
-
-		ret = gunyah_hyp_vcpu_set_timeslice(vcpu.new_cap,
-						    HLOS_VCPU_TIMESLICE);
 		if (ret != OK) {
 			LOG_ERR(ret);
 			goto out;
@@ -174,11 +172,11 @@ out:
 	return ret;
 }
 
-static cap_id_result_t
-hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
-		   cap_id_t addrspace_cap, cap_id_t root_thread_cap,
-		   cap_id_t *vcpus_caps, const cap_id_t *msi_src_caps,
-		   count_t msi_src_count)
+static error_t
+hlos_vm_create_vic(vm_config_t *vmcfg, cap_id_t partition_cap,
+		   cap_id_t cspace_cap, cap_id_t addrspace_cap,
+		   cap_id_t root_thread_cap, cap_id_t *vcpus_caps,
+		   const cap_id_t *its_caps, count_t its_caps_count)
 {
 	error_t		err;
 	cap_id_result_t ret;
@@ -252,40 +250,101 @@ hlos_vm_create_vic(cap_id_t partition_cap, cap_id_t cspace_cap,
 		}
 	}
 
-	// Bind all MSI sources (if any) to the VIC.
-	//
-	// In future this might need to be subject to finer-grained management.
-	for (count_t i = 0U; i < msi_src_count; i++) {
-		if (msi_src_caps[i] == CSPACE_CAP_INVALID) {
+	assert(its_caps_count <= (count_t)util_array_size(vmcfg->vgic_its));
+	vmcfg->vgic_itss = vector_init(vgic_its_t, 0, 0);
+	assert(vmcfg->vgic_itss != NULL);
+
+	// Create and bind all ITS sources (if any) to the VIC.
+	for (count_t i = 0U; i < its_caps_count; i++) {
+		vic_msi_source_config_t source_config =
+			vic_msi_source_config_default();
+		vgic_its_t vgic_its;
+
+		if (its_caps[i] == CSPACE_CAP_INVALID) {
 			continue;
 		}
 
-		// If the MSI source is an ITS, it will need an attachment
-		// to the VM's address space before it can be bound to the VIC.
-		err = gunyah_hyp_addrspace_attach_vdma(addrspace_cap,
-						       msi_src_caps[i], 0U);
+		gunyah_hyp_partition_create_vgic_its_result_t vgic_its_ret;
+		vgic_its_ret = gunyah_hyp_partition_create_vgic_its(
+			partition_cap, cspace_cap);
+		if (vgic_its_ret.error != OK) {
+			ret = cap_id_result_error(vgic_its_ret.error);
+			LOG_ERR(vgic_its_ret.error);
+			goto out;
+		}
+
+		err = gunyah_hyp_object_activate(vgic_its_ret.new_cap);
+		if (err != OK) {
+			ret = cap_id_result_error(err);
+			LOG_ERR(err);
+			goto out;
+		}
+
+		// A VGIC ITS will need an attachment to the VM's address space
+		// before it can be bound to the VIC.
+		err = gunyah_hyp_addrspace_attach_vdma(
+			addrspace_cap, vgic_its_ret.new_cap, 0U);
 		if ((err != OK) && (err != ERROR_CSPACE_WRONG_OBJECT_TYPE)) {
 			ret = cap_id_result_error(err);
 			(void)printf(
-				"HLOS: Failed to attach VDMA for MSI %d, error %" PRId32
+				"HLOS: Failed to attach VDMA for VGIC ITS %d, error %" PRId32
 				"\n",
 				i, (int32_t)err);
 			goto out;
 		}
 
-		err = gunyah_hyp_vic_bind_msi_source(v.new_cap,
-						     msi_src_caps[i]);
+		vic_msi_source_config_set_index(&source_config, (uint16_t)i);
+		err = gunyah_hyp_vic_bind_msi_source(
+			v.new_cap, vgic_its_ret.new_cap, source_config);
+
 		if (err != OK) {
 			ret = cap_id_result_error(err);
 			(void)printf(
-				"HLOS: Failed to bind MSI %d, error %" PRId32
+				"HLOS: Failed to bind VGIC ITS %d, error %" PRId32
 				"\n",
 				i, (int32_t)err);
 			goto out;
+		}
+
+		vmcfg->vgic_its[i]	= vgic_its_ret.new_cap;
+		vgic_its.msi_source_cap = its_caps[i];
+		vgic_its.vgic_its_cap	= vgic_its_ret.new_cap;
+		err = vector_push_back(vmcfg->vgic_itss, vgic_its);
+		if (err != OK) {
+			LOG_ERR(err);
+			ret = cap_id_result_error(err);
+			goto out;
+		}
+
+		// All devices are bound to HLOS on all ITSs.
+		const platform_msi_controller_t *ctrl =
+			platform_get_msi_controller((index_t)i);
+		if (ctrl != NULL) {
+			count_t ctrl_count =
+				platform_get_msi_ctrl_device_count(ctrl);
+			// Assumption: idx zero always contains CPU device
+			for (index_t idx = 0; idx < ctrl_count; idx++) {
+				platform_msi_device_id_t dev_id =
+					platform_get_msi_ctrl_device_id(ctrl,
+									idx);
+				err = gunyah_hyp_vgic_its_bind_devices(
+					vgic_its_ret.new_cap, its_caps[i],
+					dev_id, 1);
+				if (err != OK) {
+					ret = cap_id_result_error(err);
+					(void)printf(
+						"HLOS: Failed to bind device %d to vgic_its[%d], err %" PRId32
+						"\n",
+						dev_id, i, (int32_t)err);
+					goto out;
+				}
+			}
 		}
 	}
 
 	ret = cap_id_result_ok(v.new_cap);
+
+	vmcfg->vic = ret.r;
 
 out:
 	if ((ret.e != OK) && (v.error == OK)) {
@@ -293,15 +352,15 @@ out:
 		assert(err == OK);
 	}
 
-	return ret;
+	return ret.e;
 }
 
 static error_t
-hlos_vm_create_irq(vm_t *hlos, vm_config_t *vmcfg, cap_id_result_t vic_ret)
+hlos_vm_create_irq(vm_t *hlos, vm_config_t *vmcfg)
 {
 	error_t ret;
 
-	ret = irq_manager_vm_init(hlos, vic_ret.r, PLATFORM_IRQ_MAX);
+	ret = irq_manager_vm_init(hlos, vmcfg->vic, PLATFORM_IRQ_MAX);
 	if (ret != OK) {
 		goto out;
 	}
@@ -311,20 +370,13 @@ hlos_vm_create_irq(vm_t *hlos, vm_config_t *vmcfg, cap_id_result_t vic_ret)
 		goto out;
 	}
 
-	ret = vm_config_hlos_vdevices_setup(vmcfg, vic_ret.r);
-	if (ret != OK) {
-		goto out;
-	}
-
 out:
 	return ret;
 }
 
 static error_t
-hlos_vm_activate_vcpus(const rm_env_data_t *env_data, vm_t *hlos,
-		       vm_config_t *vmcfg, cap_id_result_t vic_ret,
-		       const cap_id_t *vcpu_caps, count_t max_cores,
-		       cpu_index_t root_vcpu_idx)
+hlos_vm_activate_vcpus(vm_config_t *vmcfg, const cap_id_t *vcpu_caps,
+		       count_t max_cores, cpu_index_t root_vcpu_idx)
 {
 	error_t ret;
 
@@ -345,18 +397,34 @@ hlos_vm_activate_vcpus(const rm_env_data_t *env_data, vm_t *hlos,
 			goto out;
 		}
 
-		ret = vm_config_add_vcpu(vmcfg, vcpu_caps[i], i,
+		ret = vm_config_add_vcpu(vmcfg, vcpu_caps[i], i, i,
 					 i == root_vcpu_idx, NULL);
 		if (ret != OK) {
 			LOG_ERR(ret);
 			goto out;
 		}
 	}
+	ret = OK;
 
-	// Create IRQ manager for HLOS VM
-	ret = hlos_vm_create_irq(hlos, vmcfg, vic_ret);
+out:
+	return ret;
+}
+
+static error_t
+hlos_vm_do_create(const rm_env_data_t *env_data, vm_t *hlos, vm_config_t *vmcfg)
+{
+	error_t ret;
+
+	// Platform specific VM creation setup
+	ret = platform_vm_create(hlos, true);
 	if (ret != OK) {
 		LOG_ERR(ret);
+		goto out;
+	}
+
+	// Setup default vdevices
+	ret = vm_config_hlos_vdevices_setup(vmcfg, vmcfg->vic);
+	if (ret != OK) {
 		goto out;
 	}
 
@@ -409,8 +477,8 @@ hlos_vm_create_watchdog(vm_config_t *vmcfg, cap_id_t root_vcpu_cap,
 {
 	error_t ret;
 
-	vmcfg->watchdog_enabled = rm_get_watchdog_supported();
-	if (vmcfg->watchdog_enabled) {
+	vmcfg->watchdog_allowed = rm_get_watchdog_supported();
+	if (vmcfg->watchdog_allowed) {
 		gunyah_hyp_partition_create_watchdog_result_t wdt;
 		wdt = gunyah_hyp_partition_create_watchdog(rm_partition_cap,
 							   rm_cspace_cap);
@@ -470,23 +538,34 @@ hlos_vm_create_psci_group(vm_config_t *vmcfg, cap_id_t root_vcpu_cap,
 		ret = vg.error;
 		goto out;
 	}
+	vmcfg->vpm_group = vg.new_cap;
+
+	// Enable explicit wakeup if another VM Is the power owner
+	if (rm_get_has_system_suspend() &&
+	    (platform_get_power_owner_vmid() != VMID_HLOS)) {
+		vmcfg->vpm_explicit_wakeup = true;
+	}
+
+	ret = vm_config_configure_vpm_group(vmcfg, NULL);
+	if (ret != OK) {
+		goto out;
+	}
 
 	ret = gunyah_hyp_object_activate(vg.new_cap);
 	if (ret != OK) {
 		goto out;
 	}
 
-	vmcfg->vpm_group = vg.new_cap;
-
 	// Attach the root vcpu to the vpm group
 
 	ret = gunyah_hyp_vpm_group_attach_vcpu(
-		vg.new_cap, root_vcpu_cap, rm_get_platform_root_vcpu_index());
+		vmcfg->vpm_group, root_vcpu_cap,
+		rm_get_platform_root_vcpu_index());
 	if (ret != OK) {
 		goto out;
 	}
 
-	*psci_ret = vg.new_cap;
+	*psci_ret = vmcfg->vpm_group;
 out:
 	if (ret != OK) {
 		LOG_ERR(ret);
@@ -495,9 +574,9 @@ out:
 }
 
 static error_t
-hlos_vm_create_address_space(const vm_t *hlos, vm_config_t *vmcfg,
-			     cap_id_t rm_partition_cap, cap_id_t rm_cspace_cap,
-			     cap_id_t root_vcpu_cap, cap_id_t *as_ret)
+hlos_vm_create_address_space(vm_config_t *vmcfg, cap_id_t rm_partition_cap,
+			     cap_id_t rm_cspace_cap, cap_id_t root_vcpu_cap,
+			     cap_id_t *as_ret)
 {
 	error_t ret;
 
@@ -536,12 +615,6 @@ hlos_vm_create_address_space(const vm_t *hlos, vm_config_t *vmcfg,
 		goto out;
 	}
 
-	ret = platform_vm_create(hlos, true);
-	if (ret != OK) {
-		LOG_ERR(ret);
-		goto out;
-	}
-
 	ret	= OK;
 	*as_ret = as.new_cap;
 
@@ -555,17 +628,114 @@ out:
 
 static error_t
 hlos_vm_setup_addrspace_info_area(const rm_env_data_t *env_data,
-				  vm_config_t *vmcfg, cap_id_t rm_cspace_cap)
+				  vm_config_t	      *vmcfg)
 {
 	error_t ret;
-	(void)env_data;
-	(void)vmcfg;
-	(void)rm_cspace_cap;
+	error_t err;
+
+	if (!platform_expose_log_to_hlos() ||
+	    (env_data->trace_me_capid == CSPACE_CAP_INVALID) ||
+	    (env_data->trace_dbl_capid == CSPACE_CAP_INVALID)) {
+		(void)printf("info: live trace collection disabled\n");
+		ret = OK;
+		goto out;
+	}
+
+	vmaddr_t trace_ipa = env_data->trace_phys;
+
+	vm_address_range_result_t as_ret = vm_address_range_alloc(
+		vmcfg->vm, VM_MEMUSE_BOOTINFO, trace_ipa, env_data->trace_phys,
+		env_data->trace_size, ADDRESS_RANGE_NO_ALIGNMENT);
+	if (as_ret.err != OK) {
+		ret = as_ret.err;
+		goto out;
+	}
+
+	// Map trace buffer to hlos read-only
+	ret = vm_memory_map(vmcfg->vm, VM_MEMUSE_BOOTINFO,
+			    env_data->trace_me_capid, trace_ipa,
+			    PGTABLE_ACCESS_R, PGTABLE_VM_MEMTYPE_NORMAL_WB);
+	if (ret != OK) {
+		goto out_free;
+	}
+
+	// Allocate and map the virq to HLOS
+	uint32_result_t db_irq = irq_manager_vm_alloc_global(vmcfg->vm);
+	if (db_irq.e != OK) {
+		ret = db_irq.e;
+		goto out_unmap_trace;
+	}
+	ret = irq_manager_vm_virq_map(vmcfg->vm, db_irq.r, false);
+	if (ret != OK) {
+		goto out_free_irq;
+	}
+
+	interrupt_data_t dbl_virq = virq_edge(db_irq.r);
+
+	// Bind VIRQ to recv VM's VIC
+	ret = gunyah_hyp_doorbell_bind_virq(env_data->trace_dbl_capid,
+					    vmcfg->vic, db_irq.r);
+	if (ret != OK) {
+		goto out_unmap_irq;
+	}
+
+	// Add the trace buffer info_area entry
+	gunyah_hyp_addrspace_info_area_add_entry_result_t add_ret;
+	addrspace_info_area_entry_type_t		  entry_type =
+		addrspace_info_area_entry_type_default();
+
+	addrspace_info_area_entry_type_set_owner(
+		&entry_type, ADDRSPACE_INFO_AREA_ID_OWNER_ROOTVM);
+	addrspace_info_area_entry_type_set_id(
+		&entry_type, ADDRSPACE_INFO_AREA_ROOTVM_TRACE_INFO);
+
+	struct addrspace_info_area_rootvm_trace_info_s trace_info = { 0U };
+
+	trace_info.trace_ipa  = trace_ipa;
+	trace_info.trace_size = env_data->trace_size;
+
+	addrspace_info_area_interrupt_result_t interrupt_result =
+		vm_creation_addrspace_info_area_interrupt(dbl_virq);
+	assert(interrupt_result.e == OK);
+	trace_info.trace_dbl_irq = interrupt_result.r;
+
+	addrspace_info_area_entry_data_info_t data_info =
+		addrspace_info_area_entry_data_info_default();
+	addrspace_info_area_entry_data_info_set_size(&data_info,
+						     sizeof(trace_info));
+	addrspace_info_area_entry_data_info_set_alignment(&data_info,
+							  sizeof(uint64_t));
+
+	add_ret = gunyah_hyp_addrspace_info_area_add_entry(
+		vmcfg->addrspace, entry_type, (user_ptr_t)&trace_info,
+		data_info);
+	if (add_ret.error != OK) {
+		ret = add_ret.error;
+		LOG_ERR(ret);
+		goto out_unbind_virq;
+	}
 
 	ret = OK;
+	goto out;
 
-	// TODO: error cleanup. If HLOS fails, then we don't boot
-	// anyway.
+out_unbind_virq:
+	err = gunyah_hyp_doorbell_unbind_virq(env_data->trace_dbl_capid);
+	assert(err == OK);
+out_unmap_irq:
+	err = irq_manager_vm_virq_unmap(vmcfg->vm, db_irq.r, true);
+	assert(err == OK);
+out_free_irq:
+	err = irq_manager_vm_free_global(vmcfg->vm, db_irq.r);
+	assert(err == OK);
+out_unmap_trace:
+	err = vm_memory_unmap(vmcfg->vm, VM_MEMUSE_NORMAL,
+			      env_data->trace_me_capid, trace_ipa);
+	assert(err == OK);
+out_free:
+	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_NORMAL, trace_ipa,
+				    env_data->trace_size);
+	assert(err == OK);
+out:
 	return ret;
 }
 
@@ -587,11 +757,6 @@ hlos_vm_set_attributes(vm_t					  *hlos,
 		goto out;
 	}
 	hlos->priority = HLOS_VCPU_PRIORITY;
-
-	ret = gunyah_hyp_vcpu_set_timeslice(root_vcpu_cap, HLOS_VCPU_TIMESLICE);
-	if (ret != OK) {
-		goto out;
-	}
 
 	ret = gunyah_hyp_cspace_attach_thread(cs.new_cap, root_vcpu_cap);
 	if (ret != OK) {
@@ -622,12 +787,15 @@ hlos_vm_get_vcpu_options(const rm_env_data_t *env_data)
 	vcpu_option_flags_set_amu_counting_disabled(&vcpu_options, false);
 	vcpu_option_flags_set_sve_allowed(&vcpu_options,
 					  env_data->sve_supported);
+	vcpu_option_flags_set_sme_allowed(&vcpu_options,
+					  env_data->sme_supported);
+	vcpu_option_flags_set_sdei_allowed(&vcpu_options,
+					   env_data->sdei_supported);
 #if defined(PLATFORM_MPAM_DIRECT) && PLATFORM_MPAM_DIRECT
 	vcpu_option_flags_set_mpam_allowed(&vcpu_options, true);
 #endif
 
 	if (env_data->hlos_handles_ras) {
-		(void)printf("HLOS is RAS handler\n");
 		// Set HLOS as the VM that handles RAS errors
 		vcpu_option_flags_set_ras_error_handler(&vcpu_options, true);
 		ras_handler_vm = VMID_HLOS;
@@ -716,6 +884,9 @@ hlos_vm_create(const rm_env_data_t *env_data)
 
 	vcpu_option_flags_t vcpu_options = hlos_vm_get_vcpu_options(env_data);
 
+	// Set trace allowed for HLOS
+	vcpu_option_flags_set_trace_allowed(&vcpu_options, true);
+
 	ret = gunyah_hyp_vcpu_configure(root_vcpu_cap, vcpu_options);
 	if (ret != OK) {
 		LOG_ERR(ret);
@@ -737,9 +908,8 @@ hlos_vm_create(const rm_env_data_t *env_data)
 
 	// Create, configure, activate, and attach address space
 	cap_id_t as_cap;
-	ret = hlos_vm_create_address_space(hlos, vmcfg, rm_partition_cap,
-					   rm_cspace_cap, root_vcpu_cap,
-					   &as_cap);
+	ret = hlos_vm_create_address_space(
+		vmcfg, rm_partition_cap, rm_cspace_cap, root_vcpu_cap, &as_cap);
 	if (ret != OK) {
 		goto out;
 	}
@@ -755,12 +925,6 @@ hlos_vm_create(const rm_env_data_t *env_data)
 	cap_id_t psci_cap;
 	ret = hlos_vm_create_psci_group(vmcfg, root_vcpu_cap, rm_partition_cap,
 					rm_cspace_cap, &psci_cap);
-	if (ret != OK) {
-		goto out;
-	}
-
-	// Setup addrspace_info_area
-	ret = hlos_vm_setup_addrspace_info_area(env_data, vmcfg, rm_cspace_cap);
 	if (ret != OK) {
 		goto out;
 	}
@@ -786,31 +950,57 @@ hlos_vm_create(const rm_env_data_t *env_data)
 		goto out;
 	}
 
-	const cap_id_t *vic_msi_sources = env_data->irq_env->vic_msi_source;
-	count_t		vic_msi_source_count =
-		(count_t)util_array_size(env_data->irq_env->vic_msi_source);
+	const cap_id_t *its_caps = env_data->its_caps;
+	count_t its_caps_count	 = (count_t)util_array_size(env_data->its_caps);
 
-	cap_id_result_t vic_ret;
-	vic_ret = hlos_vm_create_vic(rm_partition_cap, rm_cspace_cap, as_cap,
-				     root_vcpu_cap, vcpu_caps, vic_msi_sources,
-				     vic_msi_source_count);
-	if (vic_ret.e != OK) {
-		ret = vic_ret.e;
+	ret = hlos_vm_create_vic(vmcfg, rm_partition_cap, rm_cspace_cap, as_cap,
+				 root_vcpu_cap, vcpu_caps, its_caps,
+				 its_caps_count);
+	if (ret != OK) {
 		LOG_ERR(ret);
 		goto out;
 	}
 
-	vmcfg->vic = vic_ret.r;
-
-	ret = hlos_vm_activate_vcpus(env_data, hlos, vmcfg, vic_ret, vcpu_caps,
-				     max_cores, root_vcpu_idx);
+	ret = hlos_vm_activate_vcpus(vmcfg, vcpu_caps, max_cores,
+				     root_vcpu_idx);
 	if (ret != OK) {
 		goto out;
 	}
 
+	// Create IRQ manager for HLOS VM
+	ret = hlos_vm_create_irq(hlos, vmcfg);
+	if (ret != OK) {
+		LOG_ERR(ret);
+		goto out;
+	}
+
+	// Setup addrspace_info_area, make sure all components prepared for a VM
+	// were created already before call this function
+	ret = hlos_vm_setup_addrspace_info_area(env_data, vmcfg);
+	if (ret != OK) {
+		goto out;
+	}
+
+	ret = hlos_vm_do_create(env_data, hlos, vmcfg);
+	if (ret != OK) {
+		goto out;
+	}
+
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	ret = device_manager_init_vm(vmcfg->vm);
+	if (ret != OK) {
+		(void)printf(
+			"Error: failed to initialize HLOS device management\n");
+		// TODO: revert vdevices_setup
+		goto out;
+	}
+#endif
+
 	ret = OK;
 out:
-	free(vcpu_caps);
+	if (ret != OK) {
+		free(vcpu_caps);
+	}
 
 	return ret;
 }

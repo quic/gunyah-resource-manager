@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -29,6 +29,10 @@
 #include <util.h>
 #include <utils/list.h>
 
+#include <cache.h>
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+#include <device_manager.h>
+#endif
 #include <dtb_parser.h>
 #include <event.h>
 #include <guest_interface.h>
@@ -50,6 +54,9 @@
 #include <vm_firmware.h>
 #include <vm_memory.h>
 #include <vm_mgnt.h>
+
+#include <platform_vm_config_parser.h>
+#include <vm_config_parser.h>
 
 rm_error_t
 vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
@@ -118,14 +125,18 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 		goto out;
 	}
 
-	vm->image_offset = image_offset;
-	vm->image_size	 = image_size;
-	vm->dt_offset	 = dt_offset;
-	vm->dt_size	 = dt_size;
+	vm->image_offset  = image_offset;
+	vm->image_size	  = image_size;
+	vm->vmm_dt_offset = dt_offset;
+	vm->vmm_dt_size	  = dt_size;
 
 	// Default entry point is the start of the image, unless overridden
 	// later by auth-type-specific code
 	vm->entry_offset = image_offset;
+
+	// Initialize with a default value indicating a clean shutdown.
+	// This will be set to false at the end of the VM start.
+	vm->clean_shutdown = true;
 
 	// Create new cspace
 	gunyah_hyp_partition_create_cspace_result_t cs;
@@ -176,7 +187,7 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 		break;
 	case VM_AUTH_TYPE_PLATFORM:
 		vm->vm_config->mem_unsanitized	= false;
-		vm->vm_config->watchdog_enabled = true;
+		vm->vm_config->watchdog_allowed = true;
 		break;
 	case VM_AUTH_TYPE_ANDROID:
 		vm->vm_config->mem_unsanitized = false;
@@ -192,14 +203,16 @@ vm_creation_config_image(vm_t *vm, vm_auth_type_t auth,
 		goto out_destroy_cspace;
 	}
 
-	// Memory must be private if it is required to be sanitised.
-	if (!vm->mem_private && !vm->vm_config->mem_unsanitized) {
-		(void)printf("Error: vm %d memory must be private\n", vm->vmid);
-		rm_err = RM_ERROR_DENIED;
-		goto out_destroy_cspace;
-	}
-
 	vm->auth_type = auth;
+
+	rm_err = vm_firmware_config(vm);
+	if (rm_err != RM_OK) {
+		(void)printf(
+			"Error: vm %d firmware setup failed, error %" PRId32
+			"\n",
+			vm->vmid, rm_err);
+		goto out_dealloc_vm_config;
+	}
 
 	err = vm_memory_setup(vm);
 	if (err != OK) {
@@ -232,83 +245,318 @@ out:
 	return rm_err;
 }
 
-rm_error_t
-vm_creation_init(vm_t *vm)
+static rm_error_t
+vm_creation_parse_dtb(const vm_t *vm, const dtb_parser_ops_t *ops,
+		      vm_config_parser_data_t *parser_data, size_t dt_offset,
+		      size_t dt_size, bool from_image)
 {
 	rm_error_t err;
 
-	// parse vm-config node & create first class object
-	uintptr_result_t map_ret = map_dtb(vm->dt_offset, vm->dt_size,
-					   vm->mem_mp_handle, vm->mem_size);
-	(void)printf("DTB: offset:0x%lx, size:0x%zx\n", vm->dt_offset,
-		     vm->dt_size);
+	uintptr_result_t map_ret =
+		map_dtb(dt_offset, dt_size, vm->mem_mp_handle, vm->mem_size);
+	(void)printf("DTB: offset:0x%lx, size:0x%zx from_image %d\n", dt_offset,
+		     dt_size, from_image);
 	if (map_ret.e != OK) {
 		(void)printf("Error: failed to map device tree\n");
 		err = RM_ERROR_MEM_INVALID;
 		goto out;
 	}
-	void *temp_dtb_ptr = (void *)map_ret.r;
 
-	// parse it first
-	dtb_parser_ops_t *ops = vm_config_parser_get_ops();
-	assert(ops != NULL);
+	// We consider the DT to be potentially able to compromise the VM, and
+	// therefore "tainted", if the VM's configuration is generally trusted
+	// but this DT didn't come from the trusted VM image. For example, this
+	// is the case for a VMM-provided DT for a protected VM. If this is
+	// true, we limit the DT parser to a small set of listeners that can't
+	// modify any sensitive configuration parameters.
+	bool tainted_source = vm->vm_config->trusted_config && !from_image;
 
-	vm_config_parser_params_t params = vm_config_parser_get_params(vm);
-
-	dtb_parser_parse_dtb_ret_t parse_ret =
-		dtb_parser_parse_dtb(temp_dtb_ptr, ops, (void *)&params);
-	(void)unmap_dtb(vm->mem_mp_handle);
-
-	if (parse_ret.err != OK) {
+	void   *temp_dtb_ptr = (void *)map_ret.r;
+	error_t parse_err = dtb_parser_parse_dtb(temp_dtb_ptr, ops, parser_data,
+						 tainted_source);
+	if (parse_err != OK) {
 		(void)printf(
 			"Error: failed to parse device tree, ret = %" PRId32
 			"\n",
-			(int32_t)parse_ret.err);
-		error_t free_ret = dtb_parser_free(ops, parse_ret.r);
-		assert(free_ret == OK);
-		err = RM_ERROR_MEM_INVALID;
+			(int32_t)parse_err);
+		err = RM_ERROR_VALIDATE_FAILED;
+		goto out_unmap;
+	}
+
+	err = RM_OK;
+
+out_unmap:
+	(void)unmap_dtb(vm->mem_mp_handle);
+out:
+	return err;
+}
+
+static rm_error_t
+vm_creation_patch_fallback_dt(vm_t *vm, void *overlay_ptr, size_t overlay_size,
+			      const void *fallback_dt_ptr)
+{
+	rm_error_t ret;
+
+	// The overlay region will be reused for the patched DT. Hopefully
+	// there is enough space but there's no reason to check early. We still
+	// have to make sure it fits in an 'int' though, in order to pass the
+	// buffer to fdt_open_into().
+	if (overlay_size > (size_t)INT_MAX) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
+	// Copy the overlay into a temporary buffer.
+	size_t overlay_totalsize = fdt_totalsize(overlay_ptr);
+	void  *overlay_temp_ptr	 = calloc(1U, overlay_totalsize);
+	if (overlay_temp_ptr == NULL) {
+		ret = RM_ERROR_NOMEM;
+		goto out;
+	}
+	(void)memscpy(overlay_temp_ptr, overlay_totalsize, overlay_ptr,
+		      overlay_totalsize);
+
+	// Open the fallback dt into where the overlay originally was. Note
+	// that from this point on overlay_ptr points to the patched dt.
+	int open_ret =
+		fdt_open_into(fallback_dt_ptr, overlay_ptr, (int)overlay_size);
+	if (open_ret != 0) {
+		LOG_ERR(open_ret);
+		ret = RM_ERROR_DENIED;
+		goto out_free;
+	}
+
+	int apply_ret = fdt_overlay_apply(overlay_ptr, overlay_temp_ptr);
+	if (apply_ret != 0) {
+		LOG_ERR(apply_ret);
+		ret = RM_ERROR_DENIED;
+		goto out_free;
+	}
+
+	(void)fdt_pack(overlay_ptr);
+	size_t final_dt_totalsize = fdt_totalsize(overlay_ptr);
+	assert(final_dt_totalsize <= overlay_size);
+	cache_clean_by_va(overlay_ptr, final_dt_totalsize);
+
+	// Treat the patched DT as if it were the VMM-provided DT, and pretend
+	// that the image DT (which is actually an overlay) never existed.
+	vm->vmm_dt_offset    = vm->image_dt_offset;
+	vm->vmm_dt_size	     = vm->image_dt_size;
+	vm->image_dt_offset  = 0U;
+	vm->image_dt_size    = 0U;
+	vm->fallback_dt_used = true;
+
+	ret = RM_OK;
+out_free:
+	free(overlay_temp_ptr);
+out:
+	return ret;
+}
+
+static rm_error_t
+vm_creation_setup_fallback_dt(vm_t *vm)
+{
+	rm_error_t ret;
+
+	// If there is an image DT provided, it is actually an overlay that
+	// needs to be applied to the fallback DT.
+	//
+	// If there is no overlay, treat it as an error for now.
+	if (vm->image_dt_size == 0U) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	paddr_t overlay_offset	   = vm->image_dt_offset;
+	size_t	overlay_size	   = vm->image_dt_size;
+	paddr_t fallback_dt_offset = vm->fallback_dt_offset;
+	paddr_t fallback_dt_size   = vm->fallback_dt_size;
+	size_t	ipa_size	   = vm->mem_size;
+
+	error_t err =
+		map_dtb_check_range(overlay_offset, overlay_size, ipa_size);
+	if (err != OK) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	err = map_dtb_check_range(fallback_dt_offset, fallback_dt_size,
+				  ipa_size);
+	if (err != OK) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	if (fallback_dt_offset <= (overlay_offset + (overlay_size - 1U))) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	size_t mapped_size =
+		(fallback_dt_offset - overlay_offset) + fallback_dt_size;
+	uintptr_result_t map_ret =
+		memparcel_map_rm(vm->mem_mp_handle, overlay_offset,
+				 util_balign_up(mapped_size, PAGE_SIZE));
+	if (map_ret.e != OK) {
+		ret = RM_ERROR_MAP_FAILED;
+		goto out;
+	}
+	void *overlay_ptr = (void *)map_ret.r;
+	void *fallback_dt_ptr =
+		(void *)(map_ret.r + (fallback_dt_offset - overlay_offset));
+
+	err = map_dtb_setup_mapped_dtb(overlay_ptr, overlay_size);
+	if (err != OK) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out_unmap;
+	}
+
+	err = map_dtb_setup_mapped_dtb(fallback_dt_ptr, fallback_dt_size);
+	if (err != OK) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+		goto out_unmap;
+	}
+
+	ret = vm_creation_patch_fallback_dt(vm, overlay_ptr, overlay_size,
+					    fallback_dt_ptr);
+out_unmap:
+	err = memparcel_unmap_rm(vm->mem_mp_handle);
+	if (err != OK) {
+		LOG_ERR(err);
+		ret = RM_ERROR_MAP_FAILED;
+	}
+out:
+	(void)printf("fallback dt setup returned: %" PRIu32 "\n", ret);
+	return ret;
+}
+
+static error_t
+vm_creation_get_fallback_dt(vm_t *vm, const vm_config_parser_data_t *data)
+{
+	assert(data != NULL);
+
+	error_t err;
+
+	int idx = data->fallback_dt_idx;
+	if (idx < 0) {
+		err = OK;
+		goto out;
+	}
+
+	if ((index_t)idx >= vm->vm_config->segment_count) {
+		err = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	boot_env_phys_range_t *segment = &vm->vm_config->segments[(index_t)idx];
+	vm->fallback_dt_offset	       = segment->base;
+	vm->fallback_dt_size	       = segment->size;
+
+	err = OK;
+out:
+	return err;
+}
+
+rm_error_t
+vm_creation_init(vm_t *vm)
+{
+	rm_error_t err;
+
+	const dtb_parser_ops_t *ops = vm_config_parser_get_ops();
+	assert(ops != NULL);
+
+	vm_config_parser_data_t *parser_data = vm_config_parser_alloc_data(vm);
+	if (parser_data == NULL) {
+		err = RM_ERROR_NOMEM;
+		goto out;
+	}
+
+	if (vm->image_dt_size > 0U) {
+		err = vm_creation_parse_dtb(vm, ops, parser_data,
+					    vm->image_dt_offset,
+					    vm->image_dt_size, true);
+
+		if (err != RM_OK) {
+			vm_config_parser_free_data(parser_data);
+			goto out;
+		}
+	}
+
+	error_t fallback_ret = vm_creation_get_fallback_dt(vm, parser_data);
+	if (fallback_ret != OK) {
+		err = RM_ERROR_ARGUMENT_INVALID;
+		vm_config_parser_free_data(parser_data);
+		goto out;
+	}
+
+	// Use the fallback DT if there is one and a VMM-provided DT doesn't
+	// exist.
+	if ((vm->fallback_dt_size > 0U) && (vm->vmm_dt_size == 0U)) {
+		err = vm_creation_setup_fallback_dt(vm);
+		if (err != RM_OK) {
+			vm_config_parser_free_data(parser_data);
+			goto out;
+		}
+	}
+
+	if (vm->vmm_dt_size > 0U) {
+		err = vm_creation_parse_dtb(vm, ops, parser_data,
+					    vm->vmm_dt_offset, vm->vmm_dt_size,
+					    false);
+
+		if (err != RM_OK) {
+			vm_config_parser_free_data(parser_data);
+			goto out;
+		}
+	}
+
 	assert(vm->vm_config != NULL);
-	assert(parse_ret.r != NULL);
+	assert(parser_data != NULL);
 
 	error_t update_ret =
-		vm_config_update_parsed(vm->vm_config, parse_ret.r);
+		vm_config_update_parsed(vm->vm_config, parser_data);
 	if (update_ret != OK) {
 		(void)printf("Error: failed to update vm_config, ret = %" PRId32
 			     "\n",
 			     (int32_t)update_ret);
 
-		error_t free_ret = dtb_parser_free(ops, parse_ret.r);
-		assert(free_ret == OK);
-
+		vm_config_parser_free_data(parser_data);
 		err = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
 	error_t create_ret =
-		vm_config_create_vdevices(vm->vm_config, parse_ret.r);
+		vm_config_create_vdevices(vm->vm_config, parser_data);
 	if (create_ret != OK) {
 		(void)printf("Error: failed to create vdevices, ret = %" PRId32
 			     "\n",
 			     (int32_t)create_ret);
 
-		error_t free_ret = dtb_parser_free(ops, parse_ret.r);
-		assert(free_ret == OK);
-
+		vm_config_parser_free_data(parser_data);
 		err = RM_ERROR_NORESOURCE;
 		goto out;
 	}
 
-	error_t free_ret = dtb_parser_free(ops, parse_ret.r);
-	assert(free_ret == OK);
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	error_t dev_mgr_ret = device_manager_init_vm(vm);
+	if (dev_mgr_ret != OK) {
+		(void)printf(
+			"Failed to initialize device management for VM, ret %" PRId32
+			"\n",
+			(int32_t)dev_mgr_ret);
+		// TODO: revert create_vdevices
+		vm_config_parser_free_data(parser_data);
+		err = RM_ERROR_NORESOURCE;
+		goto out;
+	}
+#endif
+
+	vm_config_parser_free_data(parser_data);
 
 #if defined(GUEST_RAM_DUMP_ENABLE) && GUEST_RAM_DUMP_ENABLE
 	// Override mem_unsanitized value with dtb parsed value
 	// if the config is trusted and guest ram dump is allowed
 	// for vm do not sanitize guest vm region
-	if (!platform_get_security_state() && vm->vm_config->trusted_config &&
+	if (!platform_is_in_secure_state() && vm->vm_config->trusted_config &&
 	    vm->vm_config->guestdump_allowed) {
 		// disable sanitization of Guest VM region
 		vm->vm_config->mem_unsanitized = true;
@@ -317,6 +565,18 @@ vm_creation_init(vm_t *vm)
 			vm->vmid);
 	}
 #endif // GUEST_RAM_DUMP_ENABLE
+
+	bool vm_allows_unprotected = vm->vm_config->trusted_config &&
+				     vm->vm_config->allow_unprotected;
+	// Memory must be private if it is required to be sanitised.
+	if (!vm->mem_private && !vm_allows_unprotected &&
+	    !vm->vm_config->mem_unsanitized) {
+		(void)printf(
+			"Error: vm %d memory must be private for protected VM\n",
+			vm->vmid);
+		err = RM_ERROR_DENIED;
+		goto out;
+	}
 
 	err = platform_vm_init(vm);
 	if (err != RM_OK) {

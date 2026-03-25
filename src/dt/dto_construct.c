@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -16,6 +16,7 @@ error_t
 dto_construct_begin_path(dto_t *dto, const char *path)
 {
 	error_t ret = OK;
+	assert(path != NULL);
 
 	char *target = strdup(path);
 	if (target == NULL) {
@@ -66,14 +67,14 @@ error_t
 dto_construct_end_path(dto_t *dto, const char *path)
 {
 	error_t ret = OK;
-
-	size_t sz = strlen(path);
+	assert(path != NULL);
 
 	char *target = strdup(path);
 	if (target == NULL) {
 		ret = ERROR_NOMEM;
 		goto out;
 	}
+	size_t sz = strlen(target);
 
 	const char separator = '/';
 

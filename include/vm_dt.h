@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -24,7 +24,7 @@ vm_dt_create_hlos_ret_t
 vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size);
 
 error_t
-vm_dt_apply_hlos_overlay(vm_t *hlos_vm, paddr_t hlos_dtb, size_t dtb_size);
+vm_dt_apply_hlos_overlay(vm_t *hlos_vm);
 
 #else
 

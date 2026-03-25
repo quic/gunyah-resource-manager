@@ -1,9 +1,11 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
 #ifndef INCLUDE_VM_FIRMWARE_H_
 #define INCLUDE_VM_FIRMWARE_H_
+
+typedef struct vm_firmware_image_data_s vm_firmware_image_data_t;
 
 typedef struct {
 	vmid_t	 target;
@@ -16,6 +18,9 @@ typedef struct {
 bool
 vm_firmware_msg_handler(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 			void *buf, size_t len);
+
+rm_error_t
+vm_firmware_config(vm_t *vm);
 
 rm_error_t
 vm_firmware_vm_set_mem(vm_t *vm, resource_handle_t fw_mp_handle,

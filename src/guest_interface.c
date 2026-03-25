@@ -1130,15 +1130,15 @@ gunyah_hyp_cspace_attach_thread(cap_id_t cspace, cap_id_t thread)
 	return (error_t)out_x0_;
 }
 
-gunyah_hyp_trace_update_class_flags_result_t
-gunyah_hyp_trace_update_class_flags(uint64_t set_flags, uint64_t clear_flags)
+gunyah_hyp_trace_configure_result_t
+gunyah_hyp_trace_configure(uint64_t arg1, uint64_t arg2,
+			   trace_configure_parameter_t param)
 {
-	const register register_t in_x0_ __asm__("x0") = (register_t)set_flags;
-	const register register_t in_x1_ __asm__("x1") =
-		(register_t)clear_flags;
-	register register_t in_x2_ __asm__("x2") = 0x0U;
-	register error_t    out_x0_ __asm__("x0");
-	register uint64_t   out_x1_ __asm__("x1");
+	const register register_t in_x0_ __asm__("x0") = (register_t)arg1;
+	const register register_t in_x1_ __asm__("x1") = (register_t)arg2;
+	register register_t	  in_x2_ __asm__("x2") = (register_t)param;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
 
 	__asm__ volatile("hvc 0x603f"
 			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
@@ -1146,9 +1146,9 @@ gunyah_hyp_trace_update_class_flags(uint64_t set_flags, uint64_t clear_flags)
 			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
 			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
 
-	return (gunyah_hyp_trace_update_class_flags_result_t){
+	return (gunyah_hyp_trace_configure_result_t){
 		.error = (error_t)out_x0_,
-		.flags = (uint64_t)out_x1_,
+		.ret   = (uint64_t)out_x1_,
 	};
 }
 
@@ -1324,25 +1324,27 @@ gunyah_hyp_partition_create_virtio_backend(cap_id_t src_partition,
 }
 
 error_t
-gunyah_hyp_virtio_mmio_configure(cap_id_t virtio_backend, cap_id_t memextent,
-				 count_t		       vqs_num,
-				 virtio_backend_option_flags_t flags,
-				 virtio_device_type_t	       device_type)
+gunyah_hyp_virtio_backend_configure(cap_id_t virtio_backend, cap_id_t memextent,
+				    count_t			      vqs_num,
+				    virtio_backend_option_flags_t     flags,
+				    virtio_backend_interface_type_t   type,
+				    virtio_backend_memextent_layout_t me_layout)
 {
 	const register register_t in_x0_ __asm__("x0") =
 		(register_t)virtio_backend;
 	register register_t in_x1_ __asm__("x1") = (register_t)memextent;
 	register register_t in_x2_ __asm__("x2") = (register_t)vqs_num;
 	register register_t in_x3_ __asm__("x3") = (register_t)flags.bf[0];
-	register register_t in_x4_ __asm__("x4") = (register_t)device_type;
+	register register_t in_x4_ __asm__("x4") = (register_t)type.bf[0];
+	register register_t in_x5_ __asm__("x5") = (register_t)me_layout.bf[0];
 	register error_t    out_x0_ __asm__("x0");
 
 	__asm__ volatile("hvc 0x6049"
 			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
-			   "+r"(in_x3_), "+r"(in_x4_)
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
 			 : "r"(in_x0_)
-			 : "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
-			   "x13", "x14", "x15", "x16", "x17");
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
 
 	return (error_t)out_x0_;
 }
@@ -1427,12 +1429,14 @@ gunyah_hyp_virtio_backend_unbind_virq(cap_id_t virtio_backend)
 
 error_t
 gunyah_hyp_virtio_backend_notify(cap_id_t virtio_backend,
-				 uint32_t interrupt_status)
+				 virtio_backend_notify_status_t interrupt_status,
+				 virtio_backend_notify_flags_t flags)
 {
 	const register register_t in_x0_ __asm__("x0") =
 		(register_t)virtio_backend;
-	register register_t in_x1_ __asm__("x1") = (register_t)interrupt_status;
-	register register_t in_x2_ __asm__("x2") = 0x0U;
+	register register_t in_x1_ __asm__("x1") =
+		(register_t)interrupt_status.raw;
+	register register_t in_x2_ __asm__("x2") = (register_t)flags.bf[0];
 	register error_t    out_x0_ __asm__("x0");
 
 	__asm__ volatile("hvc 0x604e"
@@ -1605,12 +1609,14 @@ gunyah_hyp_virtio_backend_update_status(cap_id_t	virtio_backend,
 }
 
 error_t
-gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source)
+gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source,
+			       vic_msi_source_config_t source_config)
 {
 	const register register_t in_x0_ __asm__("x0") = (register_t)vic;
 	register register_t	  in_x1_ __asm__("x1") = (register_t)msi_source;
-	register register_t	  in_x2_ __asm__("x2") = 0x0U;
-	register error_t	  out_x0_ __asm__("x0");
+	register register_t	  in_x2_ __asm__("x2") =
+		(register_t)source_config.bf[0];
+	register error_t out_x0_ __asm__("x0");
 
 	__asm__ volatile("hvc 0x6056"
 			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
@@ -1767,6 +1773,53 @@ gunyah_hyp_vcpu_unbind_virq(cap_id_t vcpu, vcpu_virq_type_t virq_type)
 			 : "r"(in_x0_)
 			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
 			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_input_configure(cap_id_t virtio_backend, uint64_t devids,
+				  uint32_t prop_bits, uint32_t num_evtypes,
+				  uint32_t num_absaxes)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)virtio_backend;
+	register register_t in_x1_ __asm__("x1") = (register_t)devids;
+	register register_t in_x2_ __asm__("x2") = (register_t)prop_bits;
+	register register_t in_x3_ __asm__("x3") = (register_t)num_evtypes;
+	register register_t in_x4_ __asm__("x4") = (register_t)num_absaxes;
+	register register_t in_x5_ __asm__("x5") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x605e"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
+			 : "r"(in_x0_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_virtio_input_set_data(cap_id_t virtio_backend, uint32_t sel,
+				 uint32_t subsel, uint32_t size, vmaddr_t data)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)virtio_backend;
+	register register_t in_x1_ __asm__("x1") = (register_t)sel;
+	register register_t in_x2_ __asm__("x2") = (register_t)subsel;
+	register register_t in_x3_ __asm__("x3") = (register_t)size;
+	register register_t in_x4_ __asm__("x4") = (register_t)data;
+	register register_t in_x5_ __asm__("x5") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x605f"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
+			 : "r"(in_x0_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
 
 	return (error_t)out_x0_;
 }
@@ -2052,5 +2105,646 @@ gunyah_hyp_addrspace_info_area_add_entry(
 	return (gunyah_hyp_addrspace_info_area_add_entry_result_t){
 		.error = (error_t)out_x0_,
 		.ipa   = (vmaddr_t)out_x1_,
+	};
+}
+
+gunyah_hyp_partition_create_vpci_result_t
+gunyah_hyp_partition_create_vpci(cap_id_t src_partition, cap_id_t cspace)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)src_partition;
+	const register register_t in_x1_ __asm__("x1") = (register_t)cspace;
+	register register_t	  in_x2_ __asm__("x2") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x606c"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_partition_create_vpci_result_t){
+		.error	 = (error_t)out_x0_,
+		.new_cap = (cap_id_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_vpci_configure(cap_id_t vpci, cap_id_t aspace, cap_id_t vic,
+			  vpci_aperture_t     cam_aperture,
+			  vpci_aperture_t     npmem_aperture,
+			  vpci_aperture_t     pmem_aperture,
+			  vpci_aperture_t     io_aperture,
+			  vpci_option_flags_t options)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)vpci;
+	register register_t	  in_x1_ __asm__("x1") = (register_t)aspace;
+	register register_t	  in_x2_ __asm__("x2") = (register_t)vic;
+	register register_t	  in_x3_ __asm__("x3") =
+		(register_t)cam_aperture.bf[0];
+	register register_t in_x4_ __asm__("x4") =
+		(register_t)npmem_aperture.bf[0];
+	register register_t in_x5_ __asm__("x5") =
+		(register_t)pmem_aperture.bf[0];
+	register register_t in_x6_ __asm__("x6") =
+		(register_t)io_aperture.bf[0];
+	register register_t in_x7_ __asm__("x7") = (register_t)options.bf[0];
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x606d"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_),
+			   "+r"(in_x6_), "+r"(in_x7_)
+			 : "r"(in_x0_)
+			 : "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
+			   "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_vpci_attach_result_t
+gunyah_hyp_vpci_attach(cap_id_t vpci, index_t slot_index, cap_id_t device)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)vpci;
+	const register register_t in_x1_ __asm__("x1") = (register_t)slot_index;
+	register register_t	  in_x2_ __asm__("x2") = (register_t)device;
+	register register_t	  in_x3_ __asm__("x3") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint32_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x606e"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_vpci_attach_result_t){
+		.error	    = (error_t)out_x0_,
+		.slot_index = (index_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_vpm_group_wakeup(cap_id_t vpm_group)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)vpm_group;
+	register register_t	  in_x1_ __asm__("x1") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x606f"
+			 : "=r"(out_x0_), "+r"(in_x1_)
+			 : "r"(in_x0_)
+			 : "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9",
+			   "x10", "x11", "x12", "x13", "x14", "x15", "x16",
+			   "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_power_system_suspend(cap_id_t system_power)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)system_power;
+	register register_t in_x1_ __asm__("x1") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6070"
+			 : "=r"(out_x0_), "+r"(in_x1_)
+			 : "r"(in_x0_)
+			 : "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9",
+			   "x10", "x11", "x12", "x13", "x14", "x15", "x16",
+			   "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_partition_create_vgic_its_result_t
+gunyah_hyp_partition_create_vgic_its(cap_id_t src_partition, cap_id_t cspace)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)src_partition;
+	const register register_t in_x1_ __asm__("x1") = (register_t)cspace;
+	register register_t	  in_x2_ __asm__("x2") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6071"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_partition_create_vgic_its_result_t){
+		.error	 = (error_t)out_x0_,
+		.new_cap = (cap_id_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_vgic_its_bind_devices(cap_id_t vgic_its_cap, cap_id_t its_cap,
+				 vgic_device_id_t device_id_start,
+				 count_t	  device_count)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)vgic_its_cap;
+	register register_t in_x1_ __asm__("x1") = (register_t)its_cap;
+	register register_t in_x2_ __asm__("x2") = (register_t)device_id_start;
+	register register_t in_x3_ __asm__("x3") = (register_t)device_count;
+	register register_t in_x4_ __asm__("x4") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6072"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_)
+			 : "r"(in_x0_)
+			 : "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
+			   "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_vgic_its_unbind_devices_result_t
+gunyah_hyp_vgic_its_unbind_devices(cap_id_t	    vgic_its_cap,
+				   vgic_device_id_t device_id_start,
+				   count_t	    device_count)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)vgic_its_cap;
+	const register register_t in_x1_ __asm__("x1") =
+		(register_t)device_id_start;
+	register register_t in_x2_ __asm__("x2") = (register_t)device_count;
+	register register_t in_x3_ __asm__("x3") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+	register uint32_t   out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6073"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_vgic_its_unbind_devices_result_t){
+		.error = (error_t)out_x0_,
+		.count = (count_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_vpm_group_bind_power(cap_id_t vpm_group, cap_id_t power)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)vpm_group;
+	register register_t	  in_x1_ __asm__("x1") = (register_t)power;
+	register register_t	  in_x2_ __asm__("x2") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6074"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_partition_donate(partition_donate_flags_t flags,
+			    cap_id_t partition_cap, uint64_t arg2, paddr_t base,
+			    size_t size)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)flags.bf[0];
+	register register_t in_x1_ __asm__("x1") = (register_t)partition_cap;
+	register register_t in_x2_ __asm__("x2") = (register_t)arg2;
+	register register_t in_x3_ __asm__("x3") = (register_t)base;
+	register register_t in_x4_ __asm__("x4") = (register_t)size;
+	register register_t in_x5_ __asm__("x5") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6075"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
+			 : "r"(in_x0_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_partition_query(cap_id_t		   partition_cap,
+			   partition_query_flags_t flags, uint64_t addr,
+			   size_t size, uint64_t arg4)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)partition_cap;
+	register register_t in_x1_ __asm__("x1") = (register_t)flags.bf[0];
+	register register_t in_x2_ __asm__("x2") = (register_t)addr;
+	register register_t in_x3_ __asm__("x3") = (register_t)size;
+	register register_t in_x4_ __asm__("x4") = (register_t)arg4;
+	register register_t in_x5_ __asm__("x5") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6076"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
+			 : "r"(in_x0_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_addrspace_info_area_get_entry_result_t
+gunyah_hyp_addrspace_info_area_get_entry(addrspace_info_area_entry_type_t type,
+					 user_ptr_t buf, size_t buf_size)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)type.bf[0];
+	const register register_t in_x1_ __asm__("x1") = (register_t)buf;
+	const register register_t in_x2_ __asm__("x2") = (register_t)buf_size;
+	register register_t	  in_x3_ __asm__("x3") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+	register uint32_t	  out_x2_ __asm__("x2");
+
+	__asm__ volatile("hvc 0x6077"
+			 : "=r"(out_x0_), "=r"(out_x1_), "=r"(out_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_), "r"(in_x1_), "r"(in_x2_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17", "memory");
+
+	return (gunyah_hyp_addrspace_info_area_get_entry_result_t){
+		.error = (error_t)out_x0_,
+		.size  = (size_t)out_x1_,
+		.type  = addrspace_info_area_entry_type_cast((uint32_t)out_x2_),
+	};
+}
+
+gunyah_hyp_partition_create_vsmmuv2_result_t
+gunyah_hyp_partition_create_vsmmuv2(cap_id_t src_partition, cap_id_t cspace)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)src_partition;
+	const register register_t in_x1_ __asm__("x1") = (register_t)cspace;
+	register register_t	  in_x2_ __asm__("x2") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6079"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_partition_create_vsmmuv2_result_t){
+		.error	 = (error_t)out_x0_,
+		.new_cap = (cap_id_t)out_x1_,
+	};
+}
+
+gunyah_hyp_partition_create_pci_host_result_t
+gunyah_hyp_partition_create_pci_host(cap_id_t src_partition, cap_id_t cspace)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)src_partition;
+	const register register_t in_x1_ __asm__("x1") = (register_t)cspace;
+	register register_t	  in_x2_ __asm__("x2") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x607a"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_partition_create_pci_host_result_t){
+		.error	 = (error_t)out_x0_,
+		.new_cap = (cap_id_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_pci_host_configure(cap_id_t pci_host, cap_id_t aspace,
+			      cap_id_t cam_me, vmaddr_t cam_base,
+			      pci_host_option_flags_t options)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)pci_host;
+	register register_t	  in_x1_ __asm__("x1") = (register_t)aspace;
+	register register_t	  in_x2_ __asm__("x2") = (register_t)cam_me;
+	register register_t	  in_x3_ __asm__("x3") = (register_t)cam_base;
+	register register_t in_x4_ __asm__("x4") = (register_t)options.bf[0];
+	register register_t in_x5_ __asm__("x5") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x607b"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_), "+r"(in_x5_)
+			 : "r"(in_x0_)
+			 : "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			   "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_pci_host_add_aperture(cap_id_t pci_host, cap_id_t mem_me,
+				 vmaddr_t mem_base)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)pci_host;
+	register register_t	  in_x1_ __asm__("x1") = (register_t)mem_me;
+	register register_t	  in_x2_ __asm__("x2") = (register_t)mem_base;
+	register register_t	  in_x3_ __asm__("x3") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x607c"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_pci_host_set_lockdown(cap_id_t		   pci_host,
+				 pci_host_lockdown_state_t lockdown_state)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)pci_host;
+	register register_t in_x1_ __asm__("x1") = (register_t)lockdown_state;
+	register register_t in_x2_ __asm__("x2") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x607d"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_partition_create_pci_function_result_t
+gunyah_hyp_partition_create_pci_function(cap_id_t src_partition,
+					 cap_id_t cspace)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)src_partition;
+	const register register_t in_x1_ __asm__("x1") = (register_t)cspace;
+	register register_t	  in_x2_ __asm__("x2") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x607e"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_partition_create_pci_function_result_t){
+		.error	 = (error_t)out_x0_,
+		.new_cap = (cap_id_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_pci_function_configure(cap_id_t pci_function, cap_id_t pci_host,
+				  pci_responder_id_t	      responder_id,
+				  pci_function_option_flags_t options)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)pci_function;
+	register register_t in_x1_ __asm__("x1") = (register_t)pci_host;
+	register register_t in_x2_ __asm__("x2") =
+		(register_t)responder_id.bf[0];
+	register register_t in_x3_ __asm__("x3") = (register_t)options.bf[0];
+	register register_t in_x4_ __asm__("x4") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x607f"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_)
+			 : "r"(in_x0_)
+			 : "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
+			   "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_sdei_get_error_flags_result_t
+gunyah_hyp_sdei_get_error_flags(void)
+{
+	const register register_t in_x0_ __asm__("x0") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6080"
+			 : "=r"(out_x0_), "=r"(out_x1_)
+			 : "r"(in_x0_)
+			 : "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9",
+			   "x10", "x11", "x12", "x13", "x14", "x15", "x16",
+			   "x17");
+
+	return (gunyah_hyp_sdei_get_error_flags_result_t){
+		.error	= (error_t)out_x0_,
+		.result = sdei_error_flags_cast((uint64_t)out_x1_),
+	};
+}
+
+error_t
+gunyah_hyp_virtio_iommu_configure(cap_id_t virtio_iommu, cap_id_t iommu,
+				  virtio_iommu_options_t options,
+				  cap_id_t		 addrspace)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)virtio_iommu;
+	register register_t in_x1_ __asm__("x1") = (register_t)iommu;
+	register register_t in_x2_ __asm__("x2") = (register_t)options.bf[0];
+	register register_t in_x3_ __asm__("x3") = (register_t)addrspace;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6081"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_partition_create_virtio_iommu_result_t
+gunyah_hyp_partition_create_virtio_iommu(cap_id_t src_partition,
+					 cap_id_t cspace)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)src_partition;
+	const register register_t in_x1_ __asm__("x1") = (register_t)cspace;
+	register register_t	  in_x2_ __asm__("x2") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+	register uint64_t	  out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6082"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_partition_create_virtio_iommu_result_t){
+		.error	 = (error_t)out_x0_,
+		.new_cap = (cap_id_t)out_x1_,
+	};
+}
+
+error_t
+gunyah_hyp_vpm_group_set_threshold(cap_id_t vpm_group, uint64_t power_state)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)vpm_group;
+	register register_t in_x1_ __asm__("x1") = (register_t)power_state;
+	register register_t in_x2_ __asm__("x2") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6083"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_power_cpu_suspend(cap_id_t system_power, uint64_t power_state)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)system_power;
+	register register_t in_x1_ __asm__("x1") = (register_t)power_state;
+	register register_t in_x2_ __asm__("x2") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6084"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_vcpu_set_local_virq(cap_id_t		      cap_id,
+			       vcpu_local_virq_type_t virq_type, virq_t virq)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)cap_id;
+	register register_t	  in_x1_ __asm__("x1") = (register_t)virq_type;
+	register register_t	  in_x2_ __asm__("x2") = (register_t)virq;
+	register register_t	  in_x3_ __asm__("x3") = 0x0U;
+	register error_t	  out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6085"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_pci_function_add_capability(cap_id_t pci_function, size_t offset,
+				       size_t			     size,
+				       pci_capability_access_flags_t flags)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)pci_function;
+	register register_t in_x1_ __asm__("x1") = (register_t)offset;
+	register register_t in_x2_ __asm__("x2") = (register_t)size;
+	register register_t in_x3_ __asm__("x3") = (register_t)flags.bf[0];
+	register register_t in_x4_ __asm__("x4") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6086"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_)
+			 : "r"(in_x0_)
+			 : "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
+			   "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+error_t
+gunyah_hyp_pci_function_set_passthrough(cap_id_t pci_function, bool enable)
+{
+	const register register_t in_x0_ __asm__("x0") =
+		(register_t)pci_function;
+	register register_t in_x1_ __asm__("x1") = (register_t)enable;
+	register register_t in_x2_ __asm__("x2") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+
+	__asm__ volatile("hvc 0x6087"
+			 : "=r"(out_x0_), "+r"(in_x1_), "+r"(in_x2_)
+			 : "r"(in_x0_)
+			 : "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10",
+			   "x11", "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (error_t)out_x0_;
+}
+
+gunyah_hyp_viommu_bind_streams_result_t
+gunyah_hyp_viommu_bind_streams(cap_id_t viommu_cap, cap_id_t iommu_cap,
+			       viommu_stream_id_t stream_id_start,
+			       count_t		  stream_count)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)viommu_cap;
+	const register register_t in_x1_ __asm__("x1") = (register_t)iommu_cap;
+	register register_t in_x2_ __asm__("x2") = (register_t)stream_id_start;
+	register register_t in_x3_ __asm__("x3") = (register_t)stream_count;
+	register register_t in_x4_ __asm__("x4") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+	register uint32_t   out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6090"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_), "+r"(in_x4_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
+			   "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_viommu_bind_streams_result_t){
+		.error = (error_t)out_x0_,
+		.count = (count_t)out_x1_,
+	};
+}
+
+gunyah_hyp_viommu_unbind_streams_result_t
+gunyah_hyp_viommu_unbind_streams(cap_id_t	    viommu_cap,
+				 viommu_stream_id_t stream_id_start,
+				 count_t	    stream_count)
+{
+	const register register_t in_x0_ __asm__("x0") = (register_t)viommu_cap;
+	const register register_t in_x1_ __asm__("x1") =
+		(register_t)stream_id_start;
+	register register_t in_x2_ __asm__("x2") = (register_t)stream_count;
+	register register_t in_x3_ __asm__("x3") = 0x0U;
+	register error_t    out_x0_ __asm__("x0");
+	register uint32_t   out_x1_ __asm__("x1");
+
+	__asm__ volatile("hvc 0x6091"
+			 : "=r"(out_x0_), "=r"(out_x1_), "+r"(in_x2_),
+			   "+r"(in_x3_)
+			 : "r"(in_x0_), "r"(in_x1_)
+			 : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+			   "x12", "x13", "x14", "x15", "x16", "x17");
+
+	return (gunyah_hyp_viommu_unbind_streams_result_t){
+		.error = (error_t)out_x0_,
+		.count = (count_t)out_x1_,
 	};
 }

@@ -1,4 +1,4 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <guest_types.h>
 
@@ -27,89 +27,53 @@
 
 #include "dto_construct.h"
 
-error_t
-dto_create_vrtc(const struct vdevice_node *node, dto_t *dto)
+static uint32_result_t
+dto_create_vrtc_pclk(dto_t *dto)
 {
-	error_t	 ret;
-	error_t	 e	 = OK;
-	uint32_t phandle = 0U;
-
-	struct vdevice_rtc *cfg = node->config.rtc;
-
-	size_t sz   = strlen(node->generate) + DTB_NODE_NAME_MAX;
-	char  *path = (char *)malloc(sz);
-	if (path == NULL) {
-		(void)printf("Error: failed to allocate path for RTC\n");
-		e = ERROR_NOMEM;
-		goto err_begin;
-	}
+	error_t	 e;
+	uint32_t phandle = DTO_PHANDLE_UNSET;
 
 	// The kernel driver for PL031 needs a clock node associated with the
 	// AMBA device or it will fail to probe, so we create a dummy clock node
 	// with a unique phandle value to associate with the RTC node.
-	int32_t sz_ret;
-	sz_ret = snprintf(path, sz, "%s/vrtc-pclk", node->generate);
-	assert(sz_ret >= 0);
-	e = dto_construct_begin_path(dto, path);
-	if (e != OK) {
-		goto err_free;
-	}
-	e = dto_property_add_u32(dto, "#clock-cells", 0);
-	if (e != OK) {
-		goto err;
-	}
-	e = dto_property_add_string(dto, "compatible", "fixed-clock");
-	if (e != OK) {
-		goto err;
-	}
-	e = dto_property_add_u32(dto, "clock-frequency", 1);
-	if (e != OK) {
-		goto err;
-	}
-	e = dto_property_add_phandle(dto, &phandle);
-	if (e != OK) {
-		goto err;
-	}
-	e = dto_construct_end_path(dto, path);
-	if (e != OK) {
-		goto err_free;
-	}
+	CHECK_DTO(e, dto_node_begin(dto, "vrtc-pclk"));
+	CHECK_DTO(e, dto_property_add_u32(dto, "#clock-cells", 0));
+	CHECK_DTO(e, dto_property_add_string(dto, "compatible", "fixed-clock"));
+	CHECK_DTO(e, dto_property_add_u32(dto, "clock-frequency", 1));
+	CHECK_DTO(e, dto_property_add_phandle(dto, &phandle));
+	CHECK_DTO(e, dto_node_end(dto, "vrtc-pclk"));
 
-	// Now create the vRTC node
-	sz_ret = snprintf(path, sz, "%s/vrtc", node->generate);
-	assert(sz_ret >= 0);
-	e = dto_construct_begin_path(dto, path);
-	if (e != OK) {
-		goto err_free;
+out:
+	return (e == OK) ? uint32_result_ok(phandle) : uint32_result_error(e);
+}
+
+error_t
+dto_create_vrtc(const struct vdevice_node *node, dto_t *dto)
+{
+	error_t e = OK;
+
+	struct vdevice_rtc *cfg = node->config.rtc;
+
+	// We're called from /vsoc generation, so we can just start the node
+	// without creating an overlay fragment, and we can assume that the
+	// address / size cell counts are 2.
+
+	uint32_result_t phandle_r = dto_create_vrtc_pclk(dto);
+	if (phandle_r.e != OK) {
+		e = phandle_r.e;
+		goto out;
 	}
 
 	const char *c[] = { "arm,pl031", "arm,primecell" };
-	e = vm_creation_add_compatibles(node, c, (count_t)util_array_size(c),
-					dto);
-	if (e != OK) {
-		goto err;
-	}
+	CHECK_DTO(e, dto_node_begin(dto, "vrtc"));
+	CHECK_DTO(e, vm_creation_add_compatibles(
+			     node, c, (count_t)util_array_size(c), dto));
+	CHECK_DTO(e, dto_property_add_addrrange(dto, "reg", 2U, cfg->ipa, 2U,
+						cfg->ipa_size));
+	CHECK_DTO(e, dto_property_add_string(dto, "clock-names", "apb_pclk"));
+	CHECK_DTO(e, dto_property_ref_internal(dto, "clocks", phandle_r.r));
+	CHECK_DTO(e, dto_node_end(dto, "vrtc"));
 
-	uint64_t reg[2] = { cfg->ipa, cfg->ipa_size };
-	e		= dto_property_add_u64array(dto, "reg", reg, 2);
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_add_string(dto, "clock-names", "apb_pclk");
-	if (e != OK) {
-		goto err;
-	}
-
-	e = dto_property_ref_internal(dto, "clocks", phandle);
-
-err:
-	ret = dto_construct_end_path(dto, path);
-	if (e == OK) {
-		e = ret;
-	}
-err_free:
-	free(path);
-err_begin:
+out:
 	return e;
 }

@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -45,8 +45,8 @@ static void
 vector_swap_threadsafe(vector_t *vector, index_t idx1, index_t idx2, void *tmp);
 
 vector_t *
-vector_init_internal(count_t init_capacity, count_t capacity_step_sz,
-		     size_t element_sz)
+vector_init_size(count_t init_capacity, count_t capacity_step_sz,
+		 size_t element_sz)
 {
 	vector_t *ret = calloc(1, sizeof(*ret));
 	if (ret == NULL) {

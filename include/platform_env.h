@@ -1,4 +1,4 @@
-// © 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -38,11 +38,22 @@ check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 			      uint32_t max_dest_bytes, char *dstp,
 			      uint32_t *copied_bytesp);
 
+bool
+check_qcbor_char_string_array_create_dynamic(const char *fname, const qcbor_item_t *qcbor_item_ptr,
+				qcbor_dec_ctxt_t *qcbor_decode_ctxt, char **dstp, uint32_t *copied_bytesp);
+
 #define process_qcbor_array_item(n, ip, ctxp, ep, cp)  (_Generic(((ep)->n),    \
       char*: check_qcbor_char_string_array,                                  \
       uint32_t*: check_qcbor_uint32_t_array,                                 \
       uint64_t*: check_qcbor_uint64_t_array                                  \
    )(#n, (ip), (ctxp), ARRAY_SIZE((ep)->n), (ep)->n, (cp)))
+
+// Used for allocating the array by reading elements from QCBOR
+#define process_qcbor_array_item_create_dynamic(n, ip, ctxp, ep, cp)  (_Generic(((ep)->n),    \
+      uint32_t*: check_qcbor_uint32_t_array_create_dynamic,                                 \
+      uint64_t*: check_qcbor_uint64_t_array_create_dynamic,                                  \
+      char *: check_qcbor_char_string_array_create_dynamic				\
+   )(#n, (ip), (ctxp), &(ep)->n, (cp)))
 
 // Used for dynamically allocated arrays
 #define process_qcbor_array_item_explicit_size(n, ip, ctxp, ep, cp, sz)  (_Generic(((ep)->n),    \
@@ -155,6 +166,74 @@ check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 			}                                                             \
 		}                                                                     \
 		return false;                                                         \
+	}
+
+#define DECLARE_QCBOR_ARRAY_CREATE_DYNAMIC_ITEM_HANDLER(dtype)                 \
+	bool check_qcbor_##dtype##_array_create_dynamic(                       \
+		const char *fname, qcbor_item_t *qcbor_item_ptr,               \
+		qcbor_dec_ctxt_t *qcbor_decode_ctxt, dtype **dstp,             \
+		uint32_t *items_foundp);
+
+#define DEFINE_QCBOR_ARRAY_CREATE_DYNAMIC_ITEM_HANDLER(dtype)                  \
+	bool check_qcbor_##dtype##_array_create_dynamic(                       \
+		const char *fname, qcbor_item_t *qcbor_item_ptr,               \
+		qcbor_dec_ctxt_t *qcbor_decode_ctxt, dtype **dstp,             \
+		uint32_t *items_foundp)                                        \
+	{                                                                      \
+		bool result = false;                                           \
+		if (strncmp(qcbor_item_ptr->label.string.ptr, fname,           \
+			    qcbor_item_ptr->label.string.len) == 0) {          \
+			if (qcbor_item_ptr->uDataType ==                       \
+			    (uint8_t)QCBOR_TYPE_ARRAY) {                       \
+				uint32_t data_cnt, idx = 0, start_nesting;     \
+                                                                               \
+				start_nesting = qcbor_item_ptr->uNestingLevel; \
+				data_cnt      = qcbor_item_ptr->val.uCount;    \
+				if (data_cnt == 0U) {                          \
+					/* Encoded with empty array, skip*/    \
+					result = true;                         \
+					goto out;                              \
+				}                                              \
+				*dstp = (dtype *)calloc(data_cnt,              \
+							sizeof(dtype));        \
+				assert(*dstp != NULL);                         \
+                                                                               \
+				while (idx < data_cnt) {                       \
+					if (QCBORDecode_GetNext(               \
+						    qcbor_decode_ctxt,         \
+						    qcbor_item_ptr) !=         \
+					    QCBOR_SUCCESS) {                   \
+						break;                         \
+					}                                      \
+					qcbor_item_conv_uint64(                \
+						qcbor_item_ptr);               \
+                                                                               \
+					if (qcbor_item_ptr->uDataType ==       \
+					    (uint8_t)QCBOR_TYPE_UINT64) {      \
+						(*dstp)[idx] =                 \
+							(dtype)qcbor_item_ptr  \
+								->val.uint64;  \
+					}                                      \
+					++idx;                                 \
+				}                                              \
+                                                                               \
+				while (qcbor_item_ptr->uNextNestLevel >        \
+				       start_nesting) {                        \
+					if (QCBORDecode_GetNext(               \
+						    qcbor_decode_ctxt,         \
+						    qcbor_item_ptr) !=         \
+					    QCBOR_SUCCESS) {                   \
+						break;                         \
+					}                                      \
+				}                                              \
+				if (items_foundp != NULL) {                    \
+					*items_foundp = idx;                   \
+				}                                              \
+				result = true;                                 \
+			}                                                      \
+		}                                                              \
+	out:                                                                   \
+		return result;                                                 \
 	}
 
 #define DECLARE_QCBOR_MD_ARRAY_ITEM_HANDLER(dtype)                             \
@@ -290,74 +369,74 @@ check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 		uint32_t consecutive_elements, stype **dstp,                   \
 		uint32_t *items_foundp, size_t member_offset);
 
-#define DEFINE_QCBOR_DYNAMIC_STRUCT_ARRAY_ITEM_HANDLER(dtype, stype)              \
-	bool check_qcbor_dynamic_##stype##_##dtype##_array(                       \
-		const char *fname, qcbor_item_t *qcbor_item_ptr,                  \
-		qcbor_dec_ctxt_t *qcbor_decode_ctxt,                              \
-		uint32_t consecutive_elements, stype **dstp,                      \
-		uint32_t *items_foundp, size_t member_offset)                     \
-	{                                                                         \
-		if ((qcbor_item_ptr->label.string.len == 0U) ||                   \
-		    (strncmp(qcbor_item_ptr->label.string.ptr, fname,             \
-			     qcbor_item_ptr->label.string.len) == 0)) {           \
-			if (qcbor_item_ptr->uDataType ==                          \
-			    (uint8_t)QCBOR_TYPE_ARRAY) {                          \
-				uint32_t data_cnt, idx = 0, start_nesting;        \
-				dtype	*data_ptr = NULL;                         \
-                                                                                  \
-				start_nesting = qcbor_item_ptr->uNestingLevel;    \
-				data_cnt      = qcbor_item_ptr->val.uCount;       \
-				if (*dstp == NULL) {                              \
-					*dstp = (stype *)calloc(                  \
-						data_cnt, sizeof(stype));         \
-					assert(*dstp != NULL);                    \
-				}                                                 \
-                                                                                  \
-				while (idx < data_cnt) {                          \
-					if (QCBORDecode_GetNext(                  \
-						    qcbor_decode_ctxt,            \
-						    qcbor_item_ptr) !=            \
-					    QCBOR_SUCCESS) {                      \
-						break;                            \
-					}                                         \
-					data_ptr =                                \
-						(dtype *)((uintptr_t) &           \
-							  (*dstp)[idx] +          \
-								  member_offset); \
-					qcbor_item_conv_uint64(                   \
-						qcbor_item_ptr);                  \
-					if (qcbor_item_ptr->uDataType ==          \
-					    (uint8_t)QCBOR_TYPE_UINT64) {         \
-						*data_ptr =                       \
-							(dtype)qcbor_item_ptr     \
-								->val.uint64;     \
-					}                                         \
-					++idx;                                    \
-				}                                                 \
-                                                                                  \
-				while (qcbor_item_ptr->uNextNestLevel >           \
-				       start_nesting) {                           \
-					if (QCBORDecode_GetNext(                  \
-						    qcbor_decode_ctxt,            \
-						    qcbor_item_ptr) !=            \
-					    QCBOR_SUCCESS) {                      \
-						break;                            \
-					}                                         \
-				}                                                 \
-				if (items_foundp != NULL) {                       \
-					/* Here consecutive_elements is just      \
-					 * the number of homogeneous elements     \
-					 * if a structure is encoded as an        \
-					 * array. The size of this array of       \
-					 * structure will be total array size     \
-					 * divided by number of elements */       \
-					*items_foundp =                           \
-						idx / consecutive_elements;       \
-				}                                                 \
-				return true;                                      \
-			}                                                         \
-		}                                                                 \
-		return false;                                                     \
+#define DEFINE_QCBOR_DYNAMIC_STRUCT_ARRAY_ITEM_HANDLER(dtype, stype)            \
+	bool check_qcbor_dynamic_##stype##_##dtype##_array(                     \
+		const char *fname, qcbor_item_t *qcbor_item_ptr,                \
+		qcbor_dec_ctxt_t *qcbor_decode_ctxt,                            \
+		uint32_t consecutive_elements, stype **dstp,                    \
+		uint32_t *items_foundp, size_t member_offset)                   \
+	{                                                                       \
+		if ((qcbor_item_ptr->label.string.len == 0U) ||                 \
+		    (strncmp(qcbor_item_ptr->label.string.ptr, fname,           \
+			     qcbor_item_ptr->label.string.len) == 0)) {         \
+			if (qcbor_item_ptr->uDataType ==                        \
+			    (uint8_t)QCBOR_TYPE_ARRAY) {                        \
+				uint32_t data_cnt, idx = 0, start_nesting;      \
+				dtype	*data_ptr = NULL;                       \
+                                                                                \
+				start_nesting = qcbor_item_ptr->uNestingLevel;  \
+				data_cnt      = qcbor_item_ptr->val.uCount;     \
+				if (*dstp == NULL) {                            \
+					*dstp = (stype *)calloc(                \
+						data_cnt, sizeof(stype));       \
+					assert(*dstp != NULL);                  \
+				}                                               \
+                                                                                \
+				while (idx < data_cnt) {                        \
+					if (QCBORDecode_GetNext(                \
+						    qcbor_decode_ctxt,          \
+						    qcbor_item_ptr) !=          \
+					    QCBOR_SUCCESS) {                    \
+						break;                          \
+					}                                       \
+					data_ptr =                              \
+						(dtype *)((uintptr_t)&(         \
+								  *dstp)[idx] + \
+							  member_offset);       \
+					qcbor_item_conv_uint64(                 \
+						qcbor_item_ptr);                \
+					if (qcbor_item_ptr->uDataType ==        \
+					    (uint8_t)QCBOR_TYPE_UINT64) {       \
+						*data_ptr =                     \
+							(dtype)qcbor_item_ptr   \
+								->val.uint64;   \
+					}                                       \
+					++idx;                                  \
+				}                                               \
+                                                                                \
+				while (qcbor_item_ptr->uNextNestLevel >         \
+				       start_nesting) {                         \
+					if (QCBORDecode_GetNext(                \
+						    qcbor_decode_ctxt,          \
+						    qcbor_item_ptr) !=          \
+					    QCBOR_SUCCESS) {                    \
+						break;                          \
+					}                                       \
+				}                                               \
+				if (items_foundp != NULL) {                     \
+					/* Here consecutive_elements is just    \
+					 * the number of homogeneous elements   \
+					 * if a structure is encoded as an      \
+					 * array. The size of this array of     \
+					 * structure will be total array size   \
+					 * divided by number of elements */     \
+					*items_foundp =                         \
+						idx / consecutive_elements;     \
+				}                                               \
+				return true;                                    \
+			}                                                       \
+		}                                                               \
+		return false;                                                   \
 	}
 
 // This decode function can be used to decode a two dimension array. Here a one
@@ -393,107 +472,108 @@ check_qcbor_char_string_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
 		uint32_t *out_items_foundp, size_t array_member_offset,        \
 		size_t count_member_offset);
 
-#define DEFINE_QCBOR_DYNAMIC_MD_STRUCT_ARRAY_ITEM_HANDLER(dtype, stype,                   \
-							  cnt_type)                       \
-	bool check_qcbor_dynamic_md_##stype##_##dtype##_array(                            \
-		const char *fname, qcbor_item_t *qcbor_item_ptr,                          \
-		qcbor_dec_ctxt_t *qcbor_decode_ctxt,                                      \
-		uint8_t consecutive_elements, stype **dstp,                               \
-		uint32_t *out_items_foundp, size_t array_member_offset,                   \
-		size_t count_member_offset)                                               \
-	{                                                                                 \
-		if (strncmp(qcbor_item_ptr->label.string.ptr, fname,                      \
-			    qcbor_item_ptr->label.string.len) == 0) {                     \
-			if (qcbor_item_ptr->uDataType ==                                  \
-			    (uint8_t)QCBOR_TYPE_ARRAY) {                                  \
-				uint32_t out_data_cnt,                                    \
-					out_idx = 0, in_idx = 0,                          \
-					start_nesting, in_data_count, i;                  \
-				dtype	**data_ptr;                                       \
-				uint32_t *count_ptr;                                      \
-                                                                                          \
-				out_data_cnt  = qcbor_item_ptr->val.uCount;               \
-				start_nesting = qcbor_item_ptr->uNestingLevel;            \
-				if (*dstp == NULL) {                                      \
-					*dstp = (stype *)calloc(                          \
-						out_data_cnt, sizeof(stype));             \
-					assert(*dstp != NULL);                            \
-				}                                                         \
-                                                                                          \
-				while (out_idx < out_data_cnt) {                          \
-					if (QCBORDecode_GetNext(                          \
-						    qcbor_decode_ctxt,                    \
-						    qcbor_item_ptr) !=                    \
-					    QCBOR_SUCCESS) {                              \
-						break;                                    \
-					}                                                 \
-                                                                                          \
-					if (qcbor_item_ptr->uDataType !=                  \
-					    (uint8_t)QCBOR_TYPE_ARRAY) {                  \
-						break;                                    \
-					}                                                 \
-					in_data_count =                                   \
-						qcbor_item_ptr->val.uCount;               \
-					data_ptr =                                        \
-						(dtype **)((uintptr_t) &                  \
-							   (*dstp)[out_idx] +             \
-								   array_member_offset);  \
-					count_ptr =                                       \
-						(uint32_t                                 \
-							 *)((uintptr_t) &                 \
-							    (*dstp)[out_idx] +            \
-								    count_member_offset); \
-					*data_ptr = (dtype *)calloc(                      \
-						in_data_count, sizeof(dtype));            \
-					assert(*data_ptr != NULL);                        \
-                                                                                          \
-					for (i = 0; i < in_data_count; ++i) {             \
-						if (QCBORDecode_GetNext(                  \
-							    qcbor_decode_ctxt,            \
-							    qcbor_item_ptr) !=            \
-						    QCBOR_SUCCESS) {                      \
-							goto done;                        \
-						}                                         \
-                                                                                          \
-						qcbor_item_conv_uint64(                   \
-							qcbor_item_ptr);                  \
-						(*data_ptr)[i] =                          \
-							(dtype)qcbor_item_ptr             \
-								->val.uint64;             \
-						++in_idx;                                 \
-					}                                                 \
-					/* Here consecutive_elements is just              \
-					 * the number of homogeneous                      \
-					 * elements if a structure is                     \
-					 * encoded as an array. The                       \
-					 * size of this array of                          \
-					 * structure will be total                        \
-					 * array size divided by                          \
-					 * number of elements */                          \
-					*count_ptr =                                      \
-						in_idx / consecutive_elements;            \
-					in_idx = 0;                                       \
-                                                                                          \
-					++out_idx;                                        \
-				}                                                         \
-			done:                                                             \
-				if (out_items_foundp != NULL) {                           \
-					*out_items_foundp = out_idx;                      \
-				}                                                         \
-                                                                                          \
-				while (qcbor_item_ptr->uNextNestLevel >                   \
-				       start_nesting) {                                   \
-					if (QCBORDecode_GetNext(                          \
-						    qcbor_decode_ctxt,                    \
-						    qcbor_item_ptr) !=                    \
-					    QCBOR_SUCCESS) {                              \
-						break;                                    \
-					}                                                 \
-				}                                                         \
-				return true;                                              \
-			}                                                                 \
-		}                                                                         \
-		return false;                                                             \
+#define DEFINE_QCBOR_DYNAMIC_MD_STRUCT_ARRAY_ITEM_HANDLER(dtype, stype,           \
+							  cnt_type)               \
+	bool check_qcbor_dynamic_md_##stype##_##dtype##_array(                    \
+		const char *fname, qcbor_item_t *qcbor_item_ptr,                  \
+		qcbor_dec_ctxt_t *qcbor_decode_ctxt,                              \
+		uint8_t consecutive_elements, stype **dstp,                       \
+		uint32_t *out_items_foundp, size_t array_member_offset,           \
+		size_t count_member_offset)                                       \
+	{                                                                         \
+		if (strncmp(qcbor_item_ptr->label.string.ptr, fname,              \
+			    qcbor_item_ptr->label.string.len) == 0) {             \
+			if (qcbor_item_ptr->uDataType ==                          \
+			    (uint8_t)QCBOR_TYPE_ARRAY) {                          \
+				uint32_t out_data_cnt,                            \
+					out_idx = 0, in_idx = 0,                  \
+					start_nesting, in_data_count, i;          \
+				dtype	**data_ptr;                               \
+				uint32_t *count_ptr;                              \
+                                                                                  \
+				out_data_cnt  = qcbor_item_ptr->val.uCount;       \
+				start_nesting = qcbor_item_ptr->uNestingLevel;    \
+				if (*dstp == NULL) {                              \
+					*dstp = (stype *)calloc(                  \
+						out_data_cnt, sizeof(stype));     \
+					assert(*dstp != NULL);                    \
+				}                                                 \
+                                                                                  \
+				while (out_idx < out_data_cnt) {                  \
+					if (QCBORDecode_GetNext(                  \
+						    qcbor_decode_ctxt,            \
+						    qcbor_item_ptr) !=            \
+					    QCBOR_SUCCESS) {                      \
+						break;                            \
+					}                                         \
+                                                                                  \
+					if (qcbor_item_ptr->uDataType !=          \
+					    (uint8_t)QCBOR_TYPE_ARRAY) {          \
+						break;                            \
+					}                                         \
+					in_data_count =                           \
+						qcbor_item_ptr->val.uCount;       \
+					data_ptr =                                \
+						(dtype **)((uintptr_t)&(*dstp)    \
+								   [out_idx] +    \
+							   array_member_offset);  \
+					count_ptr =                               \
+						(uint32_t                         \
+							 *)((uintptr_t)&(         \
+								    *dstp)        \
+								    [out_idx] +   \
+							    count_member_offset); \
+					*data_ptr = (dtype *)calloc(              \
+						in_data_count, sizeof(dtype));    \
+					assert(*data_ptr != NULL);                \
+                                                                                  \
+					for (i = 0; i < in_data_count; ++i) {     \
+						if (QCBORDecode_GetNext(          \
+							    qcbor_decode_ctxt,    \
+							    qcbor_item_ptr) !=    \
+						    QCBOR_SUCCESS) {              \
+							goto done;                \
+						}                                 \
+                                                                                  \
+						qcbor_item_conv_uint64(           \
+							qcbor_item_ptr);          \
+						(*data_ptr)[i] =                  \
+							(dtype)qcbor_item_ptr     \
+								->val.uint64;     \
+						++in_idx;                         \
+					}                                         \
+					/* Here consecutive_elements is just      \
+					 * the number of homogeneous              \
+					 * elements if a structure is             \
+					 * encoded as an array. The               \
+					 * size of this array of                  \
+					 * structure will be total                \
+					 * array size divided by                  \
+					 * number of elements */                  \
+					*count_ptr =                              \
+						in_idx / consecutive_elements;    \
+					in_idx = 0;                               \
+                                                                                  \
+					++out_idx;                                \
+				}                                                 \
+			done:                                                     \
+				if (out_items_foundp != NULL) {                   \
+					*out_items_foundp = out_idx;              \
+				}                                                 \
+                                                                                  \
+				while (qcbor_item_ptr->uNextNestLevel >           \
+				       start_nesting) {                           \
+					if (QCBORDecode_GetNext(                  \
+						    qcbor_decode_ctxt,            \
+						    qcbor_item_ptr) !=            \
+					    QCBOR_SUCCESS) {                      \
+						break;                            \
+					}                                         \
+				}                                                 \
+				return true;                                      \
+			}                                                         \
+		}                                                                 \
+		return false;                                                     \
 	}
 
 DECLARE_QCBOR_ITEM_HANDLER(bool)
@@ -504,6 +584,9 @@ DECLARE_QCBOR_ITEM_HANDLER(uint64_t)
 
 DECLARE_QCBOR_ARRAY_ITEM_HANDLER(uint32_t)
 DECLARE_QCBOR_ARRAY_ITEM_HANDLER(uint64_t)
+
+DECLARE_QCBOR_ARRAY_CREATE_DYNAMIC_ITEM_HANDLER(uint64_t)
+DECLARE_QCBOR_ARRAY_CREATE_DYNAMIC_ITEM_HANDLER(uint32_t)
 
 DECLARE_QCBOR_MD_ARRAY_ITEM_HANDLER(uint32_t)
 DECLARE_QCBOR_MD_ARRAY_ITEM_HANDLER(uint64_t)
@@ -519,11 +602,20 @@ DECLARE_QCBOR_DYNAMIC_MD_STRUCT_ARRAY_ITEM_HANDLER(uint64_t,
 						   uint32_t)
 
 bool
+process_qcbor_range64_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
+			    qcbor_dec_ctxt_t *qcbor_decode_ctxt,
+			    count_t max_array_cnt, rm_range64_t *items,
+			    count_t *items_foundp);
+
+bool
 platform_process_qcbor_items(qcbor_item_t     *item,
 			     qcbor_dec_ctxt_t *qcbor_decode_ctxt);
 
 void
 qcbor_item_conv_uint64(qcbor_item_t *qcbor_item_ptr);
+
+void
+platform_validate_env_data(platform_env_data_t *platform_env);
 
 #else
 

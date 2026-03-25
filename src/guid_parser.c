@@ -1,4 +1,4 @@
-// © 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 #include <guest_types.h>
@@ -35,7 +35,7 @@ parse_guid_string(const char *guid_string, uint8_t (*guid)[VM_GUID_LEN])
 	// Initialization below is too complex for static analysis, do it here.
 	(void)memset(temp_guid, 0, sizeof(temp_guid));
 
-	// Strip the hypens and validate
+	// Strip the hyphens and validate
 	// No support for curly braces enclosed GUID currently.
 	index_t guid_len = 0U;
 	for (i = 0U; i < (index_t)len; i++) {

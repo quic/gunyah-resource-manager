@@ -1,4 +1,4 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -141,7 +141,7 @@ expand_l1(region_list_t *list)
 
 	mem_region_t **new_l1 = realloc(list->regions, new_size);
 	if (new_l1 == NULL) {
-		err = RM_ERROR_NOMEM;
+		err = RM_ERROR_RM_NOMEM;
 		goto out;
 	}
 
@@ -159,7 +159,7 @@ alloc_l2(region_list_t *list, index_t l1_idx)
 
 	mem_region_t *new_l2 = calloc(L2_TABLE_SIZE, sizeof(*new_l2));
 	if (new_l2 == NULL) {
-		err = RM_ERROR_NOMEM;
+		err = RM_ERROR_RM_NOMEM;
 		goto out;
 	}
 
@@ -261,7 +261,7 @@ region_list_finalize(region_list_t *list)
 
 		mem_region_t **new_l1 = realloc(list->regions, new_l1_size);
 		if ((new_l1 == NULL) && (l1_used_count != 0U)) {
-			err = RM_ERROR_NOMEM;
+			err = RM_ERROR_RM_NOMEM;
 			goto out;
 		}
 
@@ -277,7 +277,7 @@ region_list_finalize(region_list_t *list)
 		mem_region_t *new_l2 =
 			realloc(list->regions[l1_idx], new_l2_size);
 		if (new_l2 == NULL) {
-			err = RM_ERROR_NOMEM;
+			err = RM_ERROR_RM_NOMEM;
 			goto out;
 		}
 

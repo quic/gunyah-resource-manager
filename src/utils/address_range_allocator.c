@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -148,7 +148,7 @@ typedef struct {
 
 static target_allocator_t
 get_address_allocator(address_range_allocator_t *allocator,
-		      uint64_t base_address, size_t size, size_t alignment)
+		      uint64_t base_address, size_t size)
 {
 	// check if it's in tagged range
 	target_allocator_t ret = { .allocator.ralloc = NULL,
@@ -165,7 +165,7 @@ get_address_allocator(address_range_allocator_t *allocator,
 	}
 
 	range_list_find_ret_t check_tagged_ret = range_list_find_range(
-		allocator->ralloc, base_address, size, alignment);
+		allocator->ralloc, base_address, size, 1U);
 	if (check_tagged_ret.err != OK) {
 		ret.allocator.ralloc = allocator->ralloc;
 		ret.allocator.tag    = ADDRESS_RANGE_NO_TAG;
@@ -219,7 +219,7 @@ address_range_allocator_alloc(address_range_allocator_t *allocator,
 	}
 
 	target_allocator_t get_ret =
-		get_address_allocator(allocator, base_address, size, alignment);
+		get_address_allocator(allocator, base_address, size);
 
 	range_list_t *target_allocator = get_ret.allocator.ralloc;
 
@@ -235,7 +235,9 @@ address_range_allocator_alloc(address_range_allocator_t *allocator,
 	}
 
 out:
-	if (ret.err != OK) {
+	// Silence the error log if the requested address was 0, since that is
+	// called with an expected failure at boot time
+	if ((ret.err != OK) && (base_address != 0U)) {
 		LOG_ERR(ret.err);
 	}
 	return ret;
@@ -259,7 +261,7 @@ address_range_allocator_free(address_range_allocator_t *allocator,
 	}
 
 	target_allocator_t get_ret =
-		get_address_allocator(allocator, base_address, size, PAGE_SIZE);
+		get_address_allocator(allocator, base_address, size);
 
 	range_list_t *target_allocator = get_ret.allocator.ralloc;
 

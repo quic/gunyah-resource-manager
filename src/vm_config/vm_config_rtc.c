@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -47,8 +47,6 @@
 #include "vm_config_rtc.h"
 #include "vm_parser_rtc.h"
 
-#define ALIGN_4KB (4UL * 1024U)
-
 error_t
 vm_config_vrtc_set_time_base(vm_t *vm, uint64_t time_base,
 			     uint64_t sys_timer_ref)
@@ -79,9 +77,10 @@ add_rtc_dev_node(vm_config_t *vmcfg, vmaddr_t ipa)
 	}
 
 	node->type	   = VDEV_RTC;
+	node->bus	   = VDEVICE_BUS_MMIO;
 	node->export_to_dt = true;
 	node->visible	   = true;
-	node->generate	   = strdup("/vsoc");
+	node->generate	   = strdup("/vsoc/rtc");
 	if (node->generate == NULL) {
 		(void)printf("Failed to allocate vRTC generate string\n");
 		err = ERROR_NOMEM;
@@ -129,7 +128,7 @@ add_rtc(vm_config_t *vmcfg, rtc_data_t *d)
 	// Reserve a region for the virtual RTC device. Leave it unmapped.
 	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
 		vmcfg->vm, VM_MEMUSE_PLATFORM_VDEVICE, d->ipa_base,
-		INVALID_ADDRESS, RTC_IPA_SIZE, ALIGN_4KB);
+		INVALID_ADDRESS, RTC_IPA_SIZE, PAGE_SIZE);
 	if (alloc_ret.err != OK) {
 		err = alloc_ret.err;
 		(void)printf(

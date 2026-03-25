@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -69,13 +69,16 @@ typedef enum {
 } vm_event_src_t;
 
 typedef enum {
-	VM_RESET_STAGE_INIT		  = 0,
-	VM_RESET_STAGE_DESTROY_VDEVICES	  = 1,
-	VM_RESET_STAGE_RELEASE_MEMPARCELS = 2,
-	VM_RESET_STAGE_RELEASE_IRQS	  = 3,
-	VM_RESET_STAGE_DESTROY_VM	  = 4,
-	VM_RESET_STAGE_CLEANUP_VM	  = 5,
-	VM_RESET_STAGE_COMPLETED	  = 6,
+	VM_RESET_STAGE_INIT = 0,
+	VM_RESET_STAGE_DESTROY_VDEVICES,
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	VM_RESET_STAGE_RELEASE_DEVICES,
+#endif
+	VM_RESET_STAGE_RELEASE_MEMPARCELS,
+	VM_RESET_STAGE_RELEASE_IRQS,
+	VM_RESET_STAGE_DESTROY_VM,
+	VM_RESET_STAGE_CLEANUP_VM,
+	VM_RESET_STAGE_COMPLETED,
 } vm_reset_stage_t;
 
 struct vm_mem_range;
@@ -134,8 +137,14 @@ struct vm_s {
 
 	paddr_t entry_offset;
 
-	paddr_t dt_offset;
-	size_t	dt_size;
+	paddr_t image_dt_offset;
+	size_t	image_dt_size;
+	paddr_t vmm_dt_offset;
+	size_t	vmm_dt_size;
+
+	paddr_t fallback_dt_offset;
+	size_t	fallback_dt_size;
+	bool	fallback_dt_used;
 
 	vmaddr_t ipa_base;
 	paddr_t	 mem_base;
@@ -163,6 +172,7 @@ struct vm_s {
 	uint32_t platform_version;
 	uint32_t platform_subtype;
 	uint32_t hlos_subtype;
+	uint32_t oem_variant_id;
 
 	uint32_t signer_info; /* platform enum vm_sign_t */
 
@@ -188,6 +198,8 @@ struct vm_s {
 	bool	    clean_shutdown;
 	bool	    restart_allowed;
 	exit_type_t exit_type;
+
+	vector_t *buses; // items: bus_t
 };
 
 #pragma clang diagnostic pop
@@ -213,6 +225,9 @@ vm_is_peripheral_vm(vmid_t vmid);
 
 bool
 vm_is_dynamic_vm(vmid_t vmid);
+
+bool
+vmid_valid(vmid_t vmid);
 
 error_t
 vm_register_peers(vm_t *vm1, vm_t *vm2);

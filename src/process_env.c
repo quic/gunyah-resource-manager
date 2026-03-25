@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -73,6 +73,9 @@ DEFINE_QCBOR_ITEM_HANDLER(uint64_t)
 DEFINE_QCBOR_ARRAY_ITEM_HANDLER(uint32_t)
 DEFINE_QCBOR_ARRAY_ITEM_HANDLER(uint64_t)
 
+DEFINE_QCBOR_ARRAY_CREATE_DYNAMIC_ITEM_HANDLER(uint64_t)
+DEFINE_QCBOR_ARRAY_CREATE_DYNAMIC_ITEM_HANDLER(uint32_t)
+
 DEFINE_QCBOR_MD_ARRAY_ITEM_HANDLER(uint32_t)
 DEFINE_QCBOR_MD_ARRAY_ITEM_HANDLER(uint64_t)
 
@@ -92,6 +95,86 @@ DEFINE_QCBOR_DYNAMIC_MD_STRUCT_ARRAY_ITEM_HANDLER(uint32_t,
 DEFINE_QCBOR_DYNAMIC_MD_STRUCT_ARRAY_ITEM_HANDLER(uint64_t,
 						  vm_device_descriptor_t,
 						  uint32_t)
+
+static inline bool
+process_qcbor_map_smmu_v2_env(const char *fname, qcbor_item_t *qcbor_item_ptr,
+			      qcbor_dec_ctxt_t *qcbor_decode_ctxt,
+			      rm_env_data_t    *rm_env)
+{
+	bool		    ret	     = false;
+	rm_smmu_env_data_t *smmu_env = NULL;
+
+	if (qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_ARRAY) {
+		goto out;
+	}
+
+	if (strncmp(qcbor_item_ptr->label.string.ptr, fname,
+		    qcbor_item_ptr->label.string.len) != 0) {
+		goto out;
+	}
+
+	count_t start_nesting, data_cnt;
+	start_nesting = qcbor_item_ptr->uNestingLevel;
+	data_cnt      = qcbor_item_ptr->val.uCount;
+
+	smmu_env = (rm_smmu_env_data_t *)calloc(data_cnt, sizeof(*smmu_env));
+	assert(smmu_env != NULL);
+
+	// The SMMUv2 environment is encoded as an array of tuples, containing
+	// the cap ID and the SMMU address.
+	for (count_t idx = 0; idx < data_cnt; idx++) {
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			goto out;
+		}
+
+		if ((qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_ARRAY) ||
+		    (qcbor_item_ptr->val.uCount != 2U)) {
+			goto out_skip;
+		}
+
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			goto out;
+		}
+
+		qcbor_item_conv_uint64(qcbor_item_ptr);
+
+		if (qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_UINT64) {
+			goto out_skip;
+		}
+		smmu_env[idx].smmuv2_cap = qcbor_item_ptr->val.uint64;
+
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			goto out;
+		}
+		qcbor_item_conv_uint64(qcbor_item_ptr);
+
+		if (qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_UINT64) {
+			goto out_skip;
+		}
+		smmu_env[idx].smmu_addr = qcbor_item_ptr->val.uint64;
+	}
+
+	rm_env->num_v2_smmu = data_cnt;
+	rm_env->smmuv2_env  = smmu_env;
+	ret		    = true;
+
+out_skip:
+	while (qcbor_item_ptr->uNextNestLevel > start_nesting) {
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			break;
+		}
+	}
+out:
+	if (!ret && (smmu_env != NULL)) {
+		free(smmu_env);
+	}
+
+	return ret;
+}
 
 // This API decodes the passthrough device assignments which is encode as a map.
 // Add any enhancement into passthrough device assignments data structure here
@@ -215,11 +298,66 @@ out:
 	return res;
 }
 
+bool
+check_qcbor_char_string_array_create_dynamic(
+	const char *fname, const qcbor_item_t *qcbor_item_ptr,
+	qcbor_dec_ctxt_t *qcbor_decode_ctxt, char **dstp,
+	uint32_t *copied_bytesp)
+{
+	(void)qcbor_decode_ctxt;
+
+	bool res;
+
+	if (qcbor_item_ptr->label.string.len == 0U) {
+		res = false;
+		goto out;
+	}
+
+	if (strncmp(qcbor_item_ptr->label.string.ptr, fname,
+		    qcbor_item_ptr->label.string.len) == 0) {
+		if (qcbor_item_ptr->uDataType ==
+		    (uint8_t)QCBOR_TYPE_TEXT_STRING) {
+			size_t bytes_to_copy;
+
+			bytes_to_copy = (size_t)qcbor_item_ptr->val.string.len;
+
+			*dstp = (char *)calloc(bytes_to_copy + 1U,
+					       sizeof(char));
+
+			if (*dstp != NULL) {
+				(void)memscpy(*dstp, bytes_to_copy,
+					      (const char *)qcbor_item_ptr->val
+						      .string.ptr,
+					      bytes_to_copy);
+
+				if (copied_bytesp != NULL) {
+					*copied_bytesp =
+						(uint32_t)bytes_to_copy;
+				}
+				res = true;
+				goto out;
+			} else {
+				res = false;
+				goto out;
+			}
+		}
+	}
+	res = false;
+
+out:
+	return res;
+}
+
 static void
 validate_env_data(rm_env_data_t *rm_env)
 {
 	cpu_index_t max_core   = 0U;
 	bool	    cpus_found = false;
+
+	assert(rm_env->free_ranges_count <=
+	       util_array_size(rm_env->free_ranges));
+	assert(rm_env->device_ranges_count <=
+	       util_array_size(rm_env->device_ranges));
 
 	for (count_t i = 0; i < util_array_size(rm_env->usable_cores); i++) {
 		if (rm_env->usable_cores[i] == 0UL) {
@@ -254,6 +392,8 @@ validate_env_data(rm_env_data_t *rm_env)
 	if (rm_env->device_ranges_count == 0U) {
 		panic("no io-memory found in rm_env\n");
 	}
+
+	platform_validate_env_data(rm_env->platform_env);
 }
 
 // Extended PPIs and SPIs can be encoded as sparse ranges:
@@ -353,6 +493,80 @@ process_qcbor_vic_hwirq_ranges(qcbor_item_t	*qcbor_item_ptr,
 	return ret;
 }
 
+bool
+process_qcbor_range64_array(const char *fname, qcbor_item_t *qcbor_item_ptr,
+			    qcbor_dec_ctxt_t *qcbor_decode_ctxt,
+			    count_t max_array_cnt, rm_range64_t *items,
+			    count_t *items_foundp)
+{
+	bool ret = false;
+
+	if (strncmp(qcbor_item_ptr->label.string.ptr, fname,
+		    qcbor_item_ptr->label.string.len) != 0) {
+		goto out;
+	}
+
+	if (qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_ARRAY) {
+		goto out;
+	}
+
+	ret = true;
+
+	count_t data_cnt, start_nesting;
+
+	data_cnt      = qcbor_item_ptr->val.uCount;
+	start_nesting = qcbor_item_ptr->uNestingLevel;
+
+	for (count_t idx = 0U; (idx < data_cnt) && (idx < max_array_cnt);
+	     idx++) {
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			goto out;
+		}
+
+		if ((qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_ARRAY) ||
+		    (qcbor_item_ptr->val.uCount != 2U)) {
+			goto out_skip;
+		}
+
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			goto out;
+		}
+
+		if ((qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_UINT64) &&
+		    (qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_INT64)) {
+			goto out_skip;
+		}
+		items[idx].base = qcbor_item_ptr->val.uint64;
+
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			goto out;
+		}
+
+		if (qcbor_item_ptr->uDataType != (uint8_t)QCBOR_TYPE_INT64) {
+			goto out_skip;
+		}
+		items[idx].size = (uint32_t)qcbor_item_ptr->val.uint64;
+	}
+
+	if (items_foundp != NULL) {
+		*items_foundp = data_cnt;
+	}
+
+out_skip:
+	while (qcbor_item_ptr->uNextNestLevel > start_nesting) {
+		if (QCBORDecode_GetNext(qcbor_decode_ctxt, qcbor_item_ptr) !=
+		    QCBOR_SUCCESS) {
+			break;
+		}
+	}
+
+out:
+	return ret;
+}
+
 void
 process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 {
@@ -386,19 +600,25 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 	for (index_t i = 0; i < VIC_HWIRQ_SIZE; i++) {
 		irq_env->vic_hwirq[i] = CSPACE_CAP_INVALID;
 	}
-	for (index_t i = 0; i < util_array_size(irq_env->vic_msi_source); i++) {
-		irq_env->vic_msi_source[i] = CSPACE_CAP_INVALID;
+	for (index_t i = 0; i < util_array_size(rm_env->its_caps); i++) {
+		rm_env->its_caps[i] = CSPACE_CAP_INVALID;
 	}
-	rm_env->addrspace_capid = CSPACE_CAP_INVALID;
-	rm_env->vcpu_capid	= CSPACE_CAP_INVALID;
-	rm_env->device_me_capid = CSPACE_CAP_INVALID;
-	rm_env->partition_capid = CSPACE_CAP_INVALID;
-	rm_env->cspace_capid	= CSPACE_CAP_INVALID;
-	rm_env->me_capid	= CSPACE_CAP_INVALID;
-	rm_env->smc_wqs[0]	= CSPACE_CAP_INVALID;
-	rm_env->vic		= CSPACE_CAP_INVALID;
-	rm_env->vic_max_virqs	= (count_t)GIC_SPI_NUM;
-	rm_env->uart_me_capid	= CSPACE_CAP_INVALID;
+	for (index_t i = 0U; i < util_array_size(rm_env->smmuv3_caps); i++) {
+		rm_env->smmuv3_caps[i] = CSPACE_CAP_INVALID;
+	}
+	rm_env->addrspace_capid	   = CSPACE_CAP_INVALID;
+	rm_env->vcpu_capid	   = CSPACE_CAP_INVALID;
+	rm_env->device_me_capid	   = CSPACE_CAP_INVALID;
+	rm_env->partition_capid	   = CSPACE_CAP_INVALID;
+	rm_env->cspace_capid	   = CSPACE_CAP_INVALID;
+	rm_env->me_capid	   = CSPACE_CAP_INVALID;
+	rm_env->smc_wqs[0]	   = CSPACE_CAP_INVALID;
+	rm_env->vic		   = CSPACE_CAP_INVALID;
+	rm_env->vic_max_virqs	   = (count_t)GIC_SPI_NUM;
+	rm_env->uart_me_capid	   = CSPACE_CAP_INVALID;
+	rm_env->trace_dbl_capid	   = CSPACE_CAP_INVALID;
+	rm_env->trace_me_capid	   = CSPACE_CAP_INVALID;
+	rm_env->system_power_capid = CSPACE_CAP_INVALID;
 
 	rm_env->boot_core = CPU_INDEX_INVALID;
 
@@ -431,7 +651,7 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 		qcbor_item_conv_uint64(&qcbor_item);
 
 		if (qcbor_item.uLabelType == (uint8_t)QCBOR_TYPE_TEXT_STRING) {
-			// FIXME:
+			// FIXME: QC RM issue #24
 			// Consider using a hash table.
 
 			if (process_qcbor_item(addrspace_capid, &qcbor_item,
@@ -492,6 +712,30 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 					       rm_env)) {
 				continue;
 			}
+			if (process_qcbor_item(trace_dbl_capid, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(trace_me_capid, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(trace_phys, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(trace_size, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(system_power_capid, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(system_suspend, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
 
 			static_assert(
 				sizeof(rm_env->usable_cores) >=
@@ -549,11 +793,19 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 					       rm_env)) {
 				continue;
 			}
+			if (process_qcbor_item(sme_supported, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
 			if (process_qcbor_item(watchdog_supported, &qcbor_item,
 					       rm_env)) {
 				continue;
 			}
 			if (process_qcbor_item(hlos_handles_ras, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(sdei_supported, &qcbor_item,
 					       rm_env)) {
 				continue;
 			}
@@ -568,6 +820,10 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 			}
 			if (process_qcbor_item(hlos_ramfs_base, &qcbor_item,
 					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(scheduler_default_timeslice,
+					       &qcbor_item, rm_env)) {
 				continue;
 			}
 
@@ -592,9 +848,14 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 				    irq_env->vic_hwirq, VIC_HWIRQ_SIZE)) {
 				continue;
 			}
-			if (process_qcbor_array_item(
-				    vic_msi_source, &qcbor_item,
-				    &qcbor_decode_ctxt, irq_env, 0)) {
+			if (process_qcbor_array_item(its_caps, &qcbor_item,
+						     &qcbor_decode_ctxt, rm_env,
+						     0)) {
+				continue;
+			}
+			if (process_qcbor_array_item(smmuv3_caps, &qcbor_item,
+						     &qcbor_decode_ctxt, rm_env,
+						     0)) {
 				continue;
 			}
 			if (process_qcbor_md_array_item(
@@ -615,6 +876,45 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 				    &qcbor_decode_ctxt, device_assignments)) {
 				continue;
 			}
+			if (process_qcbor_map_smmu_v2_env(
+				    "smmuv2_caps", &qcbor_item,
+				    &qcbor_decode_ctxt, rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(gicd_base, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_item(gicr_stride, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_range64_array(
+				    "gicr_ranges", &qcbor_item,
+				    &qcbor_decode_ctxt,
+				    util_array_size(rm_env->gicr_ranges),
+				    rm_env->gicr_ranges,
+				    &rm_env->gicr_ranges_count)) {
+				continue;
+			}
+			if (process_qcbor_item(gits_stride, &qcbor_item,
+					       rm_env)) {
+				continue;
+			}
+			if (process_qcbor_range64_array(
+				    "gits_ranges", &qcbor_item,
+				    &qcbor_decode_ctxt,
+				    util_array_size(rm_env->gits_ranges),
+				    rm_env->gits_ranges,
+				    &rm_env->gits_ranges_count)) {
+				continue;
+			}
+			if (process_qcbor_array_item(
+				    gic_xlate_me, &qcbor_item,
+				    &qcbor_decode_ctxt, rm_env,
+				    &rm_env->gic_xlate_me_count)) {
+				continue;
+			}
 			if (platform_process_qcbor_items(&qcbor_item,
 							 &qcbor_decode_ctxt)) {
 				continue;
@@ -632,10 +932,6 @@ process_and_get_env_data(rm_env_data_hdr_t *env_hdr, rm_env_data_t *rm_env)
 			}
 		}
 	}
-	assert(rm_env->free_ranges_count <=
-	       util_array_size(rm_env->free_ranges));
-	assert(rm_env->device_ranges_count <=
-	       util_array_size(rm_env->device_ranges));
 
 	validate_env_data(rm_env);
 }

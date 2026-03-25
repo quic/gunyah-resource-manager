@@ -1,4 +1,4 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -30,20 +30,18 @@
 #include <rm_env_data.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
+#include <vm_creation.h>
 #include <vm_firmware.h>
 #include <vm_firmware_arch.h>
 #include <vm_firmware_message.h>
+#include <vm_firmware_struct.h>
 #include <vm_memory.h>
 #include <vm_mgnt.h>
 #include <vm_vcpu.h>
 
-// TODO: Move all architecture specific register handling to arch source
+#include "platform_vm_firmware.h"
 
-typedef rm_error_t (*vm_setup_boot_context_t)(const vm_t *vm);
-typedef rm_error_t (*vm_set_boot_context_t)(const vm_t	       *vm,
-					    arch_register_set_t reg_set,
-					    index_t		reg_index,
-					    register_t		reg_val);
+// TODO: Move all architecture specific register handling to arch source
 
 static bool vm_firmware_loading_disabled;
 
@@ -90,12 +88,13 @@ vm_firmware_vm_setup_boot_context_android(const vm_t *vm)
 
 	assert(vmcfg->boot_ctx != NULL);
 
-	// Don't need to set pc or x0 because we force those to be
-	// FW region and DTB, respectively when starting the VM.
 	vmcfg->boot_ctx->pc   = vmcfg->fw_ipa_base + vm->fw_offset;
-	vmcfg->boot_ctx->x[0] = vmcfg->mem_ipa_base + vm->dt_offset;
+	vmcfg->boot_ctx->x[0] = vmcfg->mem_ipa_base + vm->vmm_dt_offset;
 	vmcfg->boot_ctx->x[1] = vmcfg->mem_ipa_base + vm->entry_offset;
 	vmcfg->boot_ctx->x[2] = vm->image_size;
+
+	// Set the hyp boot protocol version to 0.
+	vmcfg->boot_ctx->x[15] = 0U;
 
 	return RM_OK;
 }
@@ -111,9 +110,14 @@ vm_firmware_vm_set_boot_context_android(const vm_t	   *vm,
 
 	switch (reg_set) {
 	case ARCH_REG_SET_X:
-		// x0 must be pointer to the DTB that RM parsed.
-		if ((reg_index == 0U) ||
-		    (reg_index >= util_array_size(vmcfg->boot_ctx->x))) {
+		if (reg_index >= util_array_size(vmcfg->boot_ctx->x)) {
+			ret = RM_ERROR_ARGUMENT_INVALID;
+			break;
+		}
+		// X0 is the DTB pointer, and X15-X30 are reserved for
+		// communication between hyp and pvmfw. These must not be
+		// modified from the initial boot context set by RM.
+		if ((reg_index == 0U) || (reg_index >= 15U)) {
 			ret = RM_ERROR_DENIED;
 			break;
 		}
@@ -135,7 +139,7 @@ vm_firmware_vm_set_boot_context_android(const vm_t	   *vm,
 }
 
 static rm_error_t
-vm_firmware_vm_start_default(const vm_t *vm, vcpu_t *boot_vcpu)
+start_boot_vcpu(const vm_t *vm, const vcpu_t *boot_vcpu)
 {
 	rm_error_t rm_err;
 	error_t	   err;
@@ -233,36 +237,21 @@ out:
 	return err;
 }
 
-RM_PADDED(typedef struct vm_firmware_data_s {
-	vm_auth_type_t		auth_type;
-	bool			mandatory;
-	bool			single_boot_vcpu;
-	vm_setup_boot_context_t setup_boot_context_handler;
-	vm_set_boot_context_t	set_boot_context_handler;
-
-	const uint8_t *image;
-	size_t	       size;
-} vm_firmware_data_t)
-
-static vm_firmware_data_t *
-vm_firmware_lookup(vm_auth_type_t auth_type)
+static vm_firmware_image_data_t *
+vm_firmware_find_image_data(vm_fw_type_t fw_type)
 {
-	static vm_firmware_data_t vm_firmware_data[] = {
-		{
-			.auth_type	  = VM_AUTH_TYPE_ANDROID,
-			.mandatory	  = true,
-			.single_boot_vcpu = true,
-			.setup_boot_context_handler =
-				&vm_firmware_vm_setup_boot_context_android,
-			.set_boot_context_handler =
-				&vm_firmware_vm_set_boot_context_android,
-		},
-	};
-	vm_firmware_data_t *ret = NULL;
+	vm_firmware_image_data_t *ret = NULL;
 
-	for (index_t i = 0U; i < util_array_size(vm_firmware_data); i++) {
-		if (vm_firmware_data[i].auth_type == auth_type) {
-			ret = &vm_firmware_data[i];
+	static const vm_firmware_image_data_t vm_firmware_image_pvmfw = {
+		.fw_type = VM_FW_TYPE_PVMFW,
+	};
+	static vm_firmware_image_data_t vm_firmware_image_data[] = {
+		PLATFORM_FIRMWARE_IMAGE_DATA vm_firmware_image_pvmfw,
+	};
+
+	for (index_t i = 0U; i < util_array_size(vm_firmware_image_data); i++) {
+		if (vm_firmware_image_data[i].fw_type == fw_type) {
+			ret = &vm_firmware_image_data[i];
 			break;
 		}
 	}
@@ -270,24 +259,88 @@ vm_firmware_lookup(vm_auth_type_t auth_type)
 	return ret;
 }
 
+rm_error_t
+vm_firmware_config(vm_t *vm)
+{
+	rm_error_t ret;
+
+	static const vm_firmware_data_t vm_firmware_data[] = {
+		{
+			.auth_type = VM_AUTH_TYPE_NONE,
+			.fw_type   = VM_FW_TYPE_NONE,
+		},
+		{
+			.auth_type	  = VM_AUTH_TYPE_ANDROID,
+			.fw_type	  = VM_FW_TYPE_PVMFW,
+			.mandatory	  = true,
+			.single_boot_vcpu = true,
+			.setup_boot_context_handler =
+				&vm_firmware_vm_setup_boot_context_android,
+			.set_boot_context_handler =
+				&vm_firmware_vm_set_boot_context_android,
+		},
+		PLATFORM_FIRMWARE_DATA
+	};
+
+	const vm_firmware_data_t *fw_data = NULL;
+
+	for (index_t i = 0U; i < util_array_size(vm_firmware_data); i++) {
+		if (vm_firmware_data[i].auth_type != vm->auth_type) {
+			continue;
+		}
+
+		if (vm_firmware_data[i].fw_type == VM_FW_TYPE_NONE) {
+			fw_data = &vm_firmware_data[i];
+			break;
+		}
+
+		const vm_firmware_image_data_t *image_data =
+			vm_firmware_find_image_data(
+				vm_firmware_data[i].fw_type);
+		assert(image_data != NULL);
+
+		if (image_data->image != NULL) {
+			fw_data = &vm_firmware_data[i];
+			break;
+		}
+	}
+
+	if (fw_data != NULL) {
+		vm->vm_config->fw_data = fw_data;
+		ret		       = RM_OK;
+	} else {
+		ret = RM_ERROR_ARGUMENT_INVALID;
+	}
+
+	return ret;
+}
+
 static rm_error_t
-vm_firmware_set(vm_auth_type_t auth_type, resource_handle_t mp_handle,
-		size_t offset, size_t size)
+vm_firmware_set(vm_fw_type_t fw_type, resource_handle_t mp_handle,
+		size_t fw_offset, size_t fw_size, size_t config_offset,
+		size_t config_size)
 {
 	vm_t *rm_vm = vm_lookup(VMID_RM);
 	assert(rm_vm != NULL);
 
 	rm_error_t err;
 
-	// Find the auth type's FW configuration structure
-	vm_firmware_data_t *fw_data = vm_firmware_lookup(auth_type);
-	if (fw_data == NULL) {
+	if (util_add_overflows(fw_offset, fw_size) ||
+	    util_add_overflows(config_offset, config_size)) {
 		err = RM_ERROR_ARGUMENT_INVALID;
 		LOG_ERR(err);
 		goto out;
 	}
 
-	if (fw_data->image != NULL) {
+	vm_firmware_image_data_t *image_data =
+		vm_firmware_find_image_data(fw_type);
+	if (image_data == NULL) {
+		err = RM_ERROR_ARGUMENT_INVALID;
+		LOG_ERR(err);
+		goto out;
+	}
+
+	if (image_data->image != NULL) {
 		err = RM_ERROR_BUSY;
 		LOG_ERR(err);
 		goto out;
@@ -301,13 +354,9 @@ vm_firmware_set(vm_auth_type_t auth_type, resource_handle_t mp_handle,
 		goto out;
 	}
 
-	// Check the offset and size. We currently don't support offsets that
-	// are nonzero; it does not make sense because it isn't possible to
-	// reuse the memparcel for anything else (whether a different firmware
-	// or otherwise).
-	size_t mp_size = memparcel_get_size(mp);
-	if ((size == 0U) || (offset != 0U) || (size > mp_size)) {
-		err = RM_ERROR_ARGUMENT_INVALID;
+	paddr_result_t phys_base = memparcel_get_phys(mp, 0U);
+	if (phys_base.e != OK) {
+		err = RM_ERROR_HANDLE_INVALID;
 		LOG_ERR(err);
 		goto out;
 	}
@@ -325,13 +374,41 @@ vm_firmware_set(vm_auth_type_t auth_type, resource_handle_t mp_handle,
 		goto out;
 	}
 
-	fw_data->image = (uint8_t *)donation_ret.ptr;
-	fw_data->size  = donation_ret.size;
-	err	       = RM_OK;
+	// The firmware and config ranges must be within the donated memparcel
+	if (((fw_offset + fw_size) > donation_ret.size) ||
+	    ((config_offset + config_size) > donation_ret.size)) {
+		err = RM_ERROR_ARGUMENT_INVALID;
+		LOG_ERR(err);
+		goto out;
+	}
 
-	// Note that we don't read or validate the FW image; it's assumed that
-	// the loader has done that before calling this API. Therefore we do not
-	// need to do any cache maintenance.
+	if (image_data->auth_image != NULL) {
+		err = image_data->auth_image(image_data,
+					     (uintptr_t)donation_ret.ptr,
+					     donation_ret.size, phys_base.r,
+					     fw_offset, fw_size, config_offset,
+					     config_size);
+	} else {
+		// This is a generic binary image. Check the offset and size. We
+		// don't permit offsets that are nonzero; it does not make
+		// sense because it isn't possible to reuse the memparcel for
+		// anything else (whether a different firmware or otherwise).
+		if ((fw_size == 0U) || (fw_offset != 0U)) {
+			err = RM_ERROR_ARGUMENT_INVALID;
+			LOG_ERR(err);
+			goto out;
+		}
+
+		// Calculate the necessary size to include the config when the
+		// image is copied. For generic images, RM will not do any
+		// further handling of the firmware config.
+		size_t size = util_max(fw_size, config_offset + config_size);
+
+		image_data->image = (uint8_t *)donation_ret.ptr;
+		image_data->size  = size;
+		err		  = RM_OK;
+	}
+
 out:
 	return err;
 }
@@ -353,26 +430,39 @@ vm_firmware_handle_set_vm_firmware(vmid_t client_id, void *buf, size_t len)
 		goto out;
 	}
 
-	fw_set_vm_firmware_req_t *req = (fw_set_vm_firmware_req_t *)buf;
-	if (len != sizeof(*req)) {
+	// Copy from the buffer into a zero-initialised struct so that the
+	// extended fields at the end do not contain stale data
+	fw_set_vm_firmware_req_t req = { 0 };
+	if (len > sizeof(req)) {
 		err = RM_ERROR_MSG_INVALID;
 		LOG_ERR(err);
 		goto out;
 	}
+	(void)memscpy(&req, sizeof(req), buf, len);
 
-	if (req->res0 != 0U) {
+	uint16_t flags = req.flags;
+
+	bool config_range_valid =
+		(flags & util_bit(FW_SET_VM_FIRMWARE_FLAG_CONFIG_RANGE)) != 0U;
+	flags &= (uint16_t)~util_bit(FW_SET_VM_FIRMWARE_FLAG_CONFIG_RANGE);
+
+	// Reject any unknown flags
+	if (flags != 0U) {
 		err = RM_ERROR_UNIMPLEMENTED;
 		LOG_ERR(err);
 		goto out;
 	}
 
+	uint64_t config_offset = config_range_valid ? req.config_offset : 0U;
+	uint64_t config_size   = config_range_valid ? req.config_size : 0U;
+
 	LOG("FW_SET_VM_FIRMWARE: from:%d mp:%#" PRIx64
-	    " offset:%#zx size:%#zx\n",
-	    client_id, (uint64_t)req->image_mp_handle, req->image_offset,
-	    req->image_size);
-	err = vm_firmware_set((vm_auth_type_t)req->auth_type,
-			      req->image_mp_handle, req->image_offset,
-			      req->image_size);
+	    " offset:%#zx size:%#zx config_offset: %#zx\n",
+	    client_id, (uint64_t)req.image_mp_handle, req.image_offset,
+	    req.image_size, config_offset);
+	err = vm_firmware_set((vm_fw_type_t)req.fw_type, req.image_mp_handle,
+			      req.image_offset, req.image_size, config_offset,
+			      config_size);
 
 out:
 	return err;
@@ -413,15 +503,11 @@ vm_firmware_vm_set_mem(vm_t *vm, resource_handle_t fw_mp_handle,
 {
 	rm_error_t ret;
 
-	vm_firmware_data_t *fw_data = vm_firmware_lookup(vm->auth_type);
-	if (fw_data == NULL) {
-		ret = RM_ERROR_ARGUMENT_INVALID;
-		LOG_ERR(ret);
-		goto out;
-	}
+	const vm_firmware_data_t *fw_data = vm->vm_config->fw_data;
+	assert(fw_data != NULL);
 
-	if (fw_data->image == NULL) {
-		ret = RM_ERROR_DENIED;
+	if (fw_data->fw_type == VM_FW_TYPE_NONE) {
+		ret = RM_ERROR_ARGUMENT_INVALID;
 		LOG_ERR(ret);
 		goto out;
 	}
@@ -456,7 +542,7 @@ out:
 }
 
 static rm_error_t
-vm_firmware_copy_to_vm(vm_t *vm)
+vm_firmware_copy_to_vm(vm_t *vm, const vm_firmware_data_t *fw_data)
 {
 	rm_error_t ret;
 
@@ -466,27 +552,30 @@ vm_firmware_copy_to_vm(vm_t *vm)
 		goto out;
 	}
 
-	vm_firmware_data_t *fw_data = vm_firmware_lookup(vm->auth_type);
-	if (fw_data == NULL) {
-		ret = RM_ERROR_ARGUMENT_INVALID;
-		LOG_ERR(ret);
-		goto out;
-	}
-
-	if (fw_data->image == NULL) {
+	if (fw_data->fw_type == VM_FW_TYPE_NONE) {
 		ret = RM_ERROR_NORESOURCE;
 		LOG_ERR(ret);
 		goto out;
 	}
 
-	if (fw_data->size > vm->fw_size) {
+	const vm_firmware_image_data_t *image_data =
+		vm_firmware_find_image_data(fw_data->fw_type);
+	assert(image_data != NULL);
+
+	if (image_data->image == NULL) {
+		ret = RM_ERROR_NORESOURCE;
+		LOG_ERR(ret);
+		goto out;
+	}
+
+	if (image_data->size > vm->fw_size) {
 		ret = RM_ERROR_MEM_INVALID;
 		LOG_ERR(ret);
 		goto out;
 	}
 
-	uintptr_result_t addr_r = memparcel_map_rm(
-		vm->fw_mp_handle, vm->fw_offset, fw_data->size);
+	uintptr_result_t addr_r =
+		memparcel_map_rm(vm->fw_mp_handle, vm->fw_offset, vm->fw_size);
 	if (addr_r.e != OK) {
 		ret = rm_error_from_hyp(addr_r.e);
 		LOG_ERR(ret);
@@ -494,75 +583,49 @@ vm_firmware_copy_to_vm(vm_t *vm)
 	}
 
 	uint8_t *temp_fw_ptr = (uint8_t *)addr_r.r;
-	(void)memscpy(temp_fw_ptr, fw_data->size, fw_data->image,
-		      fw_data->size);
-	cache_clean_by_va(temp_fw_ptr, fw_data->size);
+	if (fw_data->copy_image != NULL) {
+		ret = fw_data->copy_image(vm, image_data, temp_fw_ptr);
+		if (ret != RM_OK) {
+			LOG_ERR(ret);
+			goto out;
+		}
+	} else {
+		size_t copied_size = memscpy(temp_fw_ptr, vm->fw_size,
+					     image_data->image,
+					     image_data->size);
+		if (copied_size < vm->fw_size) {
+			(void)memset(temp_fw_ptr + copied_size, 0,
+				     vm->fw_size - copied_size);
+		}
+
+		// If we don't have any specific copy handler for this firmware,
+		// then we don't have a way to provide a DTBO to the firmware
+		// and therefore must patch the DTB in place.
+		error_t patch_err = vm_creation_patch_dtb(vm);
+		if (patch_err != OK) {
+			ret = rm_error_from_hyp(patch_err);
+			goto out;
+		}
+	}
+
+	// Ensure the whole firmware region is cache-coherent
+	cache_clean_by_va(temp_fw_ptr, vm->fw_size);
 
 	error_t err = memparcel_unmap_rm(vm->fw_mp_handle);
 	assert(err == OK);
-
-	if (vm->fw_size > fw_data->size) {
-		err = memparcel_sanitize(vm->fw_mp_handle,
-					 vm->fw_offset + fw_data->size,
-					 vm->fw_size - fw_data->size);
-		assert(err == OK);
-	}
 
 	ret = RM_OK;
 out:
 	return ret;
 }
 
-rm_error_t
-vm_firmware_vm_start(vm_t *vm)
+static rm_error_t
+start_vm_boot_cpu(const vm_t *vm, vm_config_t *vmcfg, bool single_boot_vcpu)
 {
-	rm_error_t   ret;
-	vm_config_t *vmcfg = vm->vm_config;
-	assert(vmcfg != NULL);
+	rm_error_t ret;
+	size_t	   vcpu_count	   = vector_size(vmcfg->vcpus);
+	bool	   found_boot_vcpu = false;
 
-	bool single_boot_vcpu;
-
-	vm_firmware_data_t *fw_data = vm_firmware_lookup(vm->auth_type);
-	if (fw_data == NULL) {
-		// VM has no firmware; call the default start handler.
-		if (vm->fw_size != 0U) {
-			(void)printf(
-				"Warning: unused firmware region of size %zd\n",
-				vm->fw_size);
-		}
-		single_boot_vcpu = false;
-	} else if ((vm->fw_size == 0U) && !fw_data->mandatory) {
-		// Firmware region is unset and is optional. Use the default
-		// start handler.
-		single_boot_vcpu = fw_data->single_boot_vcpu;
-	} else {
-		ret = vm_firmware_copy_to_vm(vm);
-		if (ret != RM_OK) {
-			goto out;
-		}
-		single_boot_vcpu = fw_data->single_boot_vcpu;
-	}
-
-	// Cache flush the whole VM region if it is not a platform VM and is
-	// not a protected demand-paged VM.
-	//
-	// For protected demand-paged VMs, we use protected map operations for
-	// normal memory, which implicitly flush the cache. For platform VMs,
-	// the platform specific VM handling should perform any required cache
-	// flushing.
-	bool protected_vm = vm->vm_config->mem_demand_paging && vm->mem_private;
-	if ((vm->auth_type != VM_AUTH_TYPE_PLATFORM) && !protected_vm) {
-		error_t err = memparcel_cache_flush(vm->mem_mp_handle, 0U,
-						    vm->mem_size);
-		if (err != OK) {
-			ret = rm_error_from_hyp(err);
-			goto out;
-		}
-		cache_invalidate_inst_all();
-	}
-
-	size_t vcpu_count      = vector_size(vmcfg->vcpus);
-	bool   found_boot_vcpu = false;
 	for (index_t i = 0; i < vcpu_count; i++) {
 		vcpu_t *vcpu = vector_at(vcpu_t *, vmcfg->vcpus, i);
 		assert(vcpu != NULL);
@@ -589,11 +652,76 @@ vm_firmware_vm_start(vm_t *vm)
 		vcpu_t *vcpu = vector_at(vcpu_t *, vmcfg->vcpus, i);
 		assert(vcpu != NULL);
 		if (vcpu->boot_vcpu) {
-			ret = vm_firmware_vm_start_default(vm, vcpu);
+			ret = start_boot_vcpu(vm, vcpu);
 			if (ret != RM_OK) {
 				goto out;
 			}
 		}
+	}
+
+out:
+	return ret;
+}
+
+rm_error_t
+vm_firmware_vm_start(vm_t *vm)
+{
+	rm_error_t   ret;
+	vm_config_t *vmcfg = vm->vm_config;
+	assert(vmcfg != NULL);
+
+	bool single_boot_vcpu;
+
+	const vm_firmware_data_t *fw_data = vm->vm_config->fw_data;
+	assert(fw_data != NULL);
+
+	if ((vm->fw_size == 0U) && !fw_data->mandatory) {
+		// Firmware region is unset and is optional. No need to copy.
+		single_boot_vcpu = fw_data->single_boot_vcpu;
+
+		// Since there is no firmware, we must generate a DTBO and apply
+		// it to the VM's device tree ourselves.
+		error_t patch_err = vm_creation_patch_dtb(vm);
+		if (patch_err != OK) {
+			ret = rm_error_from_hyp(patch_err);
+			goto out;
+		}
+	} else {
+		ret = vm_firmware_copy_to_vm(vm, fw_data);
+		if (ret != RM_OK) {
+			goto out;
+		}
+		single_boot_vcpu = fw_data->single_boot_vcpu;
+	}
+
+	error_t mp_err = memparcel_unprotect(vm->mem_mp_handle);
+	if (mp_err != OK) {
+		(void)printf("Memparcel unprotect failed..!!\n");
+		ret = RM_ERROR_DENIED;
+		goto out;
+	}
+
+	// Cache flush the whole VM region if it is not a platform VM and is
+	// not a protected demand-paged VM.
+	//
+	// For protected demand-paged VMs, we use protected map operations for
+	// normal memory, which implicitly flush the cache. For platform VMs,
+	// the platform specific VM handling should perform any required cache
+	// flushing.
+	bool protected_vm = vm->vm_config->mem_demand_paging && vm->mem_private;
+	if ((vm->auth_type != VM_AUTH_TYPE_PLATFORM) && !protected_vm) {
+		error_t err = memparcel_cache_flush(vm->mem_mp_handle, 0U,
+						    vm->mem_size);
+		if (err != OK) {
+			ret = rm_error_from_hyp(err);
+			goto out;
+		}
+		cache_invalidate_inst_all();
+	}
+
+	ret = start_vm_boot_cpu(vm, vmcfg, single_boot_vcpu);
+	if (ret != RM_OK) {
+		goto out;
 	}
 
 	// Finally, for a dynamically paged VM, drop all of the memparcel
@@ -622,7 +750,7 @@ vm_firmware_init_boot_context(const vm_t *vm)
 	assert(vm != NULL);
 	assert(vm->vm_config != NULL);
 
-	vm_firmware_data_t *fw_data = vm_firmware_lookup(vm->auth_type);
+	const vm_firmware_data_t *fw_data = vm->vm_config->fw_data;
 
 	vm_boot_context_t *ctx = calloc(1, sizeof(vm_boot_context_t));
 
@@ -632,10 +760,17 @@ vm_firmware_init_boot_context(const vm_t *vm)
 	}
 	vm->vm_config->boot_ctx = ctx;
 
-	if (fw_data == NULL) {
-		ctx->pc	  = vm->vm_config->mem_ipa_base + vm->entry_offset;
-		ctx->x[0] = vm->vm_config->mem_ipa_base + vm->dt_offset;
-		ret	  = RM_OK;
+	if (((vm->fw_size == 0U) && !fw_data->mandatory) ||
+	    (fw_data->setup_boot_context_handler == NULL)) {
+		ctx->pc = vm->vm_config->mem_ipa_base + vm->entry_offset;
+		if (vm->image_dt_size == 0U) {
+			ctx->x[0] =
+				vm->vm_config->mem_ipa_base + vm->vmm_dt_offset;
+		} else {
+			ctx->x[0] = vm->vm_config->mem_ipa_base +
+				    vm->image_dt_offset;
+		}
+		ret = RM_OK;
 	} else {
 		ret = fw_data->setup_boot_context_handler(vm);
 	}
@@ -653,6 +788,8 @@ vm_firmware_set_boot_context(const vm_t *vm, const vm_boot_ctx_req_t *req)
 
 	vm_config_t *vmcfg = vm->vm_config;
 
+	arch_register_set_t reg_set;
+
 	// Sanity check register set indexes
 	switch (req->arch_reg_set) {
 	case (uint8_t)ARCH_REG_SET_X:
@@ -660,34 +797,37 @@ vm_firmware_set_boot_context(const vm_t *vm, const vm_boot_ctx_req_t *req)
 			ret = RM_ERROR_ARGUMENT_INVALID;
 			goto out;
 		}
+		reg_set = ARCH_REG_SET_X;
 		break;
 	case (uint8_t)ARCH_REG_SET_PC:
 		if (req->reg_index != 0U) {
 			ret = RM_ERROR_ARGUMENT_INVALID;
 			goto out;
 		}
+		reg_set = ARCH_REG_SET_PC;
 		break;
 	case (uint8_t)ARCH_REG_SET_SP:
 		if (req->reg_index >= util_array_size(vmcfg->boot_ctx->sp_el)) {
 			ret = RM_ERROR_ARGUMENT_INVALID;
 			goto out;
 		}
+		reg_set = ARCH_REG_SET_SP;
 		break;
 	default:
 		ret = RM_ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
-	vm_firmware_data_t   *fw_data = vm_firmware_lookup(vm->auth_type);
-	vm_set_boot_context_t handler;
+	const vm_firmware_data_t *fw_data = vm->vm_config->fw_data;
+	assert(fw_data != NULL);
 
-	if (fw_data == NULL) {
-		handler = vm_firmware_vm_set_boot_context_default;
+	if (fw_data->set_boot_context_handler != NULL) {
+		ret = fw_data->set_boot_context_handler(
+			vm, reg_set, req->reg_index, req->value);
 	} else {
-		handler = fw_data->set_boot_context_handler;
+		ret = vm_firmware_vm_set_boot_context_default(
+			vm, reg_set, req->reg_index, req->value);
 	}
-
-	ret = handler(vm, req->arch_reg_set, req->reg_index, req->value);
 
 out:
 	return ret;

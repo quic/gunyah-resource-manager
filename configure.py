@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 #
-# © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -39,14 +39,15 @@ import inspect
 
 class ClangCompDB(object):
 
-    def __init__(self, path, var_subst):
+    def __init__(self, path, var_subst, root_dir):
         self.path = path
         self.var_subst = var_subst
         self.commands = []
+        self.root_dir = os.path.realpath(root_dir)
 
     def add_command(self, command, i, o, **local_env):
         self.commands.append({
-            'directory': os.getcwd(),
+            'directory': self.root_dir,
             'command': command,
             'file': i,
             'output': o,
@@ -416,7 +417,7 @@ class AbstractBuildGraph(object):
         This target becomes an implicit output of the build graph generation.
         """
         if form == 'clang':
-            compdb = ClangCompDB(target, self._var_subst)
+            compdb = ClangCompDB(target, self._var_subst, self.root_dir)
         else:
             raise NotImplementedError("Unknown compdb form: " + repr(form))
         self._compdbs[self._expand_target_list(target)[0]] = compdb
@@ -845,5 +846,5 @@ if __name__ == '__main__':
     build = NinjaBuild(root_dir, arguments=dict(a.split('=', 1)
                                                 for a in sys.argv[1:]))
 
-    import pipes
-    build(gen_cmd=' '.join((pipes.quote(arg) for arg in sys.argv)))
+    import shlex
+    build(gen_cmd=' '.join((shlex.quote(arg) for arg in sys.argv)))

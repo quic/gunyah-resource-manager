@@ -1,4 +1,4 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -8,6 +8,24 @@
 // We limit the size of the address space so we can store page-aligned addresses
 // in 32 bits.
 #define ADDR_LIMIT util_bit(32U + PAGE_BITS)
+
+// FIXME: hyp API should allow this to be configured and/or queried
+#define SVM_ADDRESS_SPACE_BITS 36U
+
+// Address range tag bits. All valid tags must have the valid bit set.
+#define ADDRESS_RANGE_TAG_VALID			 1U
+#define ADDRESS_RANGE_TAG_ECC			 2U
+#define ADDRESS_RANGE_TAG_MEMTAG		 4U
+#define ADDRESS_RANGE_TAG_NORMAL		 8U
+#define ADDRESS_RANGE_TAG_ENCRYPTED		 16U
+#define ADDRESS_RANGE_TAG_AUTHENTICATED		 32U
+#define ADDRESS_RANGE_TAG_REPLAY_PROTECTED	 64U
+#define ADDRESS_RANGE_TAG_PHYSICAL_DEVICE_REGION ((uint32_t)1 << 30)
+
+#define MAX_MEM_ACL_LEN 5U
+
+#define MEM_ACL_FLAGS_PRIVATE	       0x1U
+#define MEM_ACL_FLAGS_IDENTITY_MAPPING 0x2U
 
 // This enum gives information on the use of memory being mapped in a VM.
 // The mapping behaviour of memory may differ depending on its usage.
@@ -30,8 +48,18 @@ typedef enum {
 	VM_MEMUSE_PROTECTED,
 } vm_memuse_t;
 
+typedef struct {
+	vmid_t	vmid;
+	uint8_t perm;
+	uint8_t flags;
+} mem_acl_t;
+
 error_t
-vm_memory_init(void);
+vm_memory_register_mem_acl(cap_id_t me_cap, size_t acl_entries,
+			   const mem_acl_t *mem_acl);
+
+error_t
+vm_memory_init(const rm_env_data_t *env_data);
 
 error_t
 vm_memory_setup(vm_t *vm);
@@ -63,6 +91,9 @@ vm_memory_unmap_partial(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap,
 			vmaddr_t ipa, size_t offset, size_t size);
 
 error_t
+vm_memory_unmap_whole_extent(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap);
+
+error_t
 vm_memory_remap(vm_t *vm, vm_memuse_t memuse, cap_id_t me_cap, vmaddr_t ipa,
 		pgtable_access_t old_access, pgtable_access_t new_access,
 		pgtable_vm_memtype_t old_memtype,
@@ -87,6 +118,11 @@ vm_memory_create_and_map(vm_t *vm, vm_memuse_t memuse, cap_id_t parent_me,
 void
 vm_memory_batch_start(cap_id_t me_cap);
 
+// Ensure that a memextent operation is synchronised, either immediately or as
+// part of the current batch.
+void
+vm_memory_batched_sync(cap_id_t me_cap);
+
 // Finish a batch job of memextent operations and synchronize.
 void
 vm_memory_batch_end(void);
@@ -105,6 +141,9 @@ vm_memory_lookup(vm_t *vm, vm_memuse_t memuse, vmaddr_t ipa, size_t size);
 
 size_result_t
 vm_address_range_init(vm_t *vm);
+
+error_t
+vm_address_range_permit_normal(vm_t *vm);
 
 void
 vm_address_range_destroy(vm_t *vm);
@@ -155,6 +194,12 @@ vm_memory_get_acl_info(vm_t *vm, uint8_t mem_type, cap_id_t mp_me_cap,
 		       uint8_t trans_type, acl_entry_t *acl,
 		       uint32_t acl_entries, bool vm_init);
 
+// Check ACL info to determine whether the memory in a memparcel can safely
+// be temporarily mapped exclusively to RM, without being indirectly accessible
+// to the owner or any other VM.
+bool
+vm_memory_acl_can_map_exclusive(const vm_acl_info_t *acl_info);
+
 // Free an ACL info struct if one was allocated by the above function.
 void
 vm_memory_free_acl_info(vm_acl_info_t *info);
@@ -171,10 +216,9 @@ vm_memory_get_owned_extent(const vm_t *vm, uint8_t mem_type);
 
 // Get the memextent used for paged memory in a VM.
 //
-// This should only be used for mapping operations and to provide the VM's
-// paging extent capability to its host VM. It returns CSPACE_CAP_INVALID if
-// the VM does not have demand paging enabled, vm_memory_setup_paged_extents()
-// has not been called yet, or is_private is true but the VM is not protected.
+// This returns CSPACE_CAP_INVALID if the VM does not have demand paging
+// enabled, vm_memory_setup_paged_extents() has not been called yet, or
+// is_private is true but the VM is not protected.
 //
 // The memory type for this API is always MEM_TYPE_NORMAL.
 cap_id_t
@@ -206,18 +250,15 @@ vm_memory_donate_extent(vm_t *vm, uint8_t mem_type, vm_acl_info_t *acl_info,
 			cap_id_t mp_me_cap, paddr_t phys, size_t size,
 			bool to_mp);
 
-// Donate memory between a VM's paged extent and a memparcel extent.
-//
-// This should only be called after vm_memory_set_paged_extent(); it will fail
-// if that function has not been called.
-//
-// The memory must be in an extent that is either exclusively mapped RWX to the
-// VM (is_private = true), or mapped RWX to both the VM and its owner but to no
-// other vm (is_private = false). In the latter case, the preceding call to
-// vm_memory_set_paged_extent() must have had is_private set to false too.
+// Donate memory from a memparcel extent to a partition heap.
 error_t
-vm_memory_add_to_paged_extent(const vm_t *vm, cap_id_t mp_me_cap, paddr_t phys,
-			      size_t size, bool is_private, bool reclaim);
+vm_memory_add_heap(cap_id_t me_cap, cap_id_t partition_cap, paddr_t phys,
+		   size_t size, allocator_memattr_t memattr);
+
+// Return partition heap memory to a memparcel extent.
+error_t
+vm_memory_remove_heap(cap_id_t me_cap, cap_id_t partition_cap, paddr_t phys,
+		      size_t size, allocator_memattr_t memattr);
 
 // Convert a set of IPA constraints to an address range tag.
 address_range_tag_t
@@ -227,6 +268,59 @@ vm_memory_constraints_to_tag(vm_t *vm, uint32_t generic_constraints,
 // Get the compatible address range tag for a region of physical memory.
 address_range_tag_t
 vm_memory_get_phys_address_tag(paddr_t phys, size_t size);
+
+// Get the address range tag for RM's main memory.
+address_range_tag_t
+vm_memory_get_rm_address_tag(void);
+
+// FIXME: This will be removed soon.
+bool
+vm_memory_handled_by_platform(vm_t *vm, vm_memuse_t memuse);
+
+// FIXME: This will be removed soon.
+size_t
+vm_memory_get_platform_addr_limit(void);
+
+// FIXME: This will be removed soon.
+cap_id_t
+vm_memory_get_platform_device_cap_override(void);
+
+// Platform specific vm_memory_init. Called at the start.
+error_t
+vm_memory_init_platform(const rm_env_data_t *env_data);
+
+// FIXME: This will be removed soon.
+cap_id_t
+vm_memory_get_platform_parent_ddr_me_override(void);
+
+// FIXME: This will be removed soon.
+bool
+vm_memory_setup_platform_me_override(vm_t *vm);
+
+// FIXME: This will be removed soon.
+bool
+vm_memory_get_source_extent_platform_override(const vm_t *vm, uint8_t mem_type,
+					      acl_entry_t *acl,
+					      uint32_t	   acl_entries,
+					      cap_id_t	  *me_cap);
+
+// FIXME: This will be removed soon.
+bool
+vm_memory_donate_extent_platform_override(vm_t *vm, uint8_t mem_type,
+					  vm_acl_info_t *acl_info,
+					  cap_id_t mp_me_cap, paddr_t phys,
+					  size_t size, bool to_mp, error_t *err,
+					  cap_id_t *owner_me_cap_out);
+
+// Apply platform constraints to tag.
+void
+vm_memory_apply_platform_constraints_to_tag(uint32_t platform_constraints,
+					    address_range_tag_t *tag);
+
+// Apply platform modifications to phys address tag.
+void
+vm_memory_apply_platform_phys_address_rags(paddr_t phys, size_t size,
+					   address_range_tag_t *tag);
 
 #else
 

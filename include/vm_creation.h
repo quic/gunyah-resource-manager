@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -51,7 +51,13 @@ error_t
 vm_creation_process_resource(vm_t *vm);
 
 error_t
-vm_creation_process_memparcel(vm_t *vm, memparcel_t *mp);
+vm_creation_patch_dtb(vm_t *vm);
+
+error_t
+map_dtb_check_range(size_t dtb_offset, size_t dtb_size, size_t ipa_size);
+
+error_t
+map_dtb_setup_mapped_dtb(const void *temp_dtb_ptr, size_t dtb_size);
 
 uintptr_result_t
 map_dtb(size_t dtb_offset, size_t dtb_size, uint32_t mp_handle,

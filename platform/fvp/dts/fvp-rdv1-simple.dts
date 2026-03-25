@@ -1,0 +1,286 @@
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
+//
+// SPDX-License-Identifier: BSD-3-Clause
+
+/dts-v1/;
+
+#include "arm-gic.dtsi"
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	compatible = "fvp-rdv1";
+	model = "This is a simple rdv1 device tree";
+
+	interrupt-parent = <&intc>;
+
+	chosen {
+		bootargs = "earlycon debug";
+		linux,initrd-start = <0x88000000>;
+		linux,initrd-end = <0x8a800000>;
+		stdout-path = "serial0:115200n8";
+	};
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	cpus {
+		#address-cells = <0x2>;
+		#size-cells = <0x0>;
+
+		CPU0: cpu@0 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x0>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU1: cpu@10000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x10000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU2: cpu@20000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x20000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU3: cpu@30000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x30000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU4: cpu@40000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x40000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU5: cpu@50000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x50000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU6: cpu@60000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x60000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU7: cpu@70000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x70000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU8: cpu@80000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x80000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU9: cpu@90000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0x90000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU10: cpu@a0000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0xa0000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU11: cpu@b0000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0xb0000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU12: cpu@c0000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0xc0000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU13: cpu@d0000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0xd0000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU14: cpu@e0000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0xe0000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		CPU15: cpu@f0000 {
+			compatible = "arm,armv8";
+			reg = <0x0 0xf0000>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+	};
+
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x40000000>;
+	};
+
+	// ARM FVP has a PCIe based SMMU Test Engine
+	// More SMMUTE info here:
+	//  https://developer.arm.com/documentation/100966/1124/Configurable-PCIe-hierarchy/SMMU-test-engine-parameters?lang=en
+	//  https://neoverse-reference-design.docs.arm.com/en/latest/virtualization/io-virtualization.html
+	pci0: pci@60000000 {
+		#address-cells = <0x3>;
+		#size-cells = <0x2>;
+		#interrupt-cells = <0x1>;
+		compatible = "pci-host-ecam-generic";
+		device_type = "pci";
+
+		bus-range = <0x0 0xff>;
+		reg = <0x0 0x60000000 0x0 0x10000000>;
+
+		ranges = <0x01000000 0x0 0x00000000 0x0 0x00000000 0x0 0x00800000>,
+			<0x02000000 0x0 0x70000000 0x0 0x70000000 0x0 0x07800000>,
+			<0x42000000 0x5 0x00000000 0x5 0x00000000 0x3 0x00000000>;
+
+		interrupt-map-mask = <0x0 0x0 0x0 0x7>;
+		msi-map = <0x0 &its0 0x0 0x10000>;
+
+		dma-coherent;
+
+		// Split the PCI devices between multiple virtio-iommu for testing
+		iommu-map = <0x0200 &pcie_smmu 0x0200 0x100>,
+			<0x0700 &pcie_smmu 0x0700 0x100>;
+	};
+
+	intc: interrupt-controller@30000000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		interrupt-controller;
+
+		#redistributor-regions = <1>;
+
+		reg = <0x0 0x30000000 0 0x10000>,	// GICD
+			<0x0 0x30140000 0 0x400000>;	// GICR * 16
+		interrupts = <GIC_IRQ_TYPE_PPI 9 GIC_IRQ_MODE_LEVEL>;
+
+		// Enable MSI -> SPI for vPCI
+		// Interrupts above 800 seem to be free
+		// Test with and without MBI ranges to see if Legacy Interrupts are
+		// allocated as they should?
+		// -> With    - Linux uses MSI for SMMUTEs
+		// -> Without - Falls back to legacy interrupts
+		msi-controller;
+		mbi-ranges = <800 128>;
+
+		its0: msi-controller@30040000 {
+			#msi-cells = <1>;
+			compatible = "arm,gic-v3-its";
+			reg = <0x0 0x30040000 0x0 0x20000>;	// GITS
+			msi-controller;
+		};
+
+		its1: msi-controller@30080000 {
+			#msi-cells = <1>;
+			compatible = "arm,gic-v3-its";
+			reg = <0x0 0x30080000 0x0 0x20000>;	// GITS
+			msi-controller;
+		};
+
+		its2: msi-controller@300c0000 {
+			#msi-cells = <1>;
+			compatible = "arm,gic-v3-its";
+			reg = <0x0 0x300c0000 0x0 0x20000>;	// GITS
+			msi-controller;
+		};
+
+		its3: msi-controller@30100000 {
+			#msi-cells = <1>;
+			compatible = "arm,gic-v3-its";
+			reg = <0x0 0x30100000 0x0 0x20000>;	// GITS
+			msi-controller;
+		};
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_IRQ_TYPE_PPI 13 GIC_IRQ_MODE_LEVEL>,	// cntpsirq
+			<GIC_IRQ_TYPE_PPI 14 GIC_IRQ_MODE_LEVEL>,	// cntpnsirq
+			<GIC_IRQ_TYPE_PPI 11 GIC_IRQ_MODE_LEVEL>,	// cntvirq
+			<GIC_IRQ_TYPE_PPI 10 GIC_IRQ_MODE_LEVEL>;	// cnthpirq
+	};
+
+	soc_uartclk: refclk7372800hz {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <7372800>;
+		clock-output-names = "fvp:uartclk";
+	};
+
+	soc_refclk100mhz: refclk100mhz {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <100000000>;
+		clock-output-names = "apb_pclk";
+	};
+
+	uart0: serial@2a400000 {
+		compatible = "arm,pl011", "arm,primecell";
+		reg = <0x0 0x2a400000 0x0 0x1000>;
+		interrupts = <GIC_IRQ_TYPE_SPI 63 GIC_IRQ_MODE_LEVEL>;
+
+		clocks = <&soc_uartclk>, <&soc_refclk100mhz>;
+		clock-names = "uartclk", "apb_pclk";
+	};
+
+	// Give Linux full control over the SMMUv3 HW
+	// Only enable SMMU TCU for PCIe RC0, there is another TCU for PCIe
+	// RC1, but it is not used by the Example Linux
+	pcie_smmu: iommu@4f000000 {
+		compatible = "arm,smmu-v3";
+		reg = <0x0 0x4f000000 0x0 0x100000>;
+
+		// No PRI IRQ in RD-V1 FVP
+		interrupts = <GIC_IRQ_TYPE_SPI 228 GIC_IRQ_MODE_EDGE>,
+			<GIC_IRQ_TYPE_SPI 230 GIC_IRQ_MODE_EDGE>,
+		// PRI	<GIC_IRQ_TYPE_SPI ??? GIC_IRQ_MODE_EDGE>,
+			<GIC_IRQ_TYPE_SPI 229 GIC_IRQ_MODE_EDGE>;
+		interrupt-names = "eventq", "gerror", /*"priq",*/ "cmdq-sync";
+		dma-coherent;
+		#iommu-cells = <1>;
+
+		// Disable 'msi-parent' to enable wired interrupts
+		// Wired interrupts work, MSIs dont..?
+		//msi-parent = <&its1 0x0>;
+	};
+};

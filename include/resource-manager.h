@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -64,6 +64,9 @@ rm_get_usable_cores(count_t *array_size);
 vmaddr_t
 rm_get_me_ipa_base(void);
 
+size_t
+rm_get_me_size(void);
+
 vmaddr_t
 rm_get_hlos_dt_base(void);
 
@@ -78,6 +81,33 @@ rm_get_platform_env_data(void);
 
 const vm_device_assignments_t *
 rm_get_vm_device_assignments(void);
+
+bool
+rm_get_sve_supported(void);
+
+bool
+rm_get_sme_supported(void);
+
+cap_id_t
+rm_get_system_power(void);
+
+bool
+rm_get_has_system_suspend(void);
+
+bool
+rm_get_sdei_supported(void);
+
+rm_smmu_env_data_t *
+rm_get_smmuv2_env(void);
+
+count_t
+rm_get_num_v2_smmu(void);
+
+cap_id_t
+rm_get_smmuv3_cap(index_t i);
+
+cap_id_t
+rm_get_its_cap(index_t i);
 
 #else
 

@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -21,6 +21,9 @@ platform_env_init(platform_env_data_t **platform_env);
 error_t
 platform_hlos_create(vm_t *vm, const rm_env_data_t *env_data);
 
+vmid_t
+platform_get_power_owner_vmid(void);
+
 bool
 platform_msg_callback(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num,
 		      void *buf, size_t len);
@@ -42,7 +45,7 @@ platform_config_update_parsed(vm_config_t	      *vmcfg,
 
 // return true if running on a security enabled device
 bool
-platform_get_security_state(void);
+platform_is_in_secure_state(void);
 
 bool
 platform_expose_log_to_hlos(void);
@@ -98,9 +101,8 @@ platform_exit_handler(int exit_code);
 uint64_t
 platform_get_secondary_vmids(void);
 
-// Bitmap of platform peripheral VMIDs which are not managed by RM.
-uint64_t
-platform_get_peripheral_vmids(void);
+bool
+platform_is_peripheral_vm(vmid_t vmid);
 
 error_t
 platform_primary_vm_init(rm_env_data_t *env_data, uintptr_t log_buf,
@@ -124,10 +126,13 @@ platform_vrtc_create_and_configure(cap_id_t p_cap, cap_id_t cs_cap,
 				   vmaddr_t ipa);
 
 error_t
-platform_pre_hlos_vm_init(const rm_env_data_t *env_data);
+platform_post_hlos_vm_init(const rm_env_data_t *env_data);
 
 uint64_t
 platform_timestamp(void);
+
+vmaddr_result_t
+platform_lookup_peripheral_mapping(vmid_t vmid, paddr_t phys, size_t size);
 
 #else
 

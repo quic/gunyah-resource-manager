@@ -1,4 +1,4 @@
-// © 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -176,7 +176,7 @@ vm_passthrough_config_unmap_ioranges(const rm_env_data_t *env_data)
 				continue;
 			}
 
-			// FIXME:
+			// FIXME: QC RM issue #61
 			// Support non_exclusive multiple VM passthrough.
 			// non_exclusive means that the MMIO passthrough region
 			// may overlap with other passthrough regions.
@@ -185,9 +185,7 @@ vm_passthrough_config_unmap_ioranges(const rm_env_data_t *env_data)
 				root_env_mmio_range_properties_get_non_exclusive(
 					&io_range.attrs);
 			if (is_mapped && non_exclusive) {
-				(void)printf(
-					"Warning: skip unmap non_exclusive passthrough %lx %lx\n",
-					ipa, size);
+				// Skip unmapping of this range
 				continue;
 			}
 

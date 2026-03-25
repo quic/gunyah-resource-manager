@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -40,6 +40,9 @@ memextent_unmap(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase);
 error_t
 memextent_unmap_partial(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 			size_t offset, size_t size);
+
+error_t
+memextent_unmap_whole_extent(cap_id_t me_cap, cap_id_t addrspace_cap);
 
 error_t
 memextent_update_access(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,

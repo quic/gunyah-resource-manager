@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -30,8 +30,8 @@
 #define SMCCC_FUNCTION_ID(fast, call64, service_call, function)                \
 	(((uint64_t)((fast) ? 1U : 0U) << SMCCC_FAST_CALL_SHIFT) |             \
 	 ((uint64_t)((call64) ? 1U : 0U) << SMCCC_64BIT_CALL_SHIFT) |          \
-	 ((service_call) << SMCCC_SERVICE_SHIFT) |                             \
-	 ((function) << SMCCC_FUNCTION_SHIFT))
+	 ((uint64_t)(service_call) << SMCCC_SERVICE_SHIFT) |                   \
+	 ((uint64_t)(function) << SMCCC_FUNCTION_SHIFT))
 
 #define SMCCC_FUNCTION_ID_IS_FAST(func_id)                                     \
 	((bool)(((func_id) >> SMCCC_FAST_CALL_SHIFT) & 1))

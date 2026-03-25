@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -44,12 +44,14 @@ memextent_create(paddr_t phy_base, size_t size, memextent_type_t type,
 	}
 
 	if (ret != OK) {
+		memextent_delete(me_ret.new_cap);
 		cap_ret = cap_id_result_error(ret);
 		goto out;
 	}
 
 	ret = gunyah_hyp_object_activate(me_ret.new_cap);
 	if (ret != OK) {
+		memextent_delete(me_ret.new_cap);
 		cap_ret = cap_id_result_error(ret);
 		goto out;
 	}
@@ -144,10 +146,11 @@ memextent_map_partial(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 static error_t
 memextent_unmap_internal(cap_id_t me_cap, cap_id_t addrspace_cap,
 			 vmaddr_t vbase, size_t offset, size_t size,
-			 bool partial)
+			 bool partial, bool whole_extent)
 {
 	addrspace_map_flags_t map_flags = addrspace_map_flags_default();
 	addrspace_map_flags_set_partial(&map_flags, partial);
+	addrspace_map_flags_set_whole_extent(&map_flags, whole_extent);
 	addrspace_map_flags_set_no_sync(&map_flags, true);
 
 	return gunyah_hyp_addrspace_unmap(addrspace_cap, me_cap, vbase,
@@ -158,7 +161,7 @@ error_t
 memextent_unmap(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase)
 {
 	return memextent_unmap_internal(me_cap, addrspace_cap, vbase, 0U, 0U,
-					false);
+					false, false);
 }
 
 error_t
@@ -166,7 +169,14 @@ memextent_unmap_partial(cap_id_t me_cap, cap_id_t addrspace_cap, vmaddr_t vbase,
 			size_t offset, size_t size)
 {
 	return memextent_unmap_internal(me_cap, addrspace_cap, vbase, offset,
-					size, true);
+					size, true, false);
+}
+
+error_t
+memextent_unmap_whole_extent(cap_id_t me_cap, cap_id_t addrspace_cap)
+{
+	return memextent_unmap_internal(me_cap, addrspace_cap, 0U, 0U, 0U,
+					false, true);
 }
 
 static error_t
@@ -227,6 +237,7 @@ memextent_create_and_map(cap_id_t addrspace_cap, paddr_t phy_base,
 	error_t ret = memextent_map(cap_ret.r, addrspace_cap, vbase, access,
 				    memtype_map, false);
 	if (ret != OK) {
+		memextent_delete(cap_ret.r);
 		cap_ret = cap_id_result_error(ret);
 	}
 

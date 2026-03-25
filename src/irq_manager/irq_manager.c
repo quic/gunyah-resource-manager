@@ -1,4 +1,4 @@
-// © 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -52,6 +52,9 @@
 typedef enum {
 	IRQ_TYPE_HW,
 	IRQ_TYPE_VIRQ,
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	IRQ_TYPE_DEV,
+#endif
 } irq_type_t;
 
 typedef enum {
@@ -112,6 +115,8 @@ static irq_handle_t irq_handle_rand_base;
 
 // IRQ lending state, indexed by HW IRQ number
 static dict_t *hwirq_lending_dict;
+
+static uint32_t last_usable_hwirq = PLATFORM_GLOBAL_IRQ_ALLOC_BASE - 1U;
 
 static bool
 irq_number_valid(uint32_t irq_number)
@@ -181,6 +186,8 @@ irq_manager_init_hlos(const rm_env_data_t *env_data, uint32_t first_cpulocal,
 				LOG("hwirq %d\n", irq_tmp);
 				goto out;
 			}
+			last_usable_hwirq =
+				util_max(irq_tmp, last_usable_hwirq);
 		} else {
 			// Go to next
 		}
@@ -389,6 +396,14 @@ out:
 	return ret;
 }
 
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+error_t
+irq_manager_devirq_donate(uint32_t dev_irq_number, vmid_t from, vmid_t to)
+{
+	return irq_manager_hwirq_donate(dev_irq_number, from, to);
+}
+#endif
+
 vmid_result_t
 irq_manager_hwirq_get_owner(uint32_t hw_irq_number)
 {
@@ -406,6 +421,14 @@ irq_manager_hwirq_get_owner(uint32_t hw_irq_number)
 
 	return ret;
 }
+
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+vmid_result_t
+irq_manager_devirq_get_owner(uint32_t dev_irq_number)
+{
+	return irq_manager_hwirq_get_owner(dev_irq_number);
+}
+#endif
 
 error_t
 irq_manager_vm_init(vm_t *vm, cap_id_t vic, count_t max_irq)
@@ -442,7 +465,8 @@ irq_manager_vm_init(vm_t *vm, cap_id_t vic, count_t max_irq)
 		mgr->global_irq_alloc_base = first_global;
 	} else {
 		// TODO: how to set this dynamically ?
-		mgr->global_irq_alloc_base = PLATFORM_GLOBAL_IRQ_ALLOC_BASE;
+		// mgr->global_irq_alloc_base = PLATFORM_GLOBAL_IRQ_ALLOC_BASE;
+		mgr->global_irq_alloc_base = last_usable_hwirq + 1U;
 	}
 
 	mgr->irq_mappings_dict = dict_init(first_irq, max_irq);
@@ -478,8 +502,8 @@ irq_manager_vm_reset(vm_t *vm)
 }
 
 static error_t
-irq_manager_vm_hwirq_unmap_internal(const vm_t *vm, uint32_t irq_number,
-				    bool free_irq, bool owner);
+irq_manager_vm_unmap_internal(const vm_t *vm, uint32_t irq_number,
+			      bool free_irq, bool owner, irq_type_t type);
 
 static error_t
 irq_manager_check_deinit_global_irq(const vm_t		     *vm,
@@ -510,7 +534,7 @@ irq_manager_check_deinit_global_irq(const vm_t		     *vm,
 		goto out;
 	}
 
-	ret = irq_manager_vm_hwirq_unmap_internal(vm, irq, true, true);
+	ret = irq_manager_vm_unmap_internal(vm, irq, true, true, IRQ_TYPE_HW);
 	assert(ret == OK);
 
 	LOG("IRQ_UNMAP: VM %d: IRQ %d\n", vm->vmid, irq);
@@ -567,6 +591,11 @@ irq_manager_vm_deinit(vm_t *vm)
 		case IRQ_TYPE_VIRQ:
 			// We missed an vdevice virq cleanup?
 			panic("virq cleanup");
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+		case IRQ_TYPE_DEV:
+			// We missed a dev irq during device cleanup?
+			panic("device irq cleanup");
+#endif
 		default:
 			panic("unimplemented");
 		}
@@ -781,10 +810,12 @@ out:
 	return ret;
 }
 
+// Can be used for both IRQ_TYPE_HW and IRQ_TYPE_DEVIRQ due to the similar
+// semantics. IRQ_TYPE_VIRQ is handled by irq_manager_vm_virq_map.
 static error_t
-irq_manager_vm_hwirq_map_internal(const vm_t *vm, uint32_t irq_number,
-				  uint32_t hw_irq_number, bool alloc,
-				  bool owner)
+irq_manager_vm_map_internal(const vm_t *vm, uint32_t irq_number,
+			    uint32_t hw_irq_number, bool alloc, bool owner,
+			    irq_type_t type)
 {
 	error_t ret;
 
@@ -828,7 +859,7 @@ irq_manager_vm_hwirq_map_internal(const vm_t *vm, uint32_t irq_number,
 			goto out;
 		}
 		assert(irq_map->irq_number == INVALID_IRQ);
-		assert(irq_map->type == IRQ_TYPE_HW);
+		assert(irq_map->type == type);
 	} else {
 		irq_map = calloc(1, sizeof(*irq_map));
 		if (irq_map == NULL) {
@@ -857,7 +888,7 @@ irq_manager_vm_hwirq_map_internal(const vm_t *vm, uint32_t irq_number,
 		goto out;
 	}
 
-	irq_map->type	    = IRQ_TYPE_HW;
+	irq_map->type	    = type;
 	irq_map->irq_number = hw_irq_number;
 	irq_map->state	    = IRQ_MAP_STATE_BOUND;
 
@@ -877,13 +908,25 @@ error_t
 irq_manager_vm_hwirq_map(const vm_t *vm, uint32_t irq_number,
 			 uint32_t hw_irq_number, bool alloc)
 {
-	return irq_manager_vm_hwirq_map_internal(vm, irq_number, hw_irq_number,
-						 alloc, true);
+	return irq_manager_vm_map_internal(vm, irq_number, hw_irq_number, alloc,
+					   true, IRQ_TYPE_HW);
 }
 
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+error_t
+irq_manager_vm_devirq_map(const vm_t *vm, uint32_t irq_number,
+			  uint32_t hw_irq_number, bool alloc, bool owner)
+{
+	return irq_manager_vm_map_internal(vm, irq_number, hw_irq_number, alloc,
+					   owner, IRQ_TYPE_DEV);
+}
+#endif
+
+// Can be used for both IRQ_TYPE_HW and IRQ_TYPE_DEVIRQ due to the similar
+// semantics. IRQ_TYPE_VIRQ is handled by irq_manager_vm_virq_unmap.
 static error_t
-irq_manager_vm_hwirq_unmap_internal(const vm_t *vm, uint32_t irq_number,
-				    bool free_irq, bool owner)
+irq_manager_vm_unmap_internal(const vm_t *vm, uint32_t irq_number,
+			      bool free_irq, bool owner, irq_type_t type)
 {
 	error_t ret;
 
@@ -891,6 +934,11 @@ irq_manager_vm_hwirq_unmap_internal(const vm_t *vm, uint32_t irq_number,
 	assert(vm->irq_manager != NULL);
 	assert(vm->irq_manager->irq_mappings_dict != NULL);
 	assert(hwirq_owners_dict != NULL);
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	assert((type == IRQ_TYPE_HW) || (type == IRQ_TYPE_DEV));
+#else
+	assert(type == IRQ_TYPE_HW);
+#endif
 
 	irq_mapping_info_t *irq_map;
 
@@ -900,7 +948,7 @@ irq_manager_vm_hwirq_unmap_internal(const vm_t *vm, uint32_t irq_number,
 		goto out;
 	}
 	if ((irq_map->state != IRQ_MAP_STATE_BOUND) ||
-	    (irq_map->type != IRQ_TYPE_HW)) {
+	    (irq_map->type != type)) {
 		ret = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
@@ -933,7 +981,7 @@ irq_manager_vm_hwirq_unmap_internal(const vm_t *vm, uint32_t irq_number,
 		assert(ret == OK);
 		free(irq_map);
 	} else {
-		irq_map->type	    = IRQ_TYPE_HW;
+		irq_map->type	    = type;
 		irq_map->irq_number = INVALID_IRQ;
 		irq_map->state	    = IRQ_MAP_STATE_RESERVED;
 	}
@@ -946,9 +994,19 @@ out:
 error_t
 irq_manager_vm_hwirq_unmap(const vm_t *vm, uint32_t irq_number, bool free_irq)
 {
-	return irq_manager_vm_hwirq_unmap_internal(vm, irq_number, free_irq,
-						   true);
+	return irq_manager_vm_unmap_internal(vm, irq_number, free_irq, true,
+					     IRQ_TYPE_HW);
 }
+
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+error_t
+irq_manager_vm_devirq_unmap(const vm_t *vm, uint32_t irq_number, bool free_irq,
+			    bool owner)
+{
+	return irq_manager_vm_unmap_internal(vm, irq_number, free_irq, owner,
+					     IRQ_TYPE_DEV);
+}
+#endif
 
 error_t
 irq_manager_vm_virq_map(const vm_t *vm, uint32_t irq_number, bool alloc)
@@ -958,6 +1016,11 @@ irq_manager_vm_virq_map(const vm_t *vm, uint32_t irq_number, bool alloc)
 	assert(vm != NULL);
 	assert(vm->irq_manager != NULL);
 	assert(vm->irq_manager->irq_mappings_dict != NULL);
+
+	if ((irq_number & VIRQ_SDEI_BIT) != 0U) {
+		ret = OK;
+		goto out;
+	}
 
 	// VIRQs can only be global for now
 	if (!arch_irq_global_valid(irq_number)) {
@@ -1016,6 +1079,11 @@ irq_manager_vm_virq_unmap(const vm_t *vm, uint32_t irq_number, bool free_irq)
 	assert(vm != NULL);
 	assert(vm->irq_manager != NULL);
 	assert(vm->irq_manager->irq_mappings_dict != NULL);
+
+	if ((irq_number & VIRQ_SDEI_BIT) != 0U) {
+		ret = OK;
+		goto out;
+	}
 
 	// VIRQs can only be global for now
 	if (!arch_irq_global_valid(irq_number)) {
@@ -1420,15 +1488,15 @@ irq_manager_handle_accept(vmid_t client_id, uint16_t seq_num, void *buf,
 	assert(lend_info->handle == handle);
 
 	if (alloc) {
-		// FIXME:
+		// FIXME: QC RM issue #35
 		// We allocate 1:1 IRQ number so trusted VMs can validate the
 		// IRQs they received. This should ideally only be done for
 		// trusted/protected VMs until we have a separate IRQ validate
 		// API.
 		dst_irq = hw_irq_num;
 	}
-	error_t ret = irq_manager_vm_hwirq_map_internal(vm, dst_irq, hw_irq_num,
-							true, false);
+	error_t ret = irq_manager_vm_map_internal(vm, dst_irq, hw_irq_num, true,
+						  false, IRQ_TYPE_HW);
 	if (ret != OK) {
 		if (ret == ERROR_NOMEM) {
 			err = RM_ERROR_NOMEM;
@@ -1502,8 +1570,8 @@ irq_manager_handle_release(vmid_t client_id, uint16_t seq_num, void *buf,
 	assert(lend_info->borrower_irq_number != INVALID_IRQ);
 	irq_num = lend_info->borrower_irq_number;
 
-	error_t ret =
-		irq_manager_vm_hwirq_unmap_internal(vm, irq_num, true, false);
+	error_t ret = irq_manager_vm_unmap_internal(vm, irq_num, true, false,
+						    IRQ_TYPE_HW);
 	if (ret != OK) {
 		err = RM_ERROR_ARGUMENT_INVALID;
 		goto out_err;
@@ -1649,7 +1717,7 @@ irq_manager_check_release_global_irq(const vm_t *vm, uint32_t hw_irq_number,
 	assert(lend_state == IRQ_LEND_STATE_ACCEPTED);
 #endif
 
-	ret = irq_manager_vm_hwirq_unmap_internal(vm, irq, true, false);
+	ret = irq_manager_vm_unmap_internal(vm, irq, true, false, IRQ_TYPE_HW);
 	assert(ret == OK);
 
 	// Release the IRQ and reset borrower as the VM is reset
@@ -1784,8 +1852,8 @@ irq_manager_vm_restricted_lend(const vm_t *vm, uint32_t irq_number,
 	}
 	assert(ret == OK);
 
-	ret = irq_manager_vm_hwirq_map_internal(vm, irq_number, hw_irq_number,
-						true, false);
+	ret = irq_manager_vm_map_internal(vm, irq_number, hw_irq_number, true,
+					  false, IRQ_TYPE_HW);
 	if (ret == ERROR_NOMEM) {
 		error_t err =
 			dict_remove(hwirq_lending_dict, hw_irq_number, NULL);
@@ -1925,8 +1993,8 @@ irq_manager_vm_static_lend(const vm_t *vm, uint32_t irq_number,
 	}
 	assert(ret == OK);
 
-	ret = irq_manager_vm_hwirq_map_internal(vm, irq_number, hw_irq_number,
-						true, false);
+	ret = irq_manager_vm_map_internal(vm, irq_number, hw_irq_number, true,
+					  false, IRQ_TYPE_HW);
 	if (ret == ERROR_NOMEM) {
 		error_t err =
 			dict_remove(hwirq_lending_dict, hw_irq_number, NULL);
@@ -2006,6 +2074,11 @@ vm_reset_handle_release_irqs(vmid_t vmid)
 			// Currently no VIRQ lending support
 			assert(irq_map->state == IRQ_MAP_STATE_BOUND);
 			break;
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+		case IRQ_TYPE_DEV:
+			// Device IRQs are released by the device manager
+			break;
+#endif
 		default:
 			panic("unimplemented");
 		}

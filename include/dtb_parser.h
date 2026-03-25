@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -16,7 +16,8 @@ RM_PADDED(typedef struct ctx_s {
 	count_t child_addr_cells;
 	count_t child_size_cells;
 	bool	child_addr_is_phys;
-	bool	child_cells_default;
+	bool	child_addr_cells_default;
+	bool	child_size_cells_default;
 	char   *parent_path;
 	char   *node_path;
 } ctx_t)
@@ -38,36 +39,16 @@ typedef enum {
 typedef listener_return_t (*action_t)(dtb_parser_data_t *data, const void *fdt,
 				      int node_ofs, const ctx_t *ctx);
 
-struct dtb_parser_alloc_params_s;
-typedef struct dtb_parser_alloc_params_s dtb_parser_alloc_params_t;
-typedef dtb_parser_data_t *(*dtb_parser_data_alloc_t)(
-	const dtb_parser_alloc_params_t *params);
-
-typedef void (*dtb_parser_data_free_t)(dtb_parser_data_t *data);
-
 typedef struct dtb_listener_s dtb_listener_t;
 
 struct dtb_parser_ops_s {
-	dtb_parser_data_alloc_t alloc;
-
 	dtb_listener_t *listeners;
-
-	size_t listener_cnt;
-
-	dtb_parser_data_free_t free;
+	size_t		listener_cnt;
 };
 
-RM_PADDED(typedef struct {
-	error_t		   err;
-	dtb_parser_data_t *r;
-} dtb_parser_parse_dtb_ret_t)
-
-dtb_parser_parse_dtb_ret_t
-dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
-		     const dtb_parser_alloc_params_t *params);
-
 error_t
-dtb_parser_free(const dtb_parser_ops_t *ops, dtb_parser_data_t *data);
+dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
+		     dtb_parser_data_t *data, bool tainted_source);
 
 // utilities
 

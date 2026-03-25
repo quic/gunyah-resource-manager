@@ -302,14 +302,15 @@ gunyah_hyp_vcpu_set_affinity(cap_id_t cap_id, uint64_t arg1,
 error_t
 gunyah_hyp_cspace_attach_thread(cap_id_t cspace, cap_id_t thread);
 
-typedef struct gunyah_hyp_trace_update_class_flags_result {
+typedef struct gunyah_hyp_trace_configure_result {
 	error_t _Alignas(register_t) error;
 	uint8_t _pad0[4]; // Pad for struct static zero initialization
-	uint64_t _Alignas(register_t) flags;
-} gunyah_hyp_trace_update_class_flags_result_t;
+	uint64_t _Alignas(register_t) ret;
+} gunyah_hyp_trace_configure_result_t;
 
-gunyah_hyp_trace_update_class_flags_result_t
-gunyah_hyp_trace_update_class_flags(uint64_t set_flags, uint64_t clear_flags);
+gunyah_hyp_trace_configure_result_t
+gunyah_hyp_trace_configure(uint64_t arg1, uint64_t arg2,
+			   trace_configure_parameter_t param);
 
 error_t
 gunyah_hyp_watchdog_attach_vcpu(cap_id_t watchdog, cap_id_t vcpu);
@@ -354,10 +355,11 @@ gunyah_hyp_partition_create_virtio_backend(cap_id_t src_partition,
 					   cap_id_t cspace);
 
 error_t
-gunyah_hyp_virtio_mmio_configure(cap_id_t virtio_backend, cap_id_t memextent,
-				 count_t		       vqs_num,
-				 virtio_backend_option_flags_t flags,
-				 virtio_device_type_t	       device_type);
+gunyah_hyp_virtio_backend_configure(cap_id_t virtio_backend, cap_id_t memextent,
+				    count_t			    vqs_num,
+				    virtio_backend_option_flags_t   flags,
+				    virtio_backend_interface_type_t type,
+				    virtio_backend_memextent_layout_t me_layout);
 
 error_t
 gunyah_hyp_virtio_mmio_frontend_bind_virq(cap_id_t virtio_backend, cap_id_t vic,
@@ -375,7 +377,8 @@ gunyah_hyp_virtio_backend_unbind_virq(cap_id_t virtio_backend);
 
 error_t
 gunyah_hyp_virtio_backend_notify(cap_id_t virtio_backend,
-				 uint32_t interrupt_status);
+				 virtio_backend_notify_status_t interrupt_status,
+				 virtio_backend_notify_flags_t flags);
 
 error_t
 gunyah_hyp_virtio_backend_set_dev_features(cap_id_t virtio_backend,
@@ -432,7 +435,8 @@ gunyah_hyp_virtio_backend_update_status(cap_id_t	virtio_backend,
 					virtio_status_t status);
 
 error_t
-gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source);
+gunyah_hyp_vic_bind_msi_source(cap_id_t vic, cap_id_t msi_source,
+			       vic_msi_source_config_t source_config);
 
 typedef struct gunyah_hyp_prng_get_entropy_result {
 	error_t _Alignas(register_t) error;
@@ -480,6 +484,15 @@ gunyah_hyp_vcpu_bind_virq(cap_id_t vcpu, cap_id_t vic, virq_t virq,
 
 error_t
 gunyah_hyp_vcpu_unbind_virq(cap_id_t vcpu, vcpu_virq_type_t virq_type);
+
+error_t
+gunyah_hyp_virtio_input_configure(cap_id_t virtio_backend, uint64_t devids,
+				  uint32_t prop_bits, uint32_t num_evtypes,
+				  uint32_t num_absaxes);
+
+error_t
+gunyah_hyp_virtio_input_set_data(cap_id_t virtio_backend, uint32_t sel,
+				 uint32_t subsel, uint32_t size, vmaddr_t data);
 
 error_t
 gunyah_hyp_addrspace_configure_range(cap_id_t addrspace, vmaddr_t vbase,
@@ -570,3 +583,199 @@ gunyah_hyp_addrspace_info_area_add_entry_result_t
 gunyah_hyp_addrspace_info_area_add_entry(
 	cap_id_t addrspace, addrspace_info_area_entry_type_t type,
 	user_ptr_t data, addrspace_info_area_entry_data_info_t data_info);
+
+typedef struct gunyah_hyp_partition_create_vpci_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_vpci_result_t;
+
+gunyah_hyp_partition_create_vpci_result_t
+gunyah_hyp_partition_create_vpci(cap_id_t src_partition, cap_id_t cspace);
+
+error_t
+gunyah_hyp_vpci_configure(cap_id_t vpci, cap_id_t aspace, cap_id_t vic,
+			  vpci_aperture_t     cam_aperture,
+			  vpci_aperture_t     npmem_aperture,
+			  vpci_aperture_t     pmem_aperture,
+			  vpci_aperture_t     io_aperture,
+			  vpci_option_flags_t options);
+
+typedef struct gunyah_hyp_vpci_attach_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	index_t _Alignas(register_t) slot_index;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+} gunyah_hyp_vpci_attach_result_t;
+
+gunyah_hyp_vpci_attach_result_t
+gunyah_hyp_vpci_attach(cap_id_t vpci, index_t slot_index, cap_id_t device);
+
+error_t
+gunyah_hyp_vpm_group_wakeup(cap_id_t vpm_group);
+
+error_t
+gunyah_hyp_power_system_suspend(cap_id_t system_power);
+
+typedef struct gunyah_hyp_partition_create_vgic_its_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_vgic_its_result_t;
+
+gunyah_hyp_partition_create_vgic_its_result_t
+gunyah_hyp_partition_create_vgic_its(cap_id_t src_partition, cap_id_t cspace);
+
+error_t
+gunyah_hyp_vgic_its_bind_devices(cap_id_t vgic_its_cap, cap_id_t its_cap,
+				 vgic_device_id_t device_id_start,
+				 count_t	  device_count);
+
+typedef struct gunyah_hyp_vgic_its_unbind_devices_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	count_t _Alignas(register_t) count;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+} gunyah_hyp_vgic_its_unbind_devices_result_t;
+
+gunyah_hyp_vgic_its_unbind_devices_result_t
+gunyah_hyp_vgic_its_unbind_devices(cap_id_t	    vgic_its_cap,
+				   vgic_device_id_t device_id_start,
+				   count_t	    device_count);
+
+error_t
+gunyah_hyp_vpm_group_bind_power(cap_id_t vpm_group, cap_id_t power);
+
+error_t
+gunyah_hyp_partition_donate(partition_donate_flags_t flags,
+			    cap_id_t partition_cap, uint64_t arg2, paddr_t base,
+			    size_t size);
+
+error_t
+gunyah_hyp_partition_query(cap_id_t		   partition_cap,
+			   partition_query_flags_t flags, uint64_t addr,
+			   size_t size, uint64_t arg4);
+
+typedef struct gunyah_hyp_addrspace_info_area_get_entry_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	size_t _Alignas(register_t) size;
+	addrspace_info_area_entry_type_t _Alignas(register_t) type;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+} gunyah_hyp_addrspace_info_area_get_entry_result_t;
+
+gunyah_hyp_addrspace_info_area_get_entry_result_t
+gunyah_hyp_addrspace_info_area_get_entry(addrspace_info_area_entry_type_t type,
+					 user_ptr_t buf, size_t buf_size);
+
+typedef struct gunyah_hyp_partition_create_vsmmuv2_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_vsmmuv2_result_t;
+
+gunyah_hyp_partition_create_vsmmuv2_result_t
+gunyah_hyp_partition_create_vsmmuv2(cap_id_t src_partition, cap_id_t cspace);
+
+typedef struct gunyah_hyp_partition_create_pci_host_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_pci_host_result_t;
+
+gunyah_hyp_partition_create_pci_host_result_t
+gunyah_hyp_partition_create_pci_host(cap_id_t src_partition, cap_id_t cspace);
+
+error_t
+gunyah_hyp_pci_host_configure(cap_id_t pci_host, cap_id_t aspace,
+			      cap_id_t cam_me, vmaddr_t cam_base,
+			      pci_host_option_flags_t options);
+
+error_t
+gunyah_hyp_pci_host_add_aperture(cap_id_t pci_host, cap_id_t mem_me,
+				 vmaddr_t mem_base);
+
+error_t
+gunyah_hyp_pci_host_set_lockdown(cap_id_t		   pci_host,
+				 pci_host_lockdown_state_t lockdown_state);
+
+typedef struct gunyah_hyp_partition_create_pci_function_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_pci_function_result_t;
+
+gunyah_hyp_partition_create_pci_function_result_t
+gunyah_hyp_partition_create_pci_function(cap_id_t src_partition,
+					 cap_id_t cspace);
+
+error_t
+gunyah_hyp_pci_function_configure(cap_id_t pci_function, cap_id_t pci_host,
+				  pci_responder_id_t	      responder_id,
+				  pci_function_option_flags_t options);
+
+typedef struct gunyah_hyp_sdei_get_error_flags_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	sdei_error_flags_t _Alignas(register_t) result;
+} gunyah_hyp_sdei_get_error_flags_result_t;
+
+gunyah_hyp_sdei_get_error_flags_result_t
+gunyah_hyp_sdei_get_error_flags(void);
+
+error_t
+gunyah_hyp_virtio_iommu_configure(cap_id_t virtio_iommu, cap_id_t iommu,
+				  virtio_iommu_options_t options,
+				  cap_id_t		 addrspace);
+
+typedef struct gunyah_hyp_partition_create_virtio_iommu_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	cap_id_t _Alignas(register_t) new_cap;
+} gunyah_hyp_partition_create_virtio_iommu_result_t;
+
+gunyah_hyp_partition_create_virtio_iommu_result_t
+gunyah_hyp_partition_create_virtio_iommu(cap_id_t src_partition,
+					 cap_id_t cspace);
+
+error_t
+gunyah_hyp_vpm_group_set_threshold(cap_id_t vpm_group, uint64_t power_state);
+
+error_t
+gunyah_hyp_power_cpu_suspend(cap_id_t system_power, uint64_t power_state);
+
+error_t
+gunyah_hyp_vcpu_set_local_virq(cap_id_t		      cap_id,
+			       vcpu_local_virq_type_t virq_type, virq_t virq);
+
+error_t
+gunyah_hyp_pci_function_add_capability(cap_id_t pci_function, size_t offset,
+				       size_t			     size,
+				       pci_capability_access_flags_t flags);
+
+error_t
+gunyah_hyp_pci_function_set_passthrough(cap_id_t pci_function, bool enable);
+
+typedef struct gunyah_hyp_viommu_bind_streams_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	count_t _Alignas(register_t) count;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+} gunyah_hyp_viommu_bind_streams_result_t;
+
+gunyah_hyp_viommu_bind_streams_result_t
+gunyah_hyp_viommu_bind_streams(cap_id_t viommu_cap, cap_id_t iommu_cap,
+			       viommu_stream_id_t stream_id_start,
+			       count_t		  stream_count);
+
+typedef struct gunyah_hyp_viommu_unbind_streams_result {
+	error_t _Alignas(register_t) error;
+	uint8_t _pad0[4]; // Pad for struct static zero initialization
+	count_t _Alignas(register_t) count;
+	uint8_t _pad1[4]; // Pad for struct static zero initialization
+} gunyah_hyp_viommu_unbind_streams_result_t;
+
+gunyah_hyp_viommu_unbind_streams_result_t
+gunyah_hyp_viommu_unbind_streams(cap_id_t	    viommu_cap,
+				 viommu_stream_id_t stream_id_start,
+				 count_t	    stream_count);

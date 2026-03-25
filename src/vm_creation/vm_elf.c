@@ -1,4 +1,4 @@
-// © 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -38,6 +38,7 @@ vm_elf_process_ptload_segments(Elf_Ehdr_ptr ehdr, Elf_Phdr_ptr phdrs,
 	// Check all the PT_LOAD segments.
 	index_t segment_count = 0U;
 	bool	relocatable   = false;
+	bool	dt_found      = false;
 	for (index_t i = 0U; i < e_phnum; i++) {
 		// Ignore non-loadable segments.
 		if (!elf_segment_is_loadable(class, phdrs, i)) {
@@ -86,17 +87,21 @@ vm_elf_process_ptload_segments(Elf_Ehdr_ptr ehdr, Elf_Phdr_ptr phdrs,
 		// use cacheable non-secure mapping, flush is need to avoid
 		// incorrect view of memory.
 		cache_flush_by_va((void *)(mem_base + segment_offset), p_memsz);
-		// Check whether the segment contains the DT.
-		uint32_t *first_word = (uint32_t *)(mem_base + segment_offset);
-		if (elf_segment_contains_dt(first_word, single_dtb)) {
-			*dt_offset = segment_offset;
-			*dt_size =
-				elf_get_phdr_field(class, phdrs, i, p_filesz);
+
+		if ((dt_offset != NULL) && !dt_found) {
+			// Check whether the segment contains the DT.
+			uint32_t *first_word =
+				(uint32_t *)(mem_base + segment_offset);
+			if (elf_segment_contains_dt(first_word, single_dtb)) {
+				*dt_offset = segment_offset;
+				*dt_size   = p_memsz;
+				dt_found   = true;
+			}
 		}
 	}
 	*vm_segment_count = segment_count;
 
-	if (*dt_size == 0U) {
+	if ((dt_offset != NULL) && !dt_found) {
 		(void)printf("Error: no DTB segment found\n");
 		goto out;
 	}

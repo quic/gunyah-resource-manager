@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -17,6 +17,7 @@ typedef enum {
 	RSC_WATCHDOG	   = 8,
 	RSC_MEMORY_EXTENT  = 9,
 	RSC_ADDRESS_SPACE  = 10,
+	RSC_HEAP	   = 11,
 } resource_type_t;
 
 typedef uint32_t resource_label_t;

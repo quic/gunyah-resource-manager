@@ -1,0 +1,44 @@
+; © Qualcomm Technologies, Inc. and/or its subsidiaries.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+
+; This script can be used to load Gunyah and Linux into an FVP model. It
+; should be run from a directory containing the Gunyah and Resource Manager
+; build directories, a merged hypvm.elf binary, and an fvp-binaries directory
+; containing the Linux kernel and ramdisk images.
+
+system.down
+
+system.cpu NeoverseV1
+sys.config.corenumber 16.
+core.number 16.
+sys.config.core "css.cluster0.cpu0,css.cluster1.cpu0,css.cluster2.cpu0,css.cluster3.cpu0,css.cluster4.cpu0,css.cluster5.cpu0,css.cluster6.cpu0,css.cluster7.cpu0,css.cluster8.cpu0,css.cluster9.cpu0,css.cluster10.cpu0,css.cluster11.cpu0,css.cluster12.cpu0,css.cluster13.cpu0,css.cluster14.cpu0,css.cluster15.cpu0"
+
+system.up
+break
+
+system.resetout
+wait state.halt() 3s
+
+system.option machinespaces on
+system.option zonespaces on
+
+b.set hx:0:::0xe0000000
+go
+wait !state.run() 10s
+
+data.load.binary fvp-binaries/ramdisk-buildroot.img ahd:0x88000000
+data.load.binary fvp-binaries/Image ahd:0x80000000
+data.load.binary resource-manager/build/fvp-rdv1/debug/dtb/fvp-rdv1-simple.dtb ahd:0xa0000000
+data.load.elf hypvm.elf /physload /codezero
+
+y.reset
+
+data.load.elf hypvm.elf hx:0:::0xFFFFFFD5ffe00000 /nocode /noclear
+data.load.elf gunyah-c-runtime/build/runtime nsx:1:::0xe0480000 /nocode /noclear
+data.load.elf resource-manager/build/fvp-rdv1/debug/resource-manager nsx:1:::0xe048b000 /nocode /noclear
+Data.LOAD.Elf fvp-binaries/vmlinux nsx:2:::0 /NoCODE /NoClear
+
+;do T32Ext/hyp.cmm
+
+go

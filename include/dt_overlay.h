@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -6,7 +6,7 @@
 #define INCLUDE_DT_OVERLAY_H_
 
 // Wrappers for device tree binary overlay creation.
-// This set of APIs are implmeneted based on libfdt library. It supports the
+// This set of APIs are implemented based on libfdt library. It supports the
 // basic operation to add/modify the existing device tree node/property.
 // Most of the API use full path to refer a node/property.
 // Due to the libfdt only support sequential write, the API are defined as a
@@ -141,6 +141,13 @@ dto_property_add_interrupts_array(dto_t *dto, const char *name,
 error_t
 dto_property_ref_external(dto_t *dto, const char *property_name,
 			  const char *target_label);
+
+// Add a fixup for an external reference embedded in a specified property. The
+// property itself is not created by this function. This is useful for map
+// properties, like interrupt-map and msi-map.
+error_t
+dto_fixup_ref_external(dto_t *dto, const char *property_name,
+		       const char *target_label, uint32_t property_offset);
 
 // Just helper utility to ref internal.
 error_t

@@ -1,6 +1,6 @@
 # coding: utf-8
 #
-# © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -15,6 +15,9 @@ env_vars = {
 
 if 'QCOM_LLVM' in os.environ:
     env_vars['QCOM_LLVM'] = os.environ['QCOM_LLVM']
+
+if 'QCOM_DTC' in os.environ:
+    env_vars['QCOM_DTC'] = os.environ['QCOM_DTC']
 
 if 'LLVM' in os.environ:
     env_vars['LLVM'] = os.environ['LLVM']

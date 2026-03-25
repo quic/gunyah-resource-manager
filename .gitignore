@@ -22,3 +22,6 @@
 # Ignore Vim temporary files
 .*.sw[a-p]
 .*.un~
+
+#ignore .cpptest
+/.cpptest

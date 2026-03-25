@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -17,6 +17,9 @@
 #include <utils/vector.h>
 
 #include <compiler.h>
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+#include <device_manager.h>
+#endif
 #include <event.h>
 #include <guest_interface.h>
 #include <irq_manager.h>
@@ -32,6 +35,7 @@
 #include <rm-rpc.h>
 #include <rm_env_data.h>
 #include <uapi/interrupt.h>
+#include <uapi/mem.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
 #include <vm_creation.h>
@@ -54,9 +58,6 @@ static uint64_t secondary_vmids;
 
 // Bitmap of unallocated secondary VMIDs - set bit means VMID is free.
 static uint64_t free_secondary_vmids;
-
-// Bitmap of peripheral VMIDs, which are not controlled by RM.
-static uint64_t peripheral_vmids;
 
 // Bitmap of unallocated dynamic VMIDs, offset by VMID_DYNAMIC_BASE.
 static uint64_t free_dynamic_vmids;
@@ -297,10 +298,24 @@ vm_reset_callback(event_t *event, void *data)
 	case VM_RESET_STAGE_DESTROY_VDEVICES:
 		state_completed = vm_reset_handle_destroy_vdevices(vm);
 		if (state_completed) {
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+			vm->reset_stage = VM_RESET_STAGE_RELEASE_DEVICES;
+#else
+			vm->reset_stage = VM_RESET_STAGE_RELEASE_MEMPARCELS;
+#endif
+		}
+		trigger = true;
+		break;
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	case VM_RESET_STAGE_RELEASE_DEVICES:
+		state_completed = vm_reset_handle_release_devices(vm);
+		if (state_completed) {
 			vm->reset_stage = VM_RESET_STAGE_RELEASE_MEMPARCELS;
 		}
 		trigger = true;
 		break;
+#endif
+
 	case VM_RESET_STAGE_RELEASE_MEMPARCELS:
 		state_completed = vm_reset_handle_release_memparcels(vm->vmid);
 		if (state_completed) {
@@ -451,6 +466,9 @@ vm_mgnt_delete_vm(vmid_t vmid)
 
 	vm_deregister_all_peers(vm);
 	vector_deinit(vm->peers);
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	device_manager_deinit_vm(vm);
+#endif
 	free(vm);
 
 out:
@@ -470,8 +488,6 @@ vm_mgnt_init(void)
 	rm_error_t ret	     = RM_OK;
 	secondary_vmids	     = platform_get_secondary_vmids();
 	free_secondary_vmids = secondary_vmids;
-
-	peripheral_vmids = platform_get_peripheral_vmids();
 
 	free_dynamic_vmids = util_mask(VMID_DYNAMIC_END - VMID_DYNAMIC_BASE);
 
@@ -526,7 +542,7 @@ vm_is_secondary_vm(vmid_t vmid)
 bool
 vm_is_peripheral_vm(vmid_t vmid)
 {
-	return (vmid < 64U) && ((peripheral_vmids & util_bit(vmid)) != 0U);
+	return platform_is_peripheral_vm(vmid);
 }
 
 bool
@@ -535,6 +551,14 @@ vm_is_dynamic_vm(vmid_t vmid)
 	return (vmid >= VMID_DYNAMIC_BASE) && (vmid < VMID_DYNAMIC_END) &&
 	       ((free_dynamic_vmids & util_bit(vmid - VMID_DYNAMIC_BASE)) ==
 		0U);
+}
+
+bool
+vmid_valid(vmid_t vmid)
+{
+	return (vmid == VMID_HLOS) || (vmid == VMID_RM) ||
+	       vm_is_secondary_vm(vmid) || vm_is_peripheral_vm(vmid) ||
+	       vm_is_dynamic_vm(vmid);
 }
 
 static bool
@@ -749,6 +773,10 @@ vm_mgnt_handle_start(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out_state_change;
 	}
 
+	// The initial default value indicates a clean shutdown.
+	// Set to false at the end of the VM start.
+	vm->clean_shutdown = false;
+
 	ret = RM_OK;
 
 out_state_change:
@@ -789,16 +817,6 @@ vm_mgnt_handle_stop(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 	    vm->no_shutdown) {
 		ret = RM_ERROR_VM_STATE;
 		goto out;
-	}
-
-	if (vm->vm_config->watchdog != CSPACE_CAP_INVALID) {
-		// Freeze the watchdog to prevent a bark if the VM is
-		// proxy-scheduled.
-		error_t e = gunyah_hyp_watchdog_manage(
-			vm->vm_config->watchdog, WATCHDOG_MANAGE_OP_FREEZE);
-		if (e != OK) {
-			panic("Hyp watchdog failed\n");
-		}
 	}
 
 	uint8_t flags = buf8[2];
@@ -1753,8 +1771,7 @@ vm_mgnt_handle_set_time_base(vmid_t client_id, uint32_t msg_id,
 			     uint16_t seq_num, void *buf, size_t len)
 {
 	vmid_t	   vmid;
-	rm_error_t ret	   = RM_ERROR_MSG_INVALID;
-	error_t	   hvc_err = ERROR_ARGUMENT_INVALID;
+	rm_error_t ret = RM_ERROR_MSG_INVALID;
 
 	if (len == 20U) {
 		uint16_t *buf16 = (uint16_t *)buf;
@@ -1785,21 +1802,13 @@ vm_mgnt_handle_set_time_base(vmid_t client_id, uint32_t msg_id,
 		uint64_t sys_timer_ref = ((uint64_t)buf32[4] << 32) |
 					 (uint64_t)buf32[3];
 
-		hvc_err = vm_config_vrtc_set_time_base(vm, time_base,
-						       sys_timer_ref);
-		if (hvc_err == OK) {
-			ret = RM_OK;
-		} else {
-			ret = RM_ERROR_ARGUMENT_INVALID;
-		}
+		const error_t hvc_err = vm_config_vrtc_set_time_base(
+			vm, time_base, sys_timer_ref);
+		ret = rm_error_from_hyp(hvc_err);
 	}
 
 out:
-	if (ret == RM_OK) {
-		rm_standard_reply(client_id, msg_id, seq_num, ret);
-	} else {
-		rm_reply_error(client_id, msg_id, seq_num, ret, &hvc_err, 4);
-	}
+	rm_standard_reply(client_id, msg_id, seq_num, ret);
 }
 
 static void
@@ -1875,7 +1884,7 @@ vm_mgnt_handle_set_debug(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 		goto out;
 	}
 
-	if (platform_get_security_state()) {
+	if (platform_is_in_secure_state()) {
 		ret = RM_ERROR_DENIED;
 		goto out;
 	}

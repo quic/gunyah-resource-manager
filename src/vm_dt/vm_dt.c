@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -30,6 +30,7 @@
 #include <dt_overlay.h>
 #include <event.h>
 #include <guest_interface.h>
+#include <log.h>
 #include <mem_region.h>
 #include <memextent.h>
 #include <memparcel.h>
@@ -41,120 +42,93 @@
 #include <resource-manager.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
+#include <vgic.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
+#include <vm_creation_dt.h>
 #include <vm_dt.h>
 #include <vm_memory.h>
 #include <vm_mgnt.h>
 
-#if defined(PLATFORM_QCOM_WDT_VREG_HLOS) && PLATFORM_QCOM_WDT_VREG_HLOS
-static error_t
-vm_dt_add_wdt_vreg(dto_t *dto, const struct vdevice_watchdog *wdt,
-		   char (*wdt_node_name)[23], uint32_t	      wdt_addr)
-{
-	error_t err;
-
-	int32_t snprintf_ret = snprintf(*wdt_node_name, sizeof(*wdt_node_name),
-					"/soc/qcom,wdt@%08x", wdt_addr);
-
-	if ((snprintf_ret < 0) ||
-	    (snprintf_ret >= (int32_t)sizeof(*wdt_node_name))) {
-		err = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
-
-	CHECK_DTO(err, dto_modify_begin_by_path(dto, *wdt_node_name));
-	uint32_t wdt_reg[2] = { wdt_addr, PAGE_SIZE };
-	CHECK_DTO(err, dto_property_add_u32array(dto, "reg", wdt_reg, 2));
-	CHECK_DTO(err, dto_property_add_string(dto, "reg-names", "wdt-base"));
-	CHECK_DTO(err, dto_property_add_interrupts_array(dto, "interrupts",
-							 &wdt->bark_virq, 1));
-	CHECK_DTO(err, dto_modify_end_by_path(dto, *wdt_node_name));
-
-	err = OK;
-out:
-	return err;
-}
+#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT &&                         \
+	defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG
+#error Invalid watchdog configuration
 #endif
 
-#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
+#if !(defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG)
 static error_t
-vm_dt_add_sbsa_wdt(dto_t *dto, const struct vdevice_watchdog *wdt,
-		   char (*wdt_node_name)[23], uint32_t	      wdt_addr)
+vm_dt_disable_vreg_wdt(dto_t *dto, const struct vdevice_watchdog *wdt)
 {
 	error_t err;
+	char	wdt_node_name[23];
+	(void)wdt;
 
-	// Add the SBSA watchdog
-	CHECK_DTO(err, dto_modify_begin_by_path(dto, "/soc/"));
-	int32_t snprintf_ret = snprintf(*wdt_node_name, sizeof(*wdt_node_name),
-					"watchdog@%08x", wdt_addr);
-
+	// wdt->base is invalid as current function assumes hlos is not using a
+	// qualcomm watchdog
+	uint32_t wdt_addr     = (uint32_t)rm_get_watchdog_address();
+	int32_t	 snprintf_ret = snprintf(wdt_node_name, sizeof(wdt_node_name),
+					 "/soc/qcom,wdt@%08x", wdt_addr);
 	if ((snprintf_ret < 0) ||
-	    (snprintf_ret >= (int32_t)sizeof(*wdt_node_name))) {
+	    (snprintf_ret >= (int32_t)sizeof(wdt_node_name))) {
 		err = ERROR_ARGUMENT_INVALID;
 		goto out;
 	}
 
-	CHECK_DTO(err, dto_node_begin(dto, *wdt_node_name));
-	const char *wdt_compat[1] = { "arm,sbsa-gwdt" };
-	CHECK_DTO(err, dto_property_add_stringlist(dto, "compatible",
-						   wdt_compat, 1));
-	// Two frames, 4K each, 64K apart
-	uint32_t wdt_reg[4] = { wdt_addr, PAGE_SIZE, wdt_addr + 0x10000U,
-				PAGE_SIZE };
-	CHECK_DTO(err, dto_property_add_u32array(dto, "reg", wdt_reg, 4));
-	CHECK_DTO(err, dto_property_add_interrupts_array(dto, "interrupts",
-							 &wdt->bark_virq, 1));
-	CHECK_DTO(err, dto_node_end(dto, *wdt_node_name));
-	CHECK_DTO(err, dto_modify_end_by_path(dto, "/soc/"));
+	CHECK_DTO(err, dto_modify_begin_by_path(dto, wdt_node_name));
+	const char *pwdt_status[1] = { "disabled" };
+	CHECK_DTO(err,
+		  dto_property_add_stringlist(dto, "status", pwdt_status, 1));
+	CHECK_DTO(err, dto_modify_end_by_path(dto, wdt_node_name));
 
-	err = OK;
 out:
 	return err;
 }
 #endif
 
 static error_t
-vm_dt_create_hlos_wdt(dto_t *dto, const struct vdevice_watchdog *wdt)
+vm_dt_update_hlos_wdt(const vm_t *hlos, dto_t *dto)
 {
-	error_t err;
+	error_t			 err;
+	vdevice_node_t		*node = NULL;
+	struct vdevice_watchdog *wdt  = NULL;
 
-	if (wdt != NULL) {
-		// Patch the existing watchdog node
-		char	 wdt_node_name[23];
-		uint32_t wdt_addr = (uint32_t)rm_get_watchdog_address();
-#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
-		err = vm_dt_add_sbsa_wdt(dto, wdt, &wdt_node_name, wdt_addr);
-		if (err != OK) {
-			goto out;
+	loop_list(node, &hlos->vm_config->vdevice_nodes, vdevice_)
+	{
+		if (node->type == VDEV_WATCHDOG) {
+			wdt = node->config.watchdog;
+			break;
 		}
-#endif
+	}
+	if (wdt == NULL) {
+		err = OK;
+		goto out;
+	}
 
-#if defined(PLATFORM_QCOM_WDT_VREG_HLOS) && PLATFORM_QCOM_WDT_VREG_HLOS
-		// Using virtual register emulation on QCOM watchdog. Patch the
-		// watchdog properties
-		err = vm_dt_add_wdt_vreg(dto, wdt, &wdt_node_name, wdt_addr);
-		if (err != OK) {
-			goto out;
-		}
+#if defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG
+	// If PLATFORM_QCOM_WDT_REG is defined we enforce that HLOS uses qcom
+	// watchdog. But for SVM, smc watchdog or qcom watchdog can be used
+	// either.
+	assert(wdt->type == WATCHDOG_EMULATION_QCOM);
 #else
-		// Using SBSA or QCOM SMC-based watchdog. Disable the existing
-		// watchdog
-		int32_t snprintf_ret = snprintf(wdt_node_name,
-						sizeof(wdt_node_name),
-						"/soc/qcom,wdt@%08x", wdt_addr);
-		if ((snprintf_ret < 0) ||
-		    (snprintf_ret >= (int32_t)sizeof(wdt_node_name))) {
-			err = ERROR_ARGUMENT_INVALID;
-			goto out;
-		}
-
-		CHECK_DTO(err, dto_modify_begin_by_path(dto, wdt_node_name));
-		const char *pwdt_status[1] = { "disabled" };
-		CHECK_DTO(err, dto_property_add_stringlist(dto, "status",
-							   pwdt_status, 1));
-		CHECK_DTO(err, dto_modify_end_by_path(dto, wdt_node_name));
+	// Not using virtual register emulation on QCOM watchdog. Disable it in
+	// case it is present
+	err = vm_dt_disable_vreg_wdt(dto, wdt);
+	if (err != OK) {
+		goto out;
+	}
 #endif
+
+	assert(wdt->node_path != NULL);
+
+	if (wdt->type == WATCHDOG_SMC_BASED) {
+		// For the emulated watchdog, as we don't parse HLOS DT, we
+		// assume that the emulated watchdog always have property
+		// "interrupts" and "reg". For the SMC based watchdog, we
+		// always patch the IRQ in the HLOS devicetree.
+		CHECK_DTO(err, dto_modify_begin_by_path(dto, wdt->node_path));
+		CHECK_DTO(err, dto_property_add_interrupts_array(
+				       dto, "interrupts", &wdt->bark_virq, 1));
+		CHECK_DTO(err, dto_modify_end_by_path(dto, wdt->node_path));
 	}
 
 	err = OK;
@@ -162,7 +136,7 @@ out:
 	return err;
 }
 
-#if defined(CONFIG_TZ_RM_LOG) && !defined(PLATFORM_DISABLE_TZ_DT_PATCH)
+#if defined(CONFIG_TZ_RM_LOG)
 static error_t
 vm_dt_map_rm_logs(dto_t *dto, vmaddr_t log_ipa, size_t log_size)
 {
@@ -263,15 +237,16 @@ vm_dt_generate_rm_rpc_node(dto_t *dto, const vdevice_node_t *node,
 	}
 
 	CHECK_DTO(err, dto_node_begin(dto, node_name));
-	const char *rpc_compat[8];
-	count_t	    i = 0;
-	for (index_t j = 0; j < node->push_compatible_num; j++) {
-		rpc_compat[i] = node->push_compatible[j];
-		i++;
-	}
 
-	CHECK_DTO(err, dto_property_add_stringlist(dto, "compatible",
-						   rpc_compat, i));
+	const char *rpc_compat[VDEVICE_MAX_PUSH_COMPATIBLES];
+
+	assert(node->push_compatible_num <= VDEVICE_MAX_PUSH_COMPATIBLES);
+	for (index_t j = 0; j < node->push_compatible_num; j++) {
+		rpc_compat[j] = node->push_compatible[j];
+	}
+	CHECK_DTO(err,
+		  dto_property_add_stringlist(dto, "compatible", rpc_compat,
+					      node->push_compatible_num));
 
 	uint64_t reg[2] = { msgq_pair->tx_vm_cap, msgq_pair->rx_vm_cap };
 	CHECK_DTO(err, dto_property_add_u64array(dto, "reg", reg, 2));
@@ -327,47 +302,6 @@ typedef struct {
 	uint8_t			 pad[4];
 } vm_dt_wdt_info;
 
-static vm_dt_wdt_info
-vm_dt_find_watchdog_node(const vm_t *hlos, dto_t *dto)
-{
-	error_t			 err  = OK;
-	vdevice_node_t		*node = NULL;
-	struct vdevice_watchdog *wdt  = NULL;
-
-	loop_list(node, &hlos->vm_config->vdevice_nodes, vdevice_)
-	{
-		if (node->type == VDEV_WATCHDOG) {
-			wdt = node->config.watchdog;
-			break;
-		}
-	}
-
-#if (!defined(PLATFORM_SBSA_WDT) || !PLATFORM_SBSA_WDT) &&                     \
-	(!defined(PLATFORM_QCOM_WDT_VREG_HLOS) ||                              \
-	 !PLATFORM_QCOM_WDT_VREG_HLOS)
-	if (wdt != NULL) {
-		// Using QCOM SMSC-based watchdog
-		// Insert the watchdog node into the device tree
-		CHECK_DTO(err, dto_node_begin(dto, "qcom,gh-watchdog"));
-		const char *wdt_compat[1] = { "qcom,gh-watchdog" };
-		CHECK_DTO(err, dto_property_add_stringlist(dto, "compatible",
-							   wdt_compat, 1));
-		CHECK_DTO(err, dto_property_add_interrupts_array(
-				       dto, "interrupts", &wdt->bark_virq, 1));
-		CHECK_DTO(err, dto_node_end(dto, "qcom,gh-watchdog"));
-	}
-
-out:
-#else
-	(void)dto;
-#endif
-
-	return (vm_dt_wdt_info){
-		.err = err,
-		.wdt = wdt,
-	};
-}
-
 static error_t
 vm_dt_generate_root_properties(dto_t *dto)
 {
@@ -394,37 +328,16 @@ out:
 	return err;
 }
 
-typedef struct {
-	struct vdevice_watchdog *wdt;
-	vm_t			*hlos;
-	error_t			 err;
-	uint8_t			 pad[4];
-} vm_dt_hyp_info;
-
-static vm_dt_hyp_info
-vm_dt_create_hlos_hypervisor_node(dto_t *dto)
+static error_t
+vm_dt_create_hlos_hypervisor_node(vm_t *hlos, dto_t *dto)
 {
-	error_t			 err  = OK;
-	vm_t			*hlos = NULL;
-	struct vdevice_watchdog *wdt  = NULL;
+	error_t err = OK;
 
 	CHECK_DTO(err, dto_modify_begin_by_path(dto, "/"));
 
 	CHECK_DTO(err, dto_node_begin(dto, "hypervisor"));
 
 	err = vm_dt_generate_root_properties(dto);
-	if (err != OK) {
-		goto out;
-	}
-
-	hlos = vm_lookup(VMID_HLOS);
-	assert(hlos != NULL);
-	assert(hlos->vm_config != NULL);
-
-	// Find the watchdog node
-	vm_dt_wdt_info wdt_info = vm_dt_find_watchdog_node(hlos, dto);
-	err			= wdt_info.err;
-	wdt			= wdt_info.wdt;
 	if (err != OK) {
 		goto out;
 	}
@@ -439,11 +352,7 @@ vm_dt_create_hlos_hypervisor_node(dto_t *dto)
 	CHECK_DTO(err, dto_modify_end_by_path(dto, "/"));
 
 out:
-	return (vm_dt_hyp_info){
-		.hlos = hlos,
-		.wdt  = wdt,
-		.err  = err,
-	};
+	return err;
 }
 
 vm_dt_create_hlos_ret_t
@@ -458,11 +367,16 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 		goto out;
 	}
 
-	vm_dt_hyp_info hyp_info	     = vm_dt_create_hlos_hypervisor_node(dto);
-	vm_t	      *hlos	     = hyp_info.hlos;
-	struct vdevice_watchdog *wdt = hyp_info.wdt;
-	ret.err			     = hyp_info.err;
-	if (ret.err != OK) {
+	vm_t *hlos = vm_lookup(VMID_HLOS);
+	assert(hlos != NULL);
+	assert(hlos->vm_config != NULL);
+
+	// First, generate a minimal overlay to create /hypervisor. Note that
+	// the UEFI RM RPC driver requires this overlay to be applicable to an
+	// empty tree, so it must not refer to any other nodes.
+	e = vm_dt_create_hlos_hypervisor_node(hlos, dto);
+	if (e != OK) {
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
 		goto out;
 	}
 
@@ -479,10 +393,39 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 	ret.num_dtbos++;
 #endif // PLATFORM_HLOS_SPLIT_DTBO
 
+	// Register a dummy context for the root node, with impossible cell
+	// counts to ensure we never accidentally use them (since we don't know
+	// the real counts, and assuming values may break the patched DT).
+	e = dto_register_path_ctx(dto, "/", UINT32_MAX, UINT32_MAX, true);
+	if (e != OK) {
+		LOG_ERR(e);
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
+		goto out;
+	}
+
+	// If we're generating replacements for any nodes in the base DT, we
+	// need to patch those nodes to change their phandles first, so that
+	// the patch process doesn't get confused by the duplicate phandles in
+	// the replacement nodes.
+	e = vm_creation_replace_symbols(hlos, dto);
+	if (e != OK) {
+		LOG_ERR(e);
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
+		goto out;
+	}
+
+	// Generate the /vsoc node and its contents.
+	e = vm_creation_patch_vsoc_devices(hlos, dto);
+	if (e != OK) {
+		LOG_ERR(e);
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
+		goto out;
+	}
+
 	// If the RM log is exposed to HLOS, and the TZ log driver has a
 	// DT node, patch the node to add the RM log address.
-#if defined(CONFIG_TZ_RM_LOG) && !defined(PLATFORM_DISABLE_TZ_DT_PATCH)
-	if (!platform_get_security_state() && (log_size != 0U)) {
+#if defined(CONFIG_TZ_RM_LOG)
+	if (!platform_is_in_secure_state() && (log_size != 0U)) {
 		ret.err = vm_dt_map_rm_logs(dto, log_ipa, log_size);
 		if (ret.err != OK) {
 			goto out;
@@ -493,20 +436,27 @@ vm_dt_create_hlos(void *base, size_t size, vmaddr_t log_ipa, size_t log_size)
 	(void)log_size;
 #endif
 
-	ret.err = vm_dt_create_hlos_wdt(dto, wdt);
-	if (ret.err != OK) {
+	e = vm_dt_update_hlos_wdt(hlos, dto);
+	if (e != OK) {
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
+		goto out;
+	}
+
+	e = vgic_dto_finalise(dto, hlos);
+	if (e != OK) {
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
 		goto out;
 	}
 
 	e = platform_dto_finalise(dto, hlos, base);
 	if (e != OK) {
-		ret.err = ERROR_NOMEM;
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
 		goto out;
 	}
 
 	e = dto_finalise(dto);
 	if (e != OK) {
-		ret.err = ERROR_NOMEM;
+		ret = (vm_dt_create_hlos_ret_t){ .err = e };
 		goto out;
 	}
 
@@ -523,12 +473,12 @@ out:
 }
 
 error_t
-vm_dt_apply_hlos_overlay(vm_t *hlos_vm, paddr_t hlos_dtb, size_t dtb_size)
+vm_dt_apply_hlos_overlay(vm_t *hlos_vm)
 {
 	error_t err = OK;
 
-	paddr_t		orig_dtb_addr = hlos_dtb;
-	size_t		dtb_region_size;
+	paddr_t orig_dtb_addr = hlos_vm->mem_base + hlos_vm->image_dt_offset;
+	size_t	dtb_region_size;
 	cap_id_result_t cap_ret;
 	cap_id_t	vm_me;
 	void	       *dtb_process_buf;
@@ -536,7 +486,7 @@ vm_dt_apply_hlos_overlay(vm_t *hlos_vm, paddr_t hlos_dtb, size_t dtb_size)
 
 	vm_me = vm_memory_get_owned_extent(hlos_vm, MEM_TYPE_NORMAL);
 
-	dtb_region_size = dtb_size;
+	dtb_region_size = hlos_vm->image_dt_size;
 
 	cap_ret.e = memextent_map_partial(vm_me, rm_get_rm_addrspace(),
 					  orig_dtb_addr, orig_dtb_addr,
@@ -607,7 +557,7 @@ vm_dt_apply_hlos_overlay(vm_t *hlos_vm, paddr_t hlos_dtb, size_t dtb_size)
 		      new_dtb_size);
 	cache_clean_by_va((void *)orig_dtb_addr, new_dtb_size);
 
-	hlos_vm->dt_size = new_dtb_size;
+	hlos_vm->image_dt_size = new_dtb_size;
 
 out:
 	if (cap_ret.e == OK) {

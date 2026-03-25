@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -12,11 +12,11 @@
 // and capacity_step_sz in units of items. If capacity_step_sz
 // or min_capacity are zero, defaults are used.
 #define vector_init(type, min_capacity, capacity_step_sz)                      \
-	vector_init_internal((min_capacity), (capacity_step_sz), sizeof(type))
+	vector_init_size((min_capacity), (capacity_step_sz), sizeof(type))
 
 vector_t *
-vector_init_internal(count_t init_capacity, count_t capacity_step_sz,
-		     size_t element_sz);
+vector_init_size(count_t init_capacity, count_t capacity_step_sz,
+		 size_t element_sz);
 
 void
 vector_deinit(vector_t *vector);

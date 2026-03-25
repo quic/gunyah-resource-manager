@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -36,7 +36,6 @@
 
 #define DTB_START_SZ	 (PAGE_SIZE)
 #define DTB_EXPAND_SZ	 (PAGE_SIZE)
-#define DTB_ALIGNMENT	 (PAGE_SIZE)
 #define PWD_SZ		 (MAX_PATH)
 #define FRAGMENT_NAME_SZ (64)
 
@@ -73,13 +72,23 @@ typedef struct local_fixup_node {
 
 } local_fixup_node_t;
 
+// A list for the fixup paths
+typedef struct fixup_path_s {
+	struct fixup_path_s *fixup_path_prev;
+	struct fixup_path_s *fixup_path_next;
+
+	char *who;
+
+} fixup_path_t;
+
 typedef struct fixup_s {
 	struct fixup_s *fixup_prev;
 	struct fixup_s *fixup_next;
 	// referred label
 	char *label;
-	// who refer this label: [full_path:property_name:offset]
-	char *who;
+	// who refers to this label: ["full_path:prop_name:offset\0"[, next\0]]
+	fixup_path_t *fixup_path_list;
+	size_t	      total_len;
 } fixup_t;
 
 typedef struct dto_ctx_s {
@@ -154,7 +163,7 @@ expand(dto_t *dto)
 	size_t expanded_sz = dto->fdt_sz + (size_t)DTB_EXPAND_SZ;
 
 	if (!dto->use_external_memory) {
-		void *expanded_fdt = aligned_alloc(DTB_ALIGNMENT, expanded_sz);
+		void *expanded_fdt = util_alloc_pages(expanded_sz);
 		if (expanded_fdt == NULL) {
 			e = ERROR_NOMEM;
 			goto out;
@@ -162,7 +171,7 @@ expand(dto_t *dto)
 
 		(void)memscpy(expanded_fdt, expanded_sz, dto->fdt, dto->fdt_sz);
 
-		free(dto->fdt);
+		util_free_pages(dto->fdt, dto->fdt_sz);
 
 		dto->fdt    = expanded_fdt;
 		dto->fdt_sz = expanded_sz;
@@ -193,7 +202,7 @@ dto_init(void *external_memory, size_t memory_size, const void *base_fdt)
 	dto->base_fdt = base_fdt;
 
 	if (external_memory == NULL) {
-		dto->fdt = malloc(DTB_START_SZ);
+		dto->fdt = util_alloc_pages(DTB_START_SZ);
 		if (dto->fdt == NULL) {
 			e = ERROR_NOMEM;
 			goto err1;
@@ -247,7 +256,7 @@ dto_init(void *external_memory, size_t memory_size, const void *base_fdt)
 	goto out;
 err1:
 	if (external_memory == NULL) {
-		free(dto->fdt);
+		util_free_pages(dto->fdt, dto->fdt_sz);
 	}
 	free(dto);
 err:
@@ -261,11 +270,6 @@ dto_get_path_ctx(const dto_t *dto, const char *target, ctx_t *context,
 		 bool parent)
 {
 	error_t ret;
-
-	if (dto->base_fdt == NULL) {
-		ret = ERROR_FAILURE;
-		goto out;
-	}
 
 	size_t namelen;
 
@@ -290,14 +294,6 @@ dto_get_path_ctx(const dto_t *dto, const char *target, ctx_t *context,
 		goto out;
 	}
 
-	int path_ofs =
-		fdt_path_offset_namelen(dto->base_fdt, target, (int)namelen);
-	if (path_ofs >= 0) {
-		*context = dtb_parser_get_ctx(dto->base_fdt, path_ofs);
-		ret	 = OK;
-		goto out;
-	}
-
 	dto_ctx_t *curr = NULL;
 	loop_list(curr, &dto->dto_ctx_list, ctx_)
 	{
@@ -306,6 +302,19 @@ dto_get_path_ctx(const dto_t *dto, const char *target, ctx_t *context,
 			ret	 = OK;
 			goto out;
 		}
+	}
+
+	if (dto->base_fdt == NULL) {
+		ret = ERROR_FAILURE;
+		goto out;
+	}
+
+	int path_ofs =
+		fdt_path_offset_namelen(dto->base_fdt, target, (int)namelen);
+	if (path_ofs >= 0) {
+		*context = dtb_parser_get_ctx(dto->base_fdt, path_ofs);
+		ret	 = OK;
+		goto out;
 	}
 
 	ret = ERROR_ARGUMENT_INVALID;
@@ -323,9 +332,21 @@ dto_register_path_ctx(dto_t *dto, const char *target, count_t addr_cells,
 
 	// Get the parent context for the node. The parent must already exist in
 	// the base DTB or be registered for the DTO.
-	ret = dto_get_path_ctx(dto, target, &parent_ctx, true);
-	if (ret != OK) {
-		goto out;
+	if ((strcmp(target, "/") == 0) && (dto->base_fdt == NULL)) {
+		// As a special case, allow the root node to be registered when
+		// no base DTB is available, with dummy values for the fields
+		// taken from the parent (which should never be directly used).
+		parent_ctx = (ctx_t){
+			.child_addr_cells   = UINT32_MAX,
+			.child_size_cells   = UINT32_MAX,
+			.child_addr_is_phys = true,
+		};
+	} else {
+		error_t e = dto_get_path_ctx(dto, target, &parent_ctx, true);
+		if (e != OK) {
+			ret = e;
+			goto out;
+		}
 	}
 
 	// If the parent's children aren't physical, this node's children can't
@@ -358,6 +379,7 @@ dto_register_path_ctx(dto_t *dto, const char *target, count_t addr_cells,
 	dto_ctx->ctx.child_addr_is_phys = addr_is_phys;
 
 	list_append(dto_ctx_t, &dto->dto_ctx_list, dto_ctx, ctx_);
+	ret = OK;
 
 out:
 	return ret;
@@ -779,6 +801,10 @@ dto_property_add_interrupts_array(dto_t *dto, const char *name,
 		const interrupt_data_t *d = &interrupts[i];
 		uint32_t		type, irq, flags;
 
+		if (d->is_sdei) {
+			continue;
+		}
+
 		if (!d->is_cpu_local && (d->irq >= 32U) && (d->irq < 1020U)) {
 			type = DT_GIC_SPI;
 			irq  = d->irq - 32U;
@@ -831,25 +857,53 @@ error_t
 dto_property_ref_external(dto_t *dto, const char *property_name,
 			  const char *target_label)
 {
+	// set target property
+	error_t e = dto_property_add_u32(dto, property_name, 0xFFFFFFFFU);
+	if (e == OK) {
+		e = dto_fixup_ref_external(dto, property_name, target_label,
+					   0U);
+	}
+	return e;
+}
+
+error_t
+dto_fixup_ref_external(dto_t *dto, const char *property_name,
+		       const char *target_label, uint32_t property_offset)
+{
 	error_t e = OK;
 
-	// set target property
-	ASSERT_RUN(fdt_property_u32(dto->fdt, property_name, 0xFFFFFFFFU), e);
-	if (e != OK) {
-		goto out;
+	// This needs to be a string list for duplicate keys.
+	// Values are concatenated C-strings each with a `/0` terminator.
+	// Once packed they are not normal strings anymore, care should be taken
+	// with processing.
+	bool	 new_fixup = true;
+	fixup_t *fixup	   = NULL;
+	fixup_t *cur_fixup = NULL;
+	loop_list(cur_fixup, &dto->fixup_list, fixup_)
+	{
+		if (strncmp(target_label, cur_fixup->label,
+			    strlen(target_label)) == 0) {
+			// Label found add another path to this entry
+			fixup	  = cur_fixup;
+			new_fixup = false;
+			break;
+		}
 	}
 
-	// add entry to fixup
-	fixup_t *fixup = calloc(1, sizeof(*fixup));
+	// If label not found make a new entry;
 	if (fixup == NULL) {
-		e = ERROR_NOMEM;
-		goto out;
-	}
-
-	fixup->label = strdup(target_label);
-	if (fixup->label == NULL) {
-		e = ERROR_NOMEM;
-		goto err1;
+		fixup = calloc(1, sizeof(*fixup));
+		if (fixup == NULL) {
+			e = ERROR_NOMEM;
+			goto out;
+		}
+		fixup->label = strdup(target_label);
+		if (fixup->label == NULL) {
+			e = ERROR_NOMEM;
+			goto err1;
+		}
+		fixup->fixup_path_list = NULL;
+		fixup->total_len       = 0;
 	}
 
 	const size_t who_sz = 256;
@@ -876,24 +930,42 @@ dto_property_ref_external(dto_t *dto, const char *property_name,
 	(void)strlcpy(path, dto->pwd, util_array_size(path));
 	path[len] = '\0';
 
-	int32_t fmt_ret = snprintf(who, who_sz, "%s:%s:0", path, property_name);
+	int32_t fmt_ret = snprintf(who, who_sz, "%s:%s:%d", path, property_name,
+				   property_offset);
+	assert(fmt_ret >= 0);
 
-	if (fmt_ret >= (int32_t)who_sz) {
+	if ((size_t)fmt_ret >= who_sz) {
 		e = ERROR_STRING_REACHED_END;
 		goto err3;
 	}
 
-	fixup->who = who;
+	// Add to list of paths for the label
+	fixup_path_t *fixup_path = calloc(1, sizeof(*fixup_path));
+	if (fixup_path == NULL) {
+		e = ERROR_NOMEM;
+		goto err3;
+	}
 
-	list_append(fixup_t, &dto->fixup_list, fixup, fixup_);
+	fixup_path->who = who;
+	fixup->total_len += (size_t)fmt_ret + 1U; // +1 for terminator '/0'
+	list_append(fixup_path_t, &fixup->fixup_path_list, fixup_path,
+		    fixup_path_);
 
+	if (new_fixup) {
+		// Add to list of labels to fixup
+		list_append(fixup_t, &dto->fixup_list, fixup, fixup_);
+	}
 	goto out;
 err3:
 	free(who);
 err2:
-	free(fixup->label);
+	if (new_fixup) {
+		free(fixup->label);
+	}
 err1:
-	free(fixup);
+	if (new_fixup) {
+		free(fixup);
+	}
 out:
 	return e;
 }
@@ -965,6 +1037,28 @@ free_dto_ctx_list(dto_t *dto)
 	}
 }
 
+static void
+free_dto_fixup(dto_t *dto, fixup_t *fixup)
+{
+	list_remove(fixup_t, &dto->fixup_list, fixup, fixup_);
+	if (fixup->label != NULL) {
+		free(fixup->label);
+	}
+
+	fixup_path_t *fpnext, *fpcur;
+	loop_list_safe(fpcur, fpnext, &fixup->fixup_path_list, fixup_path_)
+	{
+		list_remove(fixup_path_t, &fixup->fixup_path_list, fpcur,
+			    fixup_path_);
+		if (fpcur->who != NULL) {
+			free(fpcur->who);
+		}
+		free(fpcur);
+	}
+
+	free(fixup);
+}
+
 void
 dto_deinit(dto_t *dto)
 {
@@ -972,16 +1066,8 @@ dto_deinit(dto_t *dto)
 	fixup_t *fnext, *fcur;
 	loop_list_safe(fcur, fnext, &dto->fixup_list, fixup_)
 	{
-		list_remove(fixup_t, &dto->fixup_list, fcur, fixup_);
-		if (fcur->label != NULL) {
-			free(fcur->label);
-		}
-
-		if (fcur->who != NULL) {
-			free(fcur->who);
-		}
-
-		free(fcur);
+		// Go through path list and free
+		free_dto_fixup(dto, fcur);
 	}
 
 	// free all local fixups
@@ -992,7 +1078,7 @@ dto_deinit(dto_t *dto)
 
 	if (dto->fdt != NULL) {
 		if (!dto->use_external_memory) {
-			free(dto->fdt);
+			util_free_pages(dto->fdt, dto->fdt_sz);
 		}
 		dto->fdt = NULL;
 	}
@@ -1045,6 +1131,7 @@ gen_fixups_node(dto_t *dto)
 	error_t e = OK;
 
 	static const char *fixups_node_name = "__fixups__";
+
 	ASSERT_RUN(fdt_begin_node(dto->fdt, fixups_node_name), e);
 	if (e != OK) {
 		goto out;
@@ -1055,19 +1142,52 @@ gen_fixups_node(dto_t *dto)
 	fixup_t *cur_fixup = NULL;
 	loop_list(cur_fixup, &dto->fixup_list, fixup_)
 	{
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-		ASSERT_RUN(fdt_property_string(dto->fdt, cur_fixup->label,
-					       cur_fixup->who),
-			   e);
-
-		if (e != OK) {
-			goto err1;
+		char *fixups_node_val = NULL;
+		fixups_node_val	      = malloc(cur_fixup->total_len);
+		if (fixups_node_val == NULL) {
+			e = ERROR_NOMEM;
+			goto out_leave_node;
 		}
-#pragma clang diagnostic pop
+
+		size_t	      offset	     = 0U;
+		fixup_path_t *cur_fixup_path = NULL;
+		loop_list(cur_fixup_path, &cur_fixup->fixup_path_list,
+			  fixup_path_)
+		{
+			// +1 for '/0' terminator
+			size_t len = strnlen(cur_fixup_path->who, 255U) + 1U;
+			if ((len == 0U) || (len == 256U)) {
+				e = ERROR_ARGUMENT_SIZE;
+				goto out_free_fixup;
+			}
+			if ((offset + len) > cur_fixup->total_len) {
+				e = ERROR_ARGUMENT_SIZE;
+				goto out_free_fixup;
+			}
+			offset += memscpy(&fixups_node_val[offset],
+					  cur_fixup->total_len - offset,
+					  cur_fixup_path->who, len);
+		}
+
+		if (cur_fixup->total_len > (size_t)INT32_MAX) {
+			e = ERROR_ARGUMENT_SIZE;
+			goto out_free_fixup;
+		}
+
+		// Cannot use strlen on stringlist. Use fdt_property() instead
+		// of fdt_property_string()
+		ASSERT_RUN(fdt_property(dto->fdt, cur_fixup->label,
+					fixups_node_val,
+					(int32_t)cur_fixup->total_len),
+			   e);
+	out_free_fixup:
+		free(fixups_node_val);
+		if (e != OK) {
+			goto out_leave_node;
+		}
 	}
 
-err1:
+out_leave_node:
 	ASSERT_RUN(fdt_end_node(dto->fdt), e);
 
 	leave_node(dto);

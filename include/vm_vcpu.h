@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -16,7 +16,11 @@ struct vcpu_s {
 	cap_id_t owner_cap;
 	cap_id_t vm_cap;
 
-	uint32_t affinity_index;
+	// Logical VCPU ID derived from its physical address (e.g. MPIDR)
+	index_t address_index;
+
+	// Logical index of the affined physical CPU, if any
+	index_t affinity_index;
 
 	interrupt_data_t proxy_virq;
 

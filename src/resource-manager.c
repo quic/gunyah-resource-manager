@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -16,10 +16,14 @@
 #include <util.h>
 
 #include <compiler.h>
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+#include <device_manager.h>
+#endif
 #include <errno.h>
 #include <event.h>
 #include <exit_dev.h>
 #include <guest_interface.h>
+#include <heap_mgnt.h>
 #include <irq_manager.h>
 #include <log.h>
 #include <mem_region.h>
@@ -95,6 +99,16 @@ msg_callback(vmid_t vm_id, uint32_t msg_id, uint16_t seq_num, uint8_t msg_type,
 	if (!handled) {
 		handled = log_msg_handler(vm_id, msg_id, seq_num, buf, len);
 	}
+	if (!handled) {
+		handled =
+			heap_mgnt_msg_handler(vm_id, msg_id, seq_num, buf, len);
+	}
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	if (!handled) {
+		handled = device_manager_msg_handler(vm_id, msg_id, seq_num,
+						     buf, len);
+	}
+#endif
 
 	if (!handled) {
 		(void)printf("Unhandled request from VM %d, ID: %x\n",
@@ -203,13 +217,18 @@ main(int argc, char *argv[])
 	err = irq_manager_init(priv_env_data);
 	assert(err == OK);
 
-	free(priv_env_data->irq_env->vic_hwirq);
-	priv_env_data->irq_env->vic_hwirq = NULL;
+	err = vm_memory_init(priv_env_data);
+	assert(err == OK);
+
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	// Called after vm_memory_init() because it is a dependency for
+	// creating memory extents. Called after irq_manager_init() because the
+	// IRQ manager is a dependency for mapping device IRQs.
+	err = device_manager_init(priv_env_data);
+	assert(err == OK);
+#endif
 
 	vm_passthrough_config_deinit(priv_env_data);
-
-	err = vm_memory_init();
-	assert(err == OK);
 
 	rm_err = rm_rpc_init_server(VMID_RM);
 	assert(rm_err == RM_OK);
@@ -225,9 +244,6 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	err = platform_pre_hlos_vm_init(priv_env_data);
-	assert(err == OK);
-
 	// Create HLOS
 	err = hlos_vm_create(priv_env_data);
 	if (err != OK) {
@@ -235,6 +251,9 @@ main(int argc, char *argv[])
 		ret = -ENODEV;
 		goto out;
 	}
+
+	free(priv_env_data->irq_env->vic_hwirq);
+	priv_env_data->irq_env->vic_hwirq = NULL;
 
 	if (platform_expose_log_to_hlos()) {
 		rm_err = log_expose_to_hlos(log_buf, log_buf_size);
@@ -254,9 +273,11 @@ main(int argc, char *argv[])
 	rm_err = rm_rpc_register_tx_complete_handler(rm_tx_callback);
 	assert(rm_err == RM_OK);
 
-	// Free irq env
-	free(priv_env_data->irq_env);
-	priv_env_data->irq_env = NULL;
+#if defined(CONFIG_DEBUG)
+	if (rm_get_has_system_suspend()) {
+		(void)printf("Platform has SYSTEM_SUSPEND\n");
+	}
+#endif
 
 #if defined(POST_BOOT_UART_DISABLE) && POST_BOOT_UART_DISABLE
 	(void)printf("Init completed, disabling UART\n");
@@ -283,10 +304,25 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
+	err = platform_post_hlos_vm_init(priv_env_data);
+	if (err != OK) {
+		(void)printf("Failed post HLOS init: %" PRId32 "\n",
+			     (int32_t)err);
+		ret = -ENODEV;
+		goto out;
+	}
+
+	// Free irq env
+	free(priv_env_data->irq_env);
+	priv_env_data->irq_env = NULL;
+
 	rm_rpc_wait(-1);
 
 out:
 	irq_manager_deinit();
+#if defined(CONFIG_DEVICE_MANAGER) && CONFIG_DEVICE_MANAGER
+	device_manager_deinit();
+#endif
 
 	(void)printf("RM exit ret=%d\n", ret);
 	return ret;
@@ -375,18 +411,8 @@ rm_get_watchdog_supported(void)
 paddr_t
 rm_get_watchdog_address(void)
 {
-	paddr_t addr;
-
-#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
-	// This is temporary and will be removed when hypervisor DT becomes
-	// available.
-	addr = PLATFORM_SBSA_WDT_ADDR;
-#else
 	assert(priv_env_data != NULL);
-	addr = priv_env_data->wdt_address;
-#endif
-
-	return addr;
+	return priv_env_data->wdt_address;
 }
 
 count_t
@@ -417,7 +443,7 @@ rm_get_usable_cores(count_t *array_size)
 	assert(array_size != NULL);
 
 	// We're currently limited to supporting cpu ids 0..63.
-	// FIXME:
+	// FIXME: QC RM issue #51
 	static_assert(util_array_size(priv_env_data->usable_cores) >= 1U,
 		      "invalid config");
 	*array_size = 1U;
@@ -429,6 +455,12 @@ vmaddr_t
 rm_get_me_ipa_base(void)
 {
 	return priv_env_data->me_ipa_base;
+}
+
+vmaddr_t
+rm_get_me_size(void)
+{
+	return priv_env_data->me_size;
 }
 
 paddr_t
@@ -513,4 +545,70 @@ rm_get_platform_env_data(void)
 {
 	assert(priv_env_data != NULL);
 	return priv_env_data->platform_env;
+}
+
+bool
+rm_get_sve_supported(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->sve_supported;
+}
+
+bool
+rm_get_sme_supported(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->sme_supported;
+}
+
+cap_id_t
+rm_get_system_power(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->system_power_capid;
+}
+
+bool
+rm_get_has_system_suspend(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->system_suspend;
+}
+
+bool
+rm_get_sdei_supported(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->sdei_supported;
+}
+
+count_t
+rm_get_num_v2_smmu(void)
+{
+	assert(priv_env_data != NULL);
+	return priv_env_data->num_v2_smmu;
+}
+
+rm_smmu_env_data_t *
+rm_get_smmuv2_env(void)
+{
+	assert(priv_env_data != NULL);
+	assert(priv_env_data->smmuv2_env != NULL);
+	return priv_env_data->smmuv2_env;
+}
+
+cap_id_t
+rm_get_smmuv3_cap(index_t i)
+{
+	assert(priv_env_data != NULL);
+	assert(i < util_array_size(priv_env_data->smmuv3_caps));
+	return priv_env_data->smmuv3_caps[i];
+}
+
+cap_id_t
+rm_get_its_cap(index_t i)
+{
+	assert(priv_env_data != NULL);
+	assert(i < util_array_size(priv_env_data->its_caps));
+	return priv_env_data->its_caps[i];
 }

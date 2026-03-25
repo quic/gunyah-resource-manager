@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -6,10 +6,13 @@
 
 #include <assert.h>
 #include <endian.h>
+#include <inttypes.h>
 #include <regex.h>
 #include <stdio.h>
 
 #include <rm_types.h>
+
+#include "libfdt_env.h"
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-length-array"
@@ -25,7 +28,9 @@
 #include <utils/guid_parser.h>
 #include <utils/vector.h>
 
+#include <compiler.h>
 #include <dt_linux.h>
+#include <dt_overlay.h>
 #include <dtb_parser.h>
 #include <dtb_parser_listener.h>
 #include <event.h>
@@ -39,6 +44,7 @@
 #include <resource-manager.h>
 #include <rm-rpc.h>
 #include <rm_env_data.h>
+#include <uapi/mem.h>
 #include <vm_config.h>
 #include <vm_config_struct.h>
 #include <vm_mgnt.h>
@@ -57,32 +63,34 @@
 #define DEFAULT_MSG_QUEUE_SIZE	RM_RPC_MESSAGE_SIZE
 #define DEFAULT_VIRTIO_VQS_NUM	(1U)
 
-#define FREE_ALL(element_type, vector, cleanup)                                \
+#define PHANDLE_MISSING ~(uint32_t)0U
+
+#define FREE_ALL(element_type, vector, general, cleanup)                       \
 	do {                                                                   \
 		size_t cnt = vector_size(vector);                              \
 		for (index_t i = 0; i < cnt; ++i) {                            \
 			element_type *d =                                      \
-				vector_at_ptr(element_type, vector, i);        \
+				vector_at_ptr(element_type, (vector), i);      \
 			destroy_general_vdevice_props(&d->general);            \
 			cleanup                                                \
 		}                                                              \
 	} while (0)
 
-#define FREE_GENERAL(element_type, vector) FREE_ALL(element_type, vector, )
-
-static vm_config_parser_data_t *
-alloc_parser_data(const vm_config_parser_params_t *params);
-
-static void
-free_parser_data(vm_config_parser_data_t *vd);
+#define FREE_GENERAL(element_type, vector)                                     \
+	FREE_ALL(element_type, (vector), general, )
 
 static listener_return_t
 parse_memory(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	     const ctx_t *ctx);
 
 static listener_return_t
-eval_skip_child_nodes(vm_config_parser_data_t *vd, const void *fdt,
-		      int node_ofs, const ctx_t *ctx);
+eval_skip_all_children(vm_config_parser_data_t *vd, const void *fdt,
+		       int node_ofs, const ctx_t *ctx);
+
+static listener_return_t
+eval_skip_non_rm(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		 const ctx_t *ctx);
+
 static listener_return_t
 parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs,
 		const ctx_t *ctx);
@@ -122,6 +130,14 @@ parse_virtio_mmio(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		  const ctx_t *ctx);
 
 static listener_return_t
+parse_virtio_pci(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		 const ctx_t *ctx);
+
+static listener_return_t
+parse_virtio_iommu(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		   const ctx_t *ctx);
+
+static listener_return_t
 parse_shm_doorbell(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		   const ctx_t *ctx);
 
@@ -134,6 +150,10 @@ parse_vcpus(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	    const ctx_t *ctx);
 
 static listener_return_t
+parse_cpus(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+	   const ctx_t *ctx);
+
+static listener_return_t
 parse_vsmmuv2(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	      const ctx_t *ctx);
 
@@ -141,9 +161,13 @@ static listener_return_t
 parse_psci(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	   const ctx_t *ctx);
 
-static bool
-read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
-		       count_t count);
+static listener_return_t
+parse_pci(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+	  const ctx_t *ctx);
+
+static listener_return_t
+parse_arm_timer(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		const ctx_t *ctx);
 
 typedef struct {
 	uint32_t size;
@@ -158,7 +182,23 @@ parse_iomem_ranges(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		   const ctx_t *ctx);
 
 static error_t
+parse_vmmio_ranges(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		   const ctx_t *ctx);
+
+static listener_return_t
+parse_resmem(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+	     const ctx_t *ctx);
+
+static error_t
 parse_irq_ranges(vm_config_parser_data_t *vd, const void *fdt, int node_ofs);
+
+static listener_return_t
+parse_interrupts(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		 const ctx_t *ctx);
+
+static listener_return_t
+parse_root(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+	   const ctx_t *ctx);
 
 listener_return_t
 platform_parse_vm_config(vm_config_parser_data_t *vd, const void *fdt,
@@ -172,6 +212,16 @@ static dtb_listener_t vm_config_listener[] = {
 		.string_prop_name = "device_type",
 		.expected_string  = "memory",
 		.action		  = &parse_memory,
+		.safe		  = true,
+	},
+	// Skip all overlay fragments. These are not strictly part of the DT.
+	// They may be present in QTVM image DTs when firmware is in use; in
+	// this case, they will be applied to the VMM DT if relevant, and we
+	// should parse their contents in that DT.
+	{
+		.type	       = BY_PATH,
+		.expected_path = "/__overlay__$",
+		.action	       = &eval_skip_all_children,
 	},
 	{
 		.type	       = BY_PATH,
@@ -182,11 +232,24 @@ static dtb_listener_t vm_config_listener[] = {
 		.type	       = BY_PATH,
 		.expected_path = "^/(qcom,|gunyah-)vm-config/memory$",
 		.action	       = &parse_vm_memory,
+		.safe	       = true,
 	},
 	{
 		.type	       = BY_PATH,
 		.expected_path = "^/(qcom,|gunyah-)vm-config/vcpus$",
 		.action	       = &parse_vcpus,
+	},
+	{
+		.type	       = BY_PATH,
+		.expected_path = "/cpus$",
+		.action	       = &parse_cpus,
+		.safe	       = true,
+	},
+	{
+		.type	       = BY_PATH,
+		.expected_path = "^/reserved-memory$",
+		.action	       = &parse_resmem,
+		.safe	       = true,
 	},
 	{
 		.type		  = BY_STRING_PROP,
@@ -199,24 +262,28 @@ static dtb_listener_t vm_config_listener[] = {
 		.string_prop_name = "vdevice-type",
 		.expected_string  = "shm-doorbell",
 		.action		  = &parse_shm_doorbell,
+		.safe		  = true,
 	},
 	{
 		.type		  = BY_STRING_PROP,
 		.string_prop_name = "vdevice-type",
 		.expected_string  = "shm",
 		.action		  = &parse_shm_doorbell,
+		.safe		  = true,
 	},
 	{
 		.type		  = BY_STRING_PROP,
 		.string_prop_name = "vdevice-type",
 		.expected_string  = "doorbell-source",
 		.action		  = &parse_doorbell_source,
+		.safe		  = true,
 	},
 	{
 		.type		  = BY_STRING_PROP,
 		.string_prop_name = "vdevice-type",
 		.expected_string  = "doorbell",
 		.action		  = &parse_doorbell,
+		.safe		  = true,
 	},
 	{
 		.type		  = BY_STRING_PROP,
@@ -235,6 +302,12 @@ static dtb_listener_t vm_config_listener[] = {
 		.string_prop_name = "vdevice-type",
 		.expected_string  = "virtio-mmio",
 		.action		  = &parse_virtio_mmio,
+	},
+	{
+		.type		  = BY_STRING_PROP,
+		.string_prop_name = "vdevice-type",
+		.expected_string  = "virtio-pci",
+		.action		  = &parse_virtio_pci,
 	},
 	{
 		.type		  = BY_STRING_PROP,
@@ -258,6 +331,7 @@ static dtb_listener_t vm_config_listener[] = {
 		.type		   = BY_COMPATIBLE,
 		.compatible_string = "arm,psci-0.2",
 		.action		   = &parse_psci,
+		.safe		   = true,
 	},
 	{
 		// Some existing VM DTs only declare support for 1.0, despite it
@@ -266,18 +340,45 @@ static dtb_listener_t vm_config_listener[] = {
 		.compatible_string = "arm,psci-1.0",
 		.action		   = &parse_psci,
 	},
-	PLATFORM_LISTENERS,
+	{
+		.type		  = BY_STRING_PROP,
+		.string_prop_name = "vdevice-type",
+		.expected_string  = "pci",
+		.action		  = &parse_pci,
+	},
+	{
+		.type		  = BY_STRING_PROP,
+		.string_prop_name = "vdevice-type",
+		.expected_string  = "virtio-iommu",
+		.action		  = &parse_virtio_iommu,
+	},
+	{
+		.type		   = BY_COMPATIBLE,
+		.compatible_string = "arm,armv8-timer",
+		.action		   = &parse_arm_timer,
+		.safe		   = true,
+	},
+	{
+		.type	       = BY_PATH,
+		.expected_path = "^/(qcom,|gunyah-)vm-config/interrupts$",
+		.action	       = &parse_interrupts,
+	},
+	{
+		.type	       = BY_PATH,
+		.expected_path = "^/$",
+		.action	       = &parse_root,
+		.safe	       = true,
+	},
+	PLATFORM_LISTENERS
+	// Skip the children of any other node that is not understood by RM.
 	{
 		.type	       = BY_PATH,
 		.expected_path = "^/.",
-		.action	       = &eval_skip_child_nodes,
+		.action	       = &eval_skip_non_rm,
 	},
 };
 
 static dtb_parser_ops_t vm_config_parser_ops = {
-	.alloc = alloc_parser_data,
-	.free  = free_parser_data,
-
 	.listeners = vm_config_listener,
 	.listener_cnt =
 		sizeof(vm_config_listener) / sizeof(vm_config_listener[0]),
@@ -432,12 +533,19 @@ parse_vm_attrs(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs)
 			vd->no_shutdown = true;
 			// Crash-fatal implies reset is not allowed.
 			vd->no_reset = true;
+		} else if (strcmp(vm_attr, "bite-fatal") == 0) {
+			vd->bite_fatal = true;
+			// Bite-fatal implies the same things as crash-fatal.
+			vd->no_shutdown = true;
+			vd->no_reset	= true;
 		} else if (strcmp(vm_attr, "context-dump") == 0) {
 			vd->context_dump = true;
 		} else if (strcmp(vm_attr, "no-shutdown") == 0) {
 			vd->no_shutdown = true;
 		} else if (strcmp(vm_attr, "no-reset") == 0) {
 			vd->no_reset = true;
+		} else if (strcmp(vm_attr, "allow-unprotected") == 0) {
+			vd->allow_unprotected = true;
 		} else if (strcmp(vm_attr, "crash-restart") == 0) {
 			vd->crash_restart = true;
 		}
@@ -456,6 +564,16 @@ parse_vm_attrs(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs)
 		else if (strcmp(vm_attr, "vpm-virq") == 0) {
 			// get vpm virq status
 			vd->enable_vpm_psci_virq = true;
+		} else if (strcmp(vm_attr, "nosve") == 0) {
+			vd->sve_not_allowed = true;
+		} else if (strcmp(vm_attr, "sme") == 0) {
+			vd->sme_allowed = true;
+		} else if (strcmp(vm_attr, "no-vpm-aggregation") == 0) {
+			vd->disable_vpm_aggregation = true;
+		} else if (strcmp(vm_attr, "no-dtb-patch") == 0) {
+			vd->no_dtb_patch = true;
+		} else if (strcmp(vm_attr, "sdei") == 0) {
+			vd->sdei_allowed = true;
 		} else {
 			(void)printf("Warning: Unknown VM attribute \"%s\"\n",
 				     vm_attr);
@@ -463,6 +581,73 @@ parse_vm_attrs(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs)
 	}
 
 out:
+	return ret;
+}
+
+static listener_return_t
+parse_peripheral_vms(vm_config_parser_data_t *vd, const void *fdt,
+		     int32_t node_ofs)
+{
+	listener_return_t ret;
+	int32_t		  len = 0;
+
+	const fdt32_t *periph_vmids = (const fdt32_t *)fdt_getprop(
+		fdt, node_ofs, "qcom,peripheral-vmids", &len);
+	if (periph_vmids == NULL) {
+		ret = RET_CLAIMED;
+		goto out;
+	}
+
+	count_t num_vmids = (count_t)len / (count_t)sizeof(periph_vmids[0]);
+	if (num_vmids == 0U) {
+		(void)printf("Error: empty peripheral vmids\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	for (index_t i = 0; i < num_vmids; i++) {
+		uint64_t val = fdt_read_num(&periph_vmids[i], 1U);
+		if (val >= 64U) {
+			(void)printf("Error: invalid peripheral vmid %lu\n",
+				     val);
+			ret = RET_ERROR;
+			goto out;
+		}
+
+		vmid_t vmid = (vmid_t)val;
+		if (!vm_is_peripheral_vm(vmid)) {
+			(void)printf("Error: VM %u is not a peripheral\n",
+				     vmid);
+			ret = RET_ERROR;
+			goto out;
+		}
+
+		vd->allowed_periph_vmids |= util_bit(vmid);
+	}
+
+	ret = RET_CLAIMED;
+
+out:
+	return ret;
+}
+
+static error_t
+parse_segments(vm_config_parser_data_t *vd, const void *fdt, int node_ofs)
+{
+	error_t ret = OK;
+
+	int segments_ofs = fdt_subnode_offset(fdt, node_ofs, "segments");
+	if (segments_ofs > 0) {
+		(void)fdt_getprop_s32(fdt, segments_ofs, "ramdisk",
+				      &vd->ramfs_idx);
+
+		(void)fdt_getprop_s32(fdt, segments_ofs, "config_cpio",
+				      &vd->cfgcpio_idx);
+
+		(void)fdt_getprop_s32(fdt, segments_ofs, "fallback-dtb",
+				      &vd->fallback_dt_idx);
+	}
+
 	return ret;
 }
 
@@ -521,6 +706,14 @@ parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs,
 		goto out;
 	}
 
+	error_t vmmio_ranges_ret = parse_vmmio_ranges(vd, fdt, node_ofs, ctx);
+	if (vmmio_ranges_ret != OK) {
+		(void)printf("Error: parse_vmmio_ranges failed: %d\n",
+			     vmmio_ranges_ret);
+		ret = RET_ERROR;
+		goto out;
+	}
+
 	error_t irq_ranges_ret = parse_irq_ranges(vd, fdt, node_ofs);
 	if (irq_ranges_ret != OK) {
 		(void)printf("Error: parse_irq_ranges failed: %d\n",
@@ -533,6 +726,18 @@ parse_vm_config(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs,
 		vd->sensitive = true;
 		// Sensitive VM implies hiding AMU data from HLOS
 		vd->amu_counting_disabled = true;
+	}
+
+	ret = parse_peripheral_vms(vd, fdt, node_ofs);
+	if (ret != RET_CLAIMED) {
+		goto out;
+	}
+
+	error_t segments_ret = parse_segments(vd, fdt, node_ofs);
+	if (segments_ret != OK) {
+		(void)printf("Error: parse_segments failed: %d\n", ret);
+		ret = RET_ERROR;
+		goto out;
 	}
 
 	ret = platform_parse_vm_config(vd, fdt, node_ofs, ctx);
@@ -617,6 +822,51 @@ out:
 	return ret;
 }
 
+static error_t
+parse_vmmio_ranges(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		   const ctx_t *ctx)
+{
+	error_t ret = OK;
+
+	int len = 0;
+
+	const fdt32_t *vmmios = (const fdt32_t *)fdt_getprop(
+		fdt, node_ofs, "vmmio-ranges", &len);
+	if (vmmios == NULL) {
+		goto out;
+	}
+	vd->vmmio_ranges_set = true;
+
+	count_t num_words   = (count_t)len / (count_t)sizeof(vmmios[0]);
+	count_t range_words = ctx->addr_cells + ctx->size_cells;
+
+	if ((range_words == 0U) || ((num_words % range_words) != 0U)) {
+		(void)printf(
+			"vmmio-ranges invalid length (%d words, should be multiple of %d)\n",
+			num_words, range_words);
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	index_t i = 0;
+	while (i < num_words) {
+		mem_range_t r;
+
+		r.base = fdt_read_num(&vmmios[i], ctx->addr_cells);
+		i += ctx->addr_cells;
+
+		r.size = fdt_read_num(&vmmios[i], ctx->size_cells);
+		i += ctx->size_cells;
+
+		ret = vector_push_back(vd->vmmio_ranges, r);
+		if (ret != OK) {
+			goto out;
+		}
+	}
+out:
+	return ret;
+}
+
 static listener_return_t
 parse_vm_memory(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		const ctx_t *ctx)
@@ -638,11 +888,11 @@ parse_vm_memory(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 			ret = RET_ERROR;
 			goto out;
 		}
-		if (!util_is_baligned(vd->mem_base_ipa, ((size_t)2U << 20))) {
+		if (!util_is_baligned(vd->mem_base_ipa, LARGE_PAGE_SIZE)) {
 			(void)printf(
 				"Warning: base-address not 2MB aligned, aligning up\n");
-			vd->mem_base_ipa =
-				util_p2align_up(vd->mem_base_ipa, 21U);
+			vd->mem_base_ipa = util_balign_up(vd->mem_base_ipa,
+							  LARGE_PAGE_SIZE);
 		}
 		// Default value of the maximum size is the whole address space
 		// above the configured base address
@@ -732,7 +982,8 @@ parse_rm_rpc(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	// handle irq
 	cfg.defined_irq = read_interrupts_config(
-		fdt, node_ofs, cfg.irqs, (count_t)util_array_size(cfg.irqs));
+				  fdt, node_ofs, "interrupts", cfg.irqs,
+				  (count_t)util_array_size(cfg.irqs)) == OK;
 
 	error_t general_parse_ret =
 		parse_general_vdevice_props(&cfg.general, fdt, node_ofs, ctx);
@@ -787,16 +1038,29 @@ parse_rm_rpc(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	cfg.msg_size	= (uint16_t)p.size;
 	cfg.queue_depth = (uint16_t)p.depth;
 
+	const char *console_owner =
+		fdt_stringlist_get(fdt, node_ofs, "console-owner", 0, NULL);
+	if (console_owner != NULL) {
+		cfg.console_owner = strdup(console_owner);
+		if (cfg.console_owner == NULL) {
+			ret = RET_ERROR;
+			goto out_free;
+		}
+	}
+
 	error_t push_err;
 	vector_push_back_imm(rm_rpc_data_t, vd->rm_rpcs, cfg, push_err);
 
 	if (push_err != OK) {
 		ret = RET_ERROR;
+		goto out_free;
 	}
-	goto out;
 
 out_free:
-	destroy_general_vdevice_props(&cfg.general);
+	if (ret == RET_ERROR) {
+		destroy_general_vdevice_props(&cfg.general);
+		free(cfg.console_owner);
+	}
 
 out:
 	return ret;
@@ -875,12 +1139,13 @@ parse_doorbell_source(vm_config_parser_data_t *vd, const void *fdt,
 
 	cfg.is_source = true;
 
-	// should not define irq for source doorbell
-	cfg.defined_irq = false;
-
 	if (fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
 		cfg.peer    = VMID_PEER_DEFAULT;
 		cfg.peer_id = NULL;
+
+		cfg.defined_irq = read_interrupts_config(fdt, node_ofs,
+							 "peer-interrupts",
+							 &cfg.irq, 1) == OK;
 	} else {
 		const char *peer =
 			fdt_stringlist_get(fdt, node_ofs, "peer", 0, NULL);
@@ -891,6 +1156,10 @@ parse_doorbell_source(vm_config_parser_data_t *vd, const void *fdt,
 				ret = RET_ERROR;
 				goto err_not_peer;
 			}
+			cfg.defined_irq =
+				read_interrupts_config(fdt, node_ofs,
+						       "peer-interrupts",
+						       &cfg.irq, 1) == OK;
 		} else {
 			ret = RET_ERROR;
 			goto err_not_peer;
@@ -935,7 +1204,12 @@ parse_doorbell(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	cfg.is_source = false;
 
-	cfg.defined_irq = read_interrupts_config(fdt, node_ofs, &cfg.irq, 1);
+	cfg.defined_irq = read_interrupts_config(fdt, node_ofs, "interrupts",
+						 &cfg.irq, 1) == OK;
+	if (!cfg.defined_irq) {
+		cfg.defined_irq = read_sdei_event_interrupt_config(
+			fdt, node_ofs, &cfg.irq);
+	}
 
 	if (fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
 		cfg.peer    = VMID_PEER_DEFAULT;
@@ -993,7 +1267,8 @@ parse_message_queue(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	(void)memset(&cfg, 0, sizeof(cfg));
 
 	// only need 1 irq
-	cfg.defined_irq = read_interrupts_config(fdt, node_ofs, cfg.irqs, 1);
+	cfg.defined_irq = read_interrupts_config(fdt, node_ofs, "interrupts",
+						 cfg.irqs, 1) == OK;
 
 	bool is_sender	 = fdt_getprop_bool(fdt, node_ofs, "is-sender");
 	bool is_receiver = fdt_getprop_bool(fdt, node_ofs, "is-receiver");
@@ -1067,7 +1342,8 @@ parse_message_queue_pair(vm_config_parser_data_t *vd, const void *fdt,
 	}
 
 	cfg.defined_irq = read_interrupts_config(
-		fdt, node_ofs, cfg.irqs, (count_t)util_array_size(cfg.irqs));
+				  fdt, node_ofs, "interrupts", cfg.irqs,
+				  (count_t)util_array_size(cfg.irqs)) == OK;
 
 	error_t parse_general_ret =
 		parse_general_vdevice_props(&cfg.general, fdt, node_ofs, ctx);
@@ -1100,43 +1376,11 @@ err_not_peer:
 }
 
 static listener_return_t
-parse_memory_node(const void *fdt, int node_ofs, const ctx_t *ctx,
+parse_memory_node(const void *fdt, int sub_node_ofs, const ctx_t *ctx,
 		  uint32_t *label, paddr_t *mem_base_ipa, bool *need_allocate,
 		  bool *is_optional)
 {
 	listener_return_t ret = RET_CLAIMED;
-
-	// Get memory sub node
-	bool found_mem	  = false;
-	int  sub_node_ofs = 0;
-	int  cur_node_ofs = 0;
-	int  len	  = 0;
-
-	fdt_for_each_subnode (cur_node_ofs, fdt, node_ofs) {
-		const char *node_name = fdt_get_name(fdt, cur_node_ofs, &len);
-		if (strcmp(node_name, "memory") != 0) {
-			(void)printf(
-				"parse vdevice node: expected \"memory\" node\n");
-			ret = RET_ERROR;
-			goto err_unexpected;
-		}
-
-		if (found_mem) {
-			(void)printf(
-				"parse vdevice node: multiple \"memory\" nodes\n");
-			ret = RET_ERROR;
-			goto err_unexpected;
-		}
-
-		sub_node_ofs = cur_node_ofs;
-		found_mem    = true;
-	}
-
-	if (!found_mem) {
-		(void)printf("parse vdevice node: missing \"memory\" node\n");
-		ret = RET_ERROR;
-		goto err_unexpected;
-	}
 
 	ctx_t mem_ctx;
 	dtb_parser_update_ctx(fdt, sub_node_ofs, ctx, &mem_ctx);
@@ -1191,6 +1435,72 @@ err_no_label:
 	return ret;
 }
 
+static error_t
+parse_virtio_common(virtio_common_data_t *cfg, const void *fdt, int node_ofs,
+		    const ctx_t *ctx)
+{
+	error_t ret;
+
+	(void)ctx;
+
+	if (!fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
+		ret = ERROR_ARGUMENT_INVALID;
+		goto err_not_peer_default;
+	}
+	cfg->peer = VMID_PEER_DEFAULT;
+
+	cfg->sync_reset = fdt_getprop_bool(fdt, node_ofs, "sync-reset");
+
+	if (fdt_getprop_u32(fdt, node_ofs, "vqs-num", &cfg->vqs_num) != OK) {
+		cfg->vqs_num = DEFAULT_VIRTIO_VQS_NUM;
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "virtio,device-type",
+			    &cfg->device_type) != OK) {
+		cfg->device_type = VIRTIO_DEVICE_TYPE_INVALID;
+	}
+
+	error_t err =
+		parse_general_vdevice_props(&cfg->general, fdt, node_ofs, ctx);
+	if (err != OK) {
+		ret = err;
+		goto err_parse_general;
+	}
+
+	const char *patch = fdt_stringlist_get(fdt, node_ofs, "patch", 0, NULL);
+	if (patch != NULL) {
+		if (cfg->general.generate != NULL) {
+			ret = ERROR_NOMEM;
+			goto err_parse_patch;
+		}
+
+		cfg->patch = strdup(patch);
+		if (cfg->patch == NULL) {
+			ret = ERROR_NOMEM;
+			goto err_parse_patch;
+		}
+	}
+
+	ret = OK;
+
+err_parse_patch:
+err_parse_general:
+	if (ret != OK) {
+		destroy_general_vdevice_props(&cfg->general);
+	}
+err_not_peer_default:
+	return ret;
+}
+
+static void
+destroy_virtio_common_props(virtio_common_data_t *cfg)
+{
+	if (cfg->patch != NULL) {
+		free(cfg->patch);
+	}
+	destroy_general_vdevice_props(&cfg->general);
+}
+
 static listener_return_t
 parse_virtio_mmio(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 		  const ctx_t *ctx)
@@ -1200,58 +1510,38 @@ parse_virtio_mmio(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	virtio_mmio_data_t cfg;
 	(void)memset(&cfg, 0, sizeof(cfg));
 
-	cfg.dma_coherent = fdt_getprop_bool(fdt, node_ofs, "dma-coherent");
-
-	if (!fdt_getprop_bool(fdt, node_ofs, "peer-default")) {
+	error_t parse_common_ret =
+		parse_virtio_common(&cfg.common, fdt, node_ofs, ctx);
+	if (parse_common_ret != OK) {
 		ret = RET_ERROR;
-		goto err_not_peer_default;
+		goto err_parse_common;
 	}
 
-	cfg.peer = VMID_HLOS;
-
-	if (fdt_getprop_u32(fdt, node_ofs, "vqs-num", &cfg.vqs_num) != OK) {
-		cfg.vqs_num = DEFAULT_VIRTIO_VQS_NUM;
-	}
-
-	cfg.sync_reset = fdt_getprop_bool(fdt, node_ofs, "sync-reset");
+	cfg.dma_coherent = fdt_getprop_bool(fdt, node_ofs, "dma-coherent");
 
 	if (fdt_getprop_u64(fdt, node_ofs, "dma_base", &cfg.dma_base) != OK) {
 		cfg.dma_base = 0U;
 	}
 
 	if (fdt_getprop_u32(fdt, node_ofs, "virtio,device-type",
-			    &cfg.device_type) != OK) {
-		cfg.device_type	      = VIRTIO_DEVICE_TYPE_INVALID;
-		cfg.valid_device_type = false;
-	} else {
-		cfg.valid_device_type = true;
+			    &cfg.common.device_type) != OK) {
+		cfg.common.device_type = VIRTIO_DEVICE_TYPE_INVALID;
 	}
 
-	ret = parse_memory_node(fdt, node_ofs, ctx, &cfg.general.label,
-				&cfg.mem_base_ipa, &cfg.need_allocate, NULL);
-	if (ret != RET_CLAIMED) {
-		destroy_general_vdevice_props(&cfg.general);
-		goto err_parse_memory_node;
-	}
-
-	error_t parse_general_ret =
-		parse_general_vdevice_props(&cfg.general, fdt, node_ofs, ctx);
-	if (parse_general_ret != OK) {
-		ret = RET_ERROR;
-		goto err_parse_general;
-	}
-
-	const char *patch = fdt_stringlist_get(fdt, node_ofs, "patch", 0, NULL);
-	if (patch != NULL) {
-		if (cfg.general.generate != NULL) {
-			ret = RET_ERROR;
-			goto err_parse_patch;
-		}
-
-		cfg.patch = strdup(patch);
-		if (cfg.patch == NULL) {
-			ret = RET_ERROR;
-			goto err_parse_patch;
+	int sub_node_ofs = 0;
+	fdt_for_each_subnode (sub_node_ofs, fdt, node_ofs) {
+		int	    len	      = 0;
+		const char *node_name = fdt_get_name(fdt, sub_node_ofs, &len);
+		if (strcmp(node_name, "memory") == 0) {
+			ret = parse_memory_node(fdt, sub_node_ofs, ctx,
+						&cfg.common.general.label,
+						&cfg.dma_base_ipa,
+						&cfg.need_allocate, NULL);
+			if (ret != RET_CLAIMED) {
+				goto err_parse_memory_node;
+			}
+			cfg.have_shm = true;
+			break;
 		}
 	}
 
@@ -1259,19 +1549,59 @@ parse_virtio_mmio(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	vector_push_back_imm(virtio_mmio_data_t, vd->virtio_mmios, cfg,
 			     push_err);
 	if (push_err != OK) {
-		if (cfg.patch != NULL) {
-			free(cfg.patch);
-		}
 		ret = RET_ERROR;
 	}
 
-err_parse_patch:
-err_parse_general:
 err_parse_memory_node:
+err_parse_common:
 	if (ret != RET_CLAIMED) {
-		destroy_general_vdevice_props(&cfg.general);
+		destroy_virtio_common_props(&cfg.common);
 	}
-err_not_peer_default:
+	return ret;
+}
+
+static listener_return_t
+parse_virtio_pci(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		 const ctx_t *ctx)
+{
+	listener_return_t ret = RET_CLAIMED;
+
+	virtio_pci_data_t cfg;
+	(void)memset(&cfg, 0, sizeof(cfg));
+
+	error_t parse_common_ret =
+		parse_virtio_common(&cfg.common, fdt, node_ofs, ctx);
+	if (parse_common_ret != OK) {
+		ret = RET_ERROR;
+		goto err_parse_common;
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "pci-bus", &cfg.pci_bus_phandle) !=
+	    OK) {
+		cfg.pci_bus_phandle = PHANDLE_MISSING;
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "pci-slot-index",
+			    &cfg.pci_slot_index) != OK) {
+		cfg.pci_slot_index = ~(index_t)0U;
+	}
+
+	// Per-queue backend IRQs are enabled by default for PCIE, but old
+	// backends might not support the updated notify hypercall; provide a
+	// flag to disable it.
+	cfg.per_queue_irqs =
+		!fdt_getprop_bool(fdt, node_ofs, "disable-per-queue-irqs");
+
+	error_t push_err;
+	vector_push_back_imm(virtio_pci_data_t, vd->virtio_pcis, cfg, push_err);
+	if (push_err != OK) {
+		ret = RET_ERROR;
+	}
+
+err_parse_common:
+	if (ret != RET_CLAIMED) {
+		destroy_virtio_common_props(&cfg.common);
+	}
 	return ret;
 }
 
@@ -1293,10 +1623,27 @@ parse_shm_doorbell(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	cfg.is_plain_shm = (strcmp(vdevice_type, "shm") == 0);
 
-	ret = parse_memory_node(fdt, node_ofs, ctx, &cfg.general.label,
-				&cfg.mem_base_ipa, &cfg.need_allocate,
-				&cfg.is_memory_optional);
-	if (ret != RET_CLAIMED) {
+	int  sub_node_ofs      = 0;
+	bool found_memory_node = false;
+	fdt_for_each_subnode (sub_node_ofs, fdt, node_ofs) {
+		int	    len	      = 0;
+		const char *node_name = fdt_get_name(fdt, sub_node_ofs, &len);
+		if (strcmp(node_name, "memory") == 0) {
+			ret = parse_memory_node(fdt, sub_node_ofs, ctx,
+						&cfg.general.label,
+						&cfg.mem_base_ipa,
+						&cfg.need_allocate,
+						&cfg.is_memory_optional);
+			if (ret != RET_CLAIMED) {
+				goto err_parse_memory_node;
+			}
+			found_memory_node = true;
+			break;
+		}
+	}
+	if (!found_memory_node) {
+		(void)printf("parse shm vdevice: missing \"memory\" node\n");
+		ret = RET_ERROR;
 		goto err_parse_memory_node;
 	}
 
@@ -1334,27 +1681,34 @@ err_no_vdevice_type:
 	return ret;
 }
 
-typedef struct {
-	listener_return_t ret;
-	count_t		  idle_state_count;
-	count_t		  psci_enable_count;
-	count_t		  enabled_cpu_count;
-} vcpu_state_count_t;
-
-static vcpu_state_count_t
-parse_dt_cpu_nodes(const vm_config_parser_data_t *vd, const void *fdt,
-		   int32_t config_ofs, const char *default_enable_method)
+static listener_return_t
+parse_cpus(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs,
+	   const ctx_t *ctx)
 {
+	(void)ctx;
 	listener_return_t ret = RET_CLAIMED;
+
+	const char *default_enable_method =
+		fdt_stringlist_get(fdt, node_ofs, "enable-method", 0, NULL);
+
+	if ((ctx->child_size_cells != 0U) || (ctx->child_addr_cells == 0U) ||
+	    ctx->child_addr_is_phys) {
+		ret = RET_ERROR;
+		goto out;
+	}
 
 	// create secondary vcpus only
 	int sub_node_ofs = 0;
 
+	count_t vcpu_count	  = 0;
 	count_t idle_state_count  = 0;
 	count_t psci_enable_count = 0;
 	count_t enabled_cpu_count = 0;
 
-	fdt_for_each_subnode (sub_node_ofs, fdt, config_ofs) {
+	// Determine the sufficient set of bits to represent all addresses
+	vd->vcpu_addr_mask = 0U;
+
+	fdt_for_each_subnode (sub_node_ofs, fdt, node_ofs) {
 		const char *device_type = fdt_stringlist_get(
 			fdt, sub_node_ofs, "device_type", 0, NULL);
 
@@ -1362,6 +1716,16 @@ parse_dt_cpu_nodes(const vm_config_parser_data_t *vd, const void *fdt,
 		    (strcmp(device_type, "cpu") != 0)) {
 			continue;
 		}
+
+		// Read the physical CPU address
+		uint64_t address;
+		if (fdt_getprop_num(fdt, sub_node_ofs, "reg",
+				    ctx->child_addr_cells, &address) != OK) {
+			(void)printf("cpu reg property invalid\n");
+			ret = RET_ERROR;
+			goto out;
+		}
+		vd->vcpu_addr_mask |= address;
 
 		// Check whether this CPU is enabled at boot time
 		const char *status = fdt_stringlist_get(fdt, sub_node_ofs,
@@ -1393,7 +1757,7 @@ parse_dt_cpu_nodes(const vm_config_parser_data_t *vd, const void *fdt,
 			goto out;
 		}
 
-		// Check if default enable-method is overriden
+		// Check if default enable-method is overridden
 		const char *cpu_enable_method = fdt_stringlist_get(
 			fdt, sub_node_ofs, "enable-method", 0, NULL);
 
@@ -1438,6 +1802,7 @@ parse_dt_cpu_nodes(const vm_config_parser_data_t *vd, const void *fdt,
 		vcpu_data_t cfg = {
 			.patch	   = strdup(path),
 			.boot_vcpu = is_boot_cpu,
+			.address   = address,
 		};
 
 		if (cfg.patch == NULL) {
@@ -1452,15 +1817,97 @@ parse_dt_cpu_nodes(const vm_config_parser_data_t *vd, const void *fdt,
 			ret = RET_ERROR;
 			goto out;
 		}
+		vcpu_count++;
 	}
 
+	if ((psci_enable_count != 0U) || (idle_state_count != 0U)) {
+		vd->enable_vpm_psci = true;
+	}
+
+	vd->enabled_cpu_count = enabled_cpu_count;
+	vd->idle_state_count  = idle_state_count;
+	vd->psci_enable_count = psci_enable_count;
+
+	// 8-bit affinity level field offsets matching MPIDR_EL1, as specified
+	// by the Linux kernel's arm64 cpus DT binding.
+	const count_t aff_shifts[4U] = { 0U, 8U, 16U, 32U };
+
+	(void)printf("parse_cpus: address mask %#zx\n", vd->vcpu_addr_mask);
+	count_t next_addr_bit = 0U;
+	for (index_t i = 0U; i < util_array_size(vd->vcpu_addr_shifts); i++) {
+		count_t	 aff_shift = aff_shifts[i];
+		uint64_t aff_mask  = (vd->vcpu_addr_mask >> aff_shift) &
+				    util_mask(8U);
+		if (aff_mask == 0U) {
+			// No significant bits in this affinity field
+			vd->vcpu_addr_shifts[i] = next_addr_bit;
+			continue;
+		}
+
+		// Try to strip off low bits that are always zero.
+		count_t field_shift = compiler_ctz(aff_mask);
+
+		// We can't have a negative shift, so if stripping low bits
+		// would leave us with one, we must artificially add bits to
+		// the mask to make it 0.
+		if (field_shift > next_addr_bit) {
+			vd->vcpu_addr_mask |= (util_mask(field_shift) -
+					       util_mask(next_addr_bit))
+					      << aff_shift;
+			field_shift = next_addr_bit;
+		}
+
+		// Calculate the final shift.
+		vd->vcpu_addr_shifts[i] = next_addr_bit - field_shift;
+		next_addr_bit += compiler_msb(aff_mask) + 1U - field_shift;
+	}
+	(void)printf(
+		"parse_cpus: shifts %d/%d/%d/%d, used %d bits, mask now %#zx\n",
+		vd->vcpu_addr_shifts[0], vd->vcpu_addr_shifts[1],
+		vd->vcpu_addr_shifts[2], vd->vcpu_addr_shifts[3], next_addr_bit,
+		vd->vcpu_addr_mask);
+
+	// Ensure that we can fit a bitmap of used CPUs in a uint64_t
+	if (util_bit(next_addr_bit) >
+	    (sizeof(vd->vcpu_used_indices) * (size_t)CHAR_BIT)) {
+		(void)printf(
+			"error: cpus have too many significant address bits\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	vd->vcpu_used_indices = 0U;
+	for (index_t i = 0U; i < vcpu_count; i++) {
+		vcpu_data_t *vcpu   = vector_at_ptr(vcpu_data_t, vd->vcpus, i);
+		vcpu->address_index = 0U;
+		for (index_t j = 0U; j < util_array_size(vd->vcpu_addr_shifts);
+		     j++) {
+			count_t	 aff_shift = aff_shifts[j];
+			uint64_t aff_field = (vcpu->address >> aff_shift) &
+					     util_mask(8U);
+			vcpu->address_index |=
+				((index_t)aff_field << vd->vcpu_addr_shifts[j]);
+		}
+
+		assert(vcpu->address_index < 64U);
+		if ((vd->vcpu_used_indices & util_bit(vcpu->address_index)) !=
+		    0U) {
+			(void)printf("error: /cpus: duplicate index %d "
+				     "for address %#zx\n",
+				     vcpu->address_index, vcpu->address);
+			ret = RET_ERROR;
+			goto out;
+		}
+		vd->vcpu_used_indices |= util_bit(vcpu->address_index);
+
+		(void)printf("parse_cpus: vcpu %d: address %#zx index %d\n", i,
+			     vcpu->address, vcpu->address_index);
+	}
+	(void)printf("parse_cpus: used index mask %#zx\n",
+		     vd->vcpu_used_indices);
+
 out:
-	return (vcpu_state_count_t){
-		.enabled_cpu_count = enabled_cpu_count,
-		.idle_state_count  = idle_state_count,
-		.psci_enable_count = psci_enable_count,
-		.ret		   = ret,
-	};
+	return ret;
 }
 
 static listener_return_t
@@ -1473,8 +1920,6 @@ parse_vcpus(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 
 	int len = 0;
 
-	// default is static
-	vd->affinity = VM_CONFIG_AFFINITY_STATIC;
 	// read affinity type
 	const char *affinity =
 		fdt_stringlist_get(fdt, node_ofs, "affinity", 0, NULL);
@@ -1533,65 +1978,14 @@ parse_vcpus(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 			goto out;
 		}
 	}
+	ret = RET_CLAIMED;
 
-	// read cpus number in device tree
 	const char *config =
 		fdt_stringlist_get(fdt, node_ofs, "config", 0, NULL);
-	if (config == NULL) {
-		config = "/cpus";
-	}
-
-	int32_t config_ofs = fdt_path_offset(fdt, config);
-	if (config_ofs < 0) {
-		(void)printf("parse_vcpus: \"config\" path invalid\n");
-		ret = RET_ERROR;
-		goto out;
-	}
-
-	// Optional default method
-	const char *default_enable_method =
-		fdt_stringlist_get(fdt, config_ofs, "enable-method", 0, NULL);
-
-	vcpu_state_count_t vcpu_state_count =
-		parse_dt_cpu_nodes(vd, fdt, config_ofs, default_enable_method);
-	count_t idle_state_count  = vcpu_state_count.idle_state_count;
-	count_t psci_enable_count = vcpu_state_count.psci_enable_count;
-	count_t enabled_cpu_count = vcpu_state_count.enabled_cpu_count;
-	if (vcpu_state_count.ret != RET_CLAIMED) {
-		ret = vcpu_state_count.ret;
-		goto out;
-	}
-
-	size_t cpu_count = vector_size(vd->vcpus);
-
-	if (enabled_cpu_count == 0U) {
+	if ((config != NULL) && (strcmp(config, "/cpus") != 0)) {
 		(void)printf(
-			"parse_vcpus: at least one vCPU must be enabled at VM boot\n");
-		ret = RET_ERROR;
-		goto out;
+			"warning: parse_vcpus: ignoring \"config\" property");
 	}
-
-	if ((vd->affinity != VM_CONFIG_AFFINITY_PROXY) &&
-	    (cpu_count != vd->affinity_map_cnt)) {
-		(void)printf(
-			"parse_vcpus: cpu and affinity count don't match\n");
-		ret = RET_ERROR;
-		goto out;
-	}
-
-	if ((psci_enable_count != 0U) || (idle_state_count != 0U)) {
-		vd->enable_vpm_psci = true;
-	}
-
-	if (vd->enable_vpm_psci && (vd->affinity != VM_CONFIG_AFFINITY_PROXY) &&
-	    (idle_state_count != cpu_count)) {
-		(void)printf(
-			"parse_vcpus: PSCI enabled for non-proxy VM but not all CPUs have idle states\n");
-		ret = RET_ERROR;
-		goto out;
-	}
-
-	ret = RET_CLAIMED;
 
 out:
 	return ret;
@@ -1667,6 +2061,243 @@ out:
 }
 
 static listener_return_t
+parse_virtio_iommu(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		   const ctx_t *ctx)
+{
+	listener_return_t ret = RET_CLAIMED;
+	(void)ctx;
+
+	virtio_iommu_data_t cfg;
+	(void)memset(&cfg, 0, sizeof(cfg));
+
+	// The base address of the target HW SMMU
+	if (fdt_getprop_u64(fdt, node_ofs, "smmu-handle", &cfg.smmu_handle) !=
+	    OK) {
+		(void)printf("Missing smmu-handle in virtio-iommu config\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "max-streams", &cfg.max_streams) !=
+	    OK) {
+		(void)printf("Missing max-steams in virtio-iommu config\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "pci-slot-index",
+			    &cfg.pci_slot_index) != OK) {
+		(void)printf("Missing pci-slot-index in virtio-iommu config\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	error_t push_err;
+	vector_push_back_imm(virtio_iommu_data_t, vd->virtio_iommus, cfg,
+			     push_err);
+
+	if (push_err != OK) {
+		ret = RET_ERROR;
+	}
+
+out:
+	return ret;
+}
+
+static error_t
+parse_pci_addrs(const void *fdt, int node_ofs, const ctx_t *ctx,
+		pci_data_t *cfg)
+{
+	error_t ret;
+
+	if (fdt_getprop_num(fdt, node_ofs, "config-base-address",
+			    ctx->addr_cells, &cfg->config_base_ipa) == OK) {
+		if (!util_is_baligned(cfg->config_base_ipa, PAGE_SIZE)) {
+			(void)printf("base-address invalid alignment\n");
+			ret = ERROR_ARGUMENT_ALIGNMENT;
+			goto out;
+		}
+	} else {
+		cfg->config_base_ipa = ~(vmaddr_t)0U;
+	}
+
+	// The size of the ECAM region is required to be 1MiB per bus for
+	// between 2 and 256 buses; virtual PCI does not need or implement
+	// bridges, so the minimum size of 2MiB is always sufficient.
+	cfg->config_bits = 21U;
+	size_t config_size_val;
+	if (fdt_getprop_num(fdt, node_ofs, "config-size", ctx->addr_cells,
+			    &config_size_val) == OK) {
+		if (util_bit(cfg->config_bits) > config_size_val) {
+			(void)printf(
+				"specified config-size is less than 2MiB\n");
+			ret = ERROR_ARGUMENT_SIZE;
+			goto out;
+		}
+	}
+
+	if (fdt_getprop_num(fdt, node_ofs, "npmem-base-address",
+			    ctx->addr_cells, &cfg->npmem_base_ipa) == OK) {
+		if (!util_is_baligned(cfg->npmem_base_ipa, PAGE_SIZE)) {
+			(void)printf("base-address invalid alignment\n");
+			ret = ERROR_ARGUMENT_ALIGNMENT;
+			goto out;
+		}
+	} else {
+		cfg->npmem_base_ipa = ~(vmaddr_t)0U;
+	}
+
+	size_t npmem_size_val;
+	if (fdt_getprop_num(fdt, node_ofs, "npmem-size", ctx->addr_cells,
+			    &npmem_size_val) == OK) {
+		if (!util_is_p2(npmem_size_val)) {
+			(void)printf("npmem-size must be a power of two\n");
+			ret = ERROR_ARGUMENT_SIZE;
+			goto out;
+		}
+		cfg->npmem_bits = (count_t)compiler_msb(npmem_size_val);
+	} else {
+		// npmem-size is mandatory
+		(void)printf("npmem-size must be specified for pci vdevices\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	ret = OK;
+out:
+	return ret;
+}
+
+static listener_return_t
+parse_pci(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+	  const ctx_t *ctx)
+{
+	listener_return_t ret;
+
+	pci_data_t cfg;
+	(void)memset(&cfg, 0, sizeof(cfg));
+
+	error_t err = parse_pci_addrs(fdt, node_ofs, ctx, &cfg);
+	if (err != OK) {
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	uint64_t msi_parent_phandle;
+	if (fdt_getprop_num(fdt, node_ofs, "msi-parent", 1U,
+			    &msi_parent_phandle) == OK) {
+		cfg.msi_parent_phandle = (uint32_t)msi_parent_phandle;
+		uint64_t msi_passthrough_base;
+		if (fdt_getprop_num(fdt, node_ofs, "msi-passthrough-base", 1U,
+				    &msi_passthrough_base) == OK) {
+			uint64_t msi_passthrough_length;
+			if (fdt_getprop_num(fdt, node_ofs,
+					    "msi-passthrough-length", 1U,
+					    &msi_passthrough_length) != OK) {
+				// By default, reserve virtual device IDs for
+				// all valid RIDs
+				msi_passthrough_length = 0x10000U;
+			}
+			cfg.msi_passthrough = true;
+			cfg.msi_passthrough_base =
+				(uint32_t)msi_passthrough_base;
+			cfg.msi_passthrough_length =
+				(uint32_t)msi_passthrough_length;
+		} else {
+			cfg.msi_vdevices = true;
+		}
+	} else {
+		cfg.msi_parent_phandle = DTO_PHANDLE_UNSET;
+	}
+
+	uint64_t irq_parent_phandle;
+	if (fdt_getprop_num(fdt, node_ofs, "interrupt-parent", 1U,
+			    &irq_parent_phandle) == OK) {
+		cfg.irq_parent_phandle = (uint32_t)irq_parent_phandle;
+		cfg.irq_vdevices       = true;
+	} else {
+		cfg.irq_parent_phandle = DTO_PHANDLE_UNSET;
+		cfg.irq_vdevices = !cfg.msi_vdevices && !cfg.msi_passthrough;
+	}
+
+	cfg.dma_coherent = fdt_getprop_bool(fdt, node_ofs, "dma-coherent");
+
+	int sub_node_ofs = 0;
+	fdt_for_each_subnode (sub_node_ofs, fdt, node_ofs) {
+		int	    len	      = 0;
+		const char *node_name = fdt_get_name(fdt, sub_node_ofs, &len);
+		if (strcmp(node_name, "memory") == 0) {
+			ret = parse_memory_node(fdt, sub_node_ofs, ctx,
+						&cfg.general.label,
+						&cfg.dma_base_ipa,
+						&cfg.need_allocate, NULL);
+			if (ret != RET_CLAIMED) {
+				goto err_parse_memory_node;
+			}
+			cfg.have_memory_region = true;
+			break;
+		}
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "config", &cfg.bus_phandle) != OK) {
+		if (vd->have_default_pci_bus) {
+			(void)printf(
+				"error: Multiple vpci buses without phandles\n");
+			ret = RET_ERROR;
+			goto out;
+		}
+		vd->have_default_pci_bus = true;
+		cfg.bus_phandle		 = PHANDLE_MISSING;
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "linux,pci-domain",
+			    &cfg.linux_pci_domain) != OK) {
+		cfg.linux_pci_domain = ~(uint32_t)0U;
+	}
+
+	error_t parse_general_ret =
+		parse_general_vdevice_props(&cfg.general, fdt, node_ofs, ctx);
+	if (parse_general_ret != OK) {
+		ret = RET_ERROR;
+		goto err_parse_general;
+	}
+
+	const char *patch = fdt_stringlist_get(fdt, node_ofs, "patch", 0, NULL);
+	if (patch != NULL) {
+		if (cfg.general.generate != NULL) {
+			(void)printf(
+				"error: patch and generate are mutually exclusive\n");
+			ret = RET_ERROR;
+			goto err_parse_patch;
+		}
+
+		cfg.patch = strdup(patch);
+		if (cfg.patch == NULL) {
+			ret = RET_ERROR;
+			goto err_parse_patch;
+		}
+	}
+
+	error_t push_err;
+	vector_push_back_imm(pci_data_t, vd->pci_buses, cfg, push_err);
+
+	if (push_err != OK) {
+		ret = RET_ERROR;
+	} else {
+		ret = RET_CLAIMED;
+	}
+
+err_parse_patch:
+err_parse_general:
+	if (ret == RET_ERROR) {
+		destroy_general_vdevice_props(&cfg.general);
+	}
+err_parse_memory_node:
+out:
+	return ret;
+}
+
+static listener_return_t
 parse_psci(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	   const ctx_t *ctx)
 {
@@ -1680,8 +2311,48 @@ parse_psci(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 }
 
 static listener_return_t
-eval_skip_child_nodes(vm_config_parser_data_t *vd, const void *fdt,
-		      int node_ofs, const ctx_t *ctx)
+parse_arm_timer(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		const ctx_t *ctx)
+{
+	(void)ctx;
+
+	// ARM generic timer has 4 interrupts:
+	// Index 0: secure phys timer
+	// Index 1: el1 phys timer
+	// Index 2: el1 virtual timer
+	// Index 3: el2 phys timer
+	interrupt_data_t irqs[4];
+	(void)memset(irqs, 0, sizeof(irqs));
+
+	error_t ret = read_interrupts_config(fdt, node_ofs, "interrupts", irqs,
+					     (count_t)util_array_size(irqs));
+	if (ret == OK) {
+		vd->el1_phys_timer_irq = irqs[1].irq;
+		vd->el1_virt_timer_irq = irqs[2].irq;
+		(void)printf(
+			"ARM Timer: el1_phys_timer IRQ = %u el1_virt_timer IRQ = %u\n",
+			vd->el1_phys_timer_irq, vd->el1_virt_timer_irq);
+	} else {
+		(void)printf("ARM Timer: Failed to read interrupts\n");
+	}
+
+	return RET_CLAIMED;
+}
+
+static listener_return_t
+eval_skip_all_children(vm_config_parser_data_t *vd, const void *fdt,
+		       int node_ofs, const ctx_t *ctx)
+{
+	(void)vd;
+	(void)fdt;
+	(void)node_ofs;
+	(void)ctx;
+	return RET_SKIP_CHILD_NODES;
+}
+
+static listener_return_t
+eval_skip_non_rm(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		 const ctx_t *ctx)
 {
 	listener_return_t ret = RET_CONTINUE;
 	(void)vd;
@@ -1748,18 +2419,118 @@ get_msg_queue_param(const void *fdt, int node_ofs)
 	return ret;
 }
 
+static listener_return_t
+parse_resmem(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+	     const ctx_t *ctx)
+{
+	listener_return_t ret;
+
+	int32_t region_node_ofs;
+
+	if (!ctx->child_addr_is_phys) {
+		(void)printf(
+			"Error: addresses in /reserved-memory are not 1:1 physical!");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	fdt_for_each_subnode (region_node_ofs, fdt, node_ofs) {
+		const char *name = fdt_get_name(fdt, region_node_ofs, NULL);
+		assert(name != NULL);
+
+		resmem_range_data_t data = { 0 };
+
+		int	       reg_len;
+		const fdt32_t *reg =
+			fdt_getprop(fdt, region_node_ofs, "reg", &reg_len);
+
+		uint32_t target_vmid;
+		if (fdt_getprop_u32(fdt, region_node_ofs, "qcom,target-vmid",
+				    &target_vmid) == OK) {
+			if (!fdt_getprop_bool(fdt, region_node_ofs, "no-map")) {
+				(void)printf(
+					"error: /reserved-memory/%s: "
+					"external memory must be marked no-map\n",
+					name);
+				ret = RET_ERROR;
+				goto out;
+			}
+			if (target_vmid >=
+			    (sizeof(vd->used_periph_vmids) * 8U)) {
+				(void)printf(
+					"error: /reserved-memory/%s: "
+					"qcom,target-vmid out of range: %d\n",
+					name, target_vmid);
+				ret = RET_ERROR;
+				goto out;
+			}
+			vd->used_periph_vmids |=
+				(uint64_t)util_bit(target_vmid);
+			continue;
+		}
+
+		if (reg == NULL) {
+			// This isn't a fixed address allocation, so it won't
+			// influence the VM creation and we can leave it alone
+			// until DTBO generation.
+			continue;
+		}
+
+		data.label_valid =
+			(fdt_getprop_u32(fdt, region_node_ofs, "qcom,label",
+					 &data.label) == OK);
+		data.is_reusable =
+			fdt_getprop_bool(fdt, region_node_ofs, "reusable");
+
+		assert(reg_len >= 0);
+
+		count_t cells = ctx->child_addr_cells + ctx->child_size_cells;
+		size_t	expected_len = sizeof(fdt32_t) * cells;
+		if ((size_t)reg_len != expected_len) {
+			// TODO: Support multiple-range reserved memory nodes
+			(void)printf(
+				"Bad \"reg\" in /reserved-memory/%s; len %zd != %zd\n",
+				name, (size_t)reg_len, expected_len);
+			ret = RET_ERROR;
+			goto out;
+		}
+
+		// Reg property is valid. Parse the address and size.
+		data.ipa_base =
+			(vmaddr_t)fdt_read_num(&reg[0], ctx->child_addr_cells);
+		data.size = (size_t)fdt_read_num(&reg[ctx->child_addr_cells],
+						 ctx->child_size_cells);
+		if ((data.size == 0U) ||
+		    util_add_overflows(data.ipa_base, data.size - 1U)) {
+			(void)printf(
+				"Bad \"reg\" in /reserved-memory/%s; size %#zx\n",
+				name, data.size);
+			ret = RET_ERROR;
+			goto out;
+		}
+
+		(void)printf(
+			"/reserved-memory/%s: addr %#zx, size %#zx, label %#x\n",
+			fdt_get_name(fdt, region_node_ofs, NULL), data.ipa_base,
+			data.size, data.label);
+
+		error_t push_err =
+			vector_push_back(vd->resmem_fixed_ranges, data);
+		if (push_err != OK) {
+			ret = RET_ERROR;
+			goto out;
+		}
+	}
+
+	ret = RET_CLAIMED;
+out:
+	return ret;
+}
+
 dtb_parser_ops_t *
 vm_config_parser_get_ops(void)
 {
 	return &vm_config_parser_ops;
-}
-
-vm_config_parser_params_t
-vm_config_parser_get_params(const vm_t *vm)
-{
-	return (vm_config_parser_params_t){
-		.auth_type = vm->auth_type,
-	};
 }
 
 static void
@@ -1770,6 +2541,9 @@ alloc_parser_data_rollback(vm_config_parser_data_t *vd)
 	}
 	if (vd->vcpus != NULL) {
 		vector_deinit(vd->vcpus);
+	}
+	if (vd->pci_buses != NULL) {
+		vector_deinit(vd->pci_buses);
 	}
 	if (vd->smmus != NULL) {
 		vector_deinit(vd->smmus);
@@ -1783,8 +2557,14 @@ alloc_parser_data_rollback(vm_config_parser_data_t *vd)
 	if (vd->iomem_ranges != NULL) {
 		vector_deinit(vd->iomem_ranges);
 	}
+	if (vd->vmmio_ranges != NULL) {
+		vector_deinit(vd->vmmio_ranges);
+	}
 	if (vd->virtio_mmios != NULL) {
 		vector_deinit(vd->virtio_mmios);
+	}
+	if (vd->virtio_pcis != NULL) {
+		vector_deinit(vd->virtio_pcis);
 	}
 	if (vd->shms != NULL) {
 		vector_deinit(vd->shms);
@@ -1801,90 +2581,64 @@ alloc_parser_data_rollback(vm_config_parser_data_t *vd)
 	if (vd->rm_rpcs != NULL) {
 		vector_deinit(vd->rm_rpcs);
 	}
+	if (vd->resmem_fixed_ranges != NULL) {
+		vector_deinit(vd->resmem_fixed_ranges);
+	}
 	if (vd->minidump != NULL) {
 		vector_deinit(vd->minidump);
+	}
+	if (vd->watchdog != NULL) {
+		vector_deinit(vd->watchdog);
 	}
 	free(vd);
 }
 
-static vm_config_parser_data_t *
-alloc_parser_data(const vm_config_parser_params_t *params)
+vm_config_parser_data_t *
+vm_config_parser_alloc_data(const vm_t *vm)
 {
 	vm_config_parser_data_t *ret = calloc(1, sizeof(*ret));
 	if (ret == NULL) {
 		goto out;
 	}
 
-	ret->auth_type = params->auth_type;
+	ret->auth_type = vm->auth_type;
 
-	ret->rm_rpcs = vector_init(rm_rpc_data_t, 1U, 1U);
-	if (ret->rm_rpcs == NULL) {
-		goto err_out;
-	}
+	RM_PADDED_BEGIN
 
-	ret->doorbells = vector_init(doorbell_data_t, 2U, 2U);
-	if (ret->doorbells == NULL) {
-		goto err_out;
-	}
+	struct {
+		vector_t **v;
+		size_t	   size;
+		count_t	   step;
+	} vectors[] = {
+		{ &ret->resmem_fixed_ranges, sizeof(resmem_range_data_t), 1U },
+		{ &ret->rm_rpcs, sizeof(rm_rpc_data_t), 1U },
+		{ &ret->doorbells, sizeof(doorbell_data_t), 2U },
+		{ &ret->msg_queues, sizeof(msg_queue_data_t), 2U },
+		{ &ret->msg_queue_pairs, sizeof(msg_queue_pair_data_t), 2U },
+		{ &ret->shms, sizeof(shm_data_t), 2U },
+		{ &ret->virtio_mmios, sizeof(virtio_mmio_data_t), 1U },
+		{ &ret->virtio_pcis, sizeof(virtio_pci_data_t), 1U },
+		{ &ret->virtio_iommus, sizeof(virtio_iommu_data_t), 1U },
+		{ &ret->iomem_ranges, sizeof(iomem_range_data_t), 2U },
+		{ &ret->vmmio_ranges, sizeof(mem_range_t), 2U },
+		{ &ret->irq_ranges, sizeof(irq_range_data_t), 2U },
+		{ &ret->iomems, sizeof(iomem_data_t), 1U },
+		{ &ret->smmus, sizeof(smmu_v2_data_t), 1U },
+		{ &ret->pci_buses, sizeof(pci_data_t), 1U },
+		{ &ret->vcpus, sizeof(vcpu_data_t), 2U },
+		{ &ret->rtc, sizeof(rtc_data_t), 1U },
+		{ &ret->minidump, sizeof(minidump_data_t), 1U },
+		{ &ret->watchdog, sizeof(watchdog_data_t), 1U },
+	};
 
-	ret->msg_queues = vector_init(msg_queue_data_t, 2U, 2U);
-	if (ret->msg_queues == NULL) {
-		goto err_out;
-	}
+	RM_PADDED_END
 
-	ret->msg_queue_pairs = vector_init(msg_queue_pair_data_t, 2U, 2U);
-	if (ret->msg_queue_pairs == NULL) {
-		goto err_out;
-	}
-
-	ret->shms = vector_init(shm_data_t, 1U, 1U);
-	if (ret->shms == NULL) {
-		goto err_out;
-	}
-
-	ret->virtio_mmios = vector_init(virtio_mmio_data_t, 1U, 1U);
-	if (ret->virtio_mmios == NULL) {
-		goto err_out;
-	}
-
-	ret->iomem_ranges = vector_init(iomem_range_data_t, 1U, 1U);
-	if (ret->iomem_ranges == NULL) {
-		goto err_out;
-	}
-
-	ret->irq_ranges = vector_init(irq_range_data_t, 1U, 1U);
-	if (ret->irq_ranges == NULL) {
-		goto err_out;
-	}
-
-	ret->iomems = vector_init(iomem_data_t, 1U, 1U);
-	if (ret->iomems == NULL) {
-		goto err_out;
-	}
-
-	ret->smmus = vector_init(smmu_v2_data_t, 1U, 1U);
-	if (ret->smmus == NULL) {
-		goto err_out;
-	}
-
-	ret->vcpus = vector_init(vcpu_data_t, 1U, 1U);
-	if (ret->vcpus == NULL) {
-		goto err_out;
-	}
-
-	ret->rtc = vector_init(rtc_data_t, 1U, 1U);
-	if (ret->rtc == NULL) {
-		goto err_out;
-	}
-
-	ret->minidump = vector_init(minidump_data_t, 1U, 1U);
-	if (ret->minidump == NULL) {
-		goto err_out;
-	}
-
-	ret->platform_data = vector_init(platform_data_t, 1U, 1U);
-	if (ret->platform_data == NULL) {
-		goto err_out;
+	for (index_t i = 0U; i < util_array_size(vectors); i++) {
+		*vectors[i].v = vector_init_size(
+			vectors[i].step, vectors[i].step, vectors[i].size);
+		if (*vectors[i].v == NULL) {
+			goto err_out;
+		}
 	}
 
 	rm_error_t rm_err = platform_alloc_parser_data(ret);
@@ -1898,6 +2652,10 @@ alloc_parser_data(const vm_config_parser_params_t *params)
 	ret->fw_base_ipa  = INVALID_ADDRESS;
 	ret->fw_size_max  = 0x400000U;
 
+	ret->ramfs_idx	     = -1;
+	ret->cfgcpio_idx     = -1;
+	ret->fallback_dt_idx = -1;
+
 	goto out;
 
 err_out:
@@ -1905,23 +2663,6 @@ err_out:
 	ret = NULL;
 out:
 	return ret;
-}
-
-static void
-free_platform_data(vm_config_parser_data_t *vd)
-{
-	if (vd->platform_data != NULL) {
-		size_t cnt = vector_size(vd->platform_data);
-		for (index_t idx = 0; idx < cnt; ++idx) {
-			platform_data_t *d = vector_at_ptr(
-				platform_data_t, vd->platform_data, idx);
-			if (d->data != NULL) {
-				free(d->data);
-			}
-		}
-
-		vector_deinit(vd->platform_data);
-	}
 }
 
 static void
@@ -1936,6 +2677,17 @@ free_vcpus_parser_data(vm_config_parser_data_t *vd)
 		}
 
 		vector_deinit(vd->vcpus);
+	}
+}
+
+static void
+free_pci_parser_data(vm_config_parser_data_t *vd)
+{
+	if (vd->pci_buses != NULL) {
+		FREE_ALL(pci_data_t, vd->pci_buses, general,
+			 { free(d->patch); });
+
+		vector_deinit(vd->pci_buses);
 	}
 }
 
@@ -1955,15 +2707,30 @@ free_smmus_parser_data(vm_config_parser_data_t *vd)
 }
 
 static void
+free_virtio_iommus_parser_data(vm_config_parser_data_t *vd)
+{
+	if (vd->virtio_iommus != NULL) {
+		vector_deinit(vd->virtio_iommus);
+	}
+}
+
+static void
 free_io_parser_data(vm_config_parser_data_t *vd)
 {
 	if (vd->virtio_mmios != NULL) {
-		FREE_GENERAL(virtio_mmio_data_t, vd->virtio_mmios);
+		FREE_ALL(virtio_mmio_data_t, vd->virtio_mmios, common.general,
+			 { free(d->common.patch); });
 		vector_deinit(vd->virtio_mmios);
 	}
 
+	if (vd->virtio_pcis != NULL) {
+		FREE_ALL(virtio_pci_data_t, vd->virtio_pcis, common.general,
+			 { free(d->common.patch); });
+		vector_deinit(vd->virtio_pcis);
+	}
+
 	if (vd->iomems != NULL) {
-		FREE_ALL(iomem_data_t, vd->iomems, {
+		FREE_ALL(iomem_data_t, vd->iomems, general, {
 			free(d->patch_node_path);
 			free(d->rm_sglist);
 		});
@@ -1980,7 +2747,7 @@ free_msg_parser_data(vm_config_parser_data_t *vd)
 	}
 
 	if (vd->msg_queue_pairs != NULL) {
-		FREE_ALL(msg_queue_pair_data_t, vd->msg_queue_pairs,
+		FREE_ALL(msg_queue_pair_data_t, vd->msg_queue_pairs, general,
 			 { free(d->peer_id); });
 		vector_deinit(vd->msg_queue_pairs);
 	}
@@ -1992,14 +2759,34 @@ free_msg_parser_data(vm_config_parser_data_t *vd)
 }
 
 static void
-free_parser_data(vm_config_parser_data_t *vd)
+free_watchdog(vm_config_parser_data_t *vd)
+{
+	if (vd->watchdog != NULL) {
+		size_t cnt = vector_size(vd->watchdog);
+		for (index_t i = 0U; i < cnt; i++) {
+			watchdog_data_t *d =
+				vector_at_ptr(watchdog_data_t, vd->watchdog, i);
+			free(d->node_path);
+		}
+
+		vector_deinit(vd->watchdog);
+	}
+}
+
+void
+vm_config_parser_free_data(vm_config_parser_data_t *vd)
 {
 	if (vd == NULL) {
 		goto out;
 	}
 
+	if (vd->resmem_fixed_ranges != NULL) {
+		vector_deinit(vd->resmem_fixed_ranges);
+	}
+
 	if (vd->rm_rpcs != NULL) {
-		FREE_GENERAL(rm_rpc_data_t, vd->rm_rpcs);
+		FREE_ALL(rm_rpc_data_t, vd->rm_rpcs, general,
+			 { free(d->console_owner); });
 		vector_deinit(vd->rm_rpcs);
 	}
 
@@ -2017,8 +2804,14 @@ free_parser_data(vm_config_parser_data_t *vd)
 		vector_deinit(vd->minidump);
 	}
 
+	free_watchdog(vd);
+
 	if (vd->iomem_ranges != NULL) {
 		vector_deinit(vd->iomem_ranges);
+	}
+
+	if (vd->vmmio_ranges != NULL) {
+		vector_deinit(vd->vmmio_ranges);
 	}
 
 	if (vd->irq_ranges != NULL) {
@@ -2027,13 +2820,15 @@ free_parser_data(vm_config_parser_data_t *vd)
 
 	free_smmus_parser_data(vd);
 
+	free_pci_parser_data(vd);
+
+	free_virtio_iommus_parser_data(vd);
+
 	free_vcpus_parser_data(vd);
 
 	if (vd->rtc != NULL) {
 		vector_deinit(vd->rtc);
 	}
-
-	free_platform_data(vd);
 
 	if (vd->kernel_entry_segment != NULL) {
 		free(vd->kernel_entry_segment);
@@ -2057,22 +2852,28 @@ out:
 
 #undef FREE_GENERAL
 
-static bool
-read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
-		       count_t count)
+error_t
+read_interrupts_config(const void *fdt, int node_ofs, const char *property,
+		       interrupt_data_t *irqs, count_t count)
 {
-	bool ret = false;
-	int  len = 0;
+	error_t ret;
+	int	len;
 
 	const fdt32_t *irq_data =
-		(const fdt32_t *)fdt_getprop(fdt, node_ofs, "interrupts", &len);
+		(const fdt32_t *)fdt_getprop(fdt, node_ofs, property, &len);
 	if (irq_data == NULL) {
-		ret = false;
+		if (len == -FDT_ERR_NOTFOUND) {
+			ret = ERROR_DENIED;
+		} else {
+			ret = ERROR_FAILURE;
+		}
 		goto out;
 	}
 
-	if ((uint32_t)len != (3U * sizeof(irq_data[0]) * count)) {
-		ret = false;
+	// We assume #interrupt-cells = 3 by default.
+	if (((len % 3) != 0) ||
+	    ((uint32_t)len < (3U * sizeof(irq_data[0]) * count))) {
+		ret = ERROR_ARGUMENT_SIZE;
 		goto out;
 	}
 
@@ -2083,7 +2884,7 @@ read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
 	while (cnt > 0U) {
 		virq_t offset = 0, limit = 0;
 
-		ret = true;
+		ret = OK;
 
 		switch (fdt32_to_cpu(irq_data[i])) {
 		case DT_GIC_SPI:
@@ -2109,11 +2910,11 @@ read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
 		default:
 			(void)printf("Ignoring invalid GIC IRQ class %d\n",
 				     fdt32_to_cpu(irq_data[i]));
-			ret = false;
+			ret = ERROR_ARGUMENT_INVALID;
 			break;
 		}
-		if (!ret) {
-			break;
+		if (ret != OK) {
+			goto out;
 		}
 		++i;
 
@@ -2121,8 +2922,8 @@ read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
 		if (cur_irq->irq >= limit) {
 			(void)printf("Ignoring invalid GIC IRQ number %d\n",
 				     cur_irq->irq);
-			ret = false;
-			break;
+			ret = ERROR_ARGUMENT_INVALID;
+			goto out;
 		}
 		++i;
 
@@ -2131,23 +2932,48 @@ read_interrupts_config(const void *fdt, int node_ofs, interrupt_data_t *irqs,
 			cur_irq->is_edge_triggering = true;
 			break;
 		case DT_GIC_IRQ_TYPE_LEVEL_HIGH:
+		case DT_GIC_IRQ_TYPE_LEVEL_LOW:
 			cur_irq->is_edge_triggering = false;
 			break;
 		default:
 			(void)printf(
 				"Ignoring invalid GIC IRQ trigger mode %#x\n",
 				fdt32_to_cpu(irq_data[i]) & 0xfU);
-			ret = false;
+			ret = ERROR_ARGUMENT_INVALID;
 			break;
 		}
-		if (!ret) {
-			break;
+		if (ret != OK) {
+			goto out;
 		}
 		++i;
 
 		++cur_irq;
 		--cnt;
 	}
+
+	ret = OK;
+out:
+	return ret;
+}
+
+bool
+read_sdei_event_interrupt_config(const void *fdt, int node_ofs,
+				 interrupt_data_t *irq)
+{
+	bool	 ret;
+	uint32_t event_number;
+
+	if (fdt_getprop_u32(fdt, node_ofs, "sdei-event-number",
+			    &event_number) != OK) {
+		ret = false;
+		goto out;
+	}
+
+	irq->irq		= event_number | VIRQ_SDEI_BIT;
+	irq->is_cpu_local	= false;
+	irq->is_edge_triggering = true;
+	irq->is_sdei		= true;
+	ret			= true;
 out:
 	return ret;
 }
@@ -2236,7 +3062,7 @@ parse_iomem_opt(const void *fdt, int node_ofs, iomem_data_t *cfg)
 		const count_t entry_cells = addr_cells + size_cells;
 		size_t	      entry_size  = entry_cells * sizeof(fdt32_t);
 
-		if (((size_t)len % entry_size) != 0U) {
+		if ((entry_size == 0U) || (((size_t)len % entry_size) != 0U)) {
 			(void)printf("Error: invalid qcom,rm_sglist value\n");
 			ret = RET_ERROR;
 			goto out;
@@ -2361,7 +3187,6 @@ parse_iomem(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
 	vector_push_back_imm(iomem_data_t, vd->iomems, cfg, push_err);
 
 	if (push_err != OK) {
-		destroy_general_vdevice_props(&cfg.general);
 		ret = RET_ERROR;
 	}
 out:
@@ -2371,5 +3196,220 @@ out:
 		destroy_general_vdevice_props(&cfg.general);
 	}
 
+	return ret;
+}
+
+static error_t
+platform_parse_gic(vm_config_parser_data_t *vd, const void *fdt,
+		   uint32_t phandle)
+{
+	error_t ret;
+	int	vgic_ofs = fdt_node_offset_by_phandle(fdt, phandle);
+
+	if (vgic_ofs < 0) {
+		(void)printf("Interrupt controller phandle is invalid\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	ctx_t ctx = dtb_parser_get_ctx(fdt, vgic_ofs);
+
+	if (!ctx.addr_is_phys) {
+		char path[256];
+		if (fdt_get_path(fdt, vgic_ofs, path, (int)sizeof(path)) != 0) {
+			(void)strlcpy(path, "<unknown path>", sizeof(path));
+		}
+		(void)printf("Warning: addresses in %s are not 1:1 physical!\n",
+			     path);
+	}
+
+	// check vgic compatible
+	if (fdt_node_check_compatible(fdt, vgic_ofs, "arm,gic-v3") != 0) {
+		(void)printf("Interrupt controller is not a GIC\n");
+		ret = ERROR_UNIMPLEMENTED;
+		goto out;
+	}
+
+	if (!fdt_getprop_bool(fdt, vgic_ofs, "interrupt-controller")) {
+		(void)printf("Missing \"interrupt-controller\" property\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	vd->vgic_addr_cells	  = ctx.addr_cells;
+	vd->vgic_size_cells	  = ctx.size_cells;
+	vd->vgic_child_addr_cells = ctx.child_addr_cells;
+
+	// if there is no 'address_cells' defined for this node, then the
+	// child 'interrupt-map' assumes 0.
+	vd->map_addr_cells =
+		ctx.child_addr_cells_default ? 0U : ctx.child_addr_cells;
+
+	uint32_t gicr_regions;
+	if ((fdt_getprop_u32(fdt, vgic_ofs, "#redistributor-regions",
+			     &gicr_regions) == OK) &&
+	    (gicr_regions != 1U)) {
+		(void)printf("Can't support multiple GICR regions\n");
+		ret = ERROR_ADDR_INVALID;
+		goto out;
+	}
+
+	uint32_t int_cells;
+	if ((fdt_getprop_u32(fdt, vgic_ofs, "#interrupt-cells", &int_cells) !=
+	     OK) ||
+	    (int_cells != 3U)) {
+		(void)printf(
+			"GIC node does not specify #interrupt-cells = 3\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	int	       len;
+	const fdt32_t *reg =
+		(const fdt32_t *)fdt_getprop(fdt, vgic_ofs, "reg", &len);
+	uint32_t reg_cells = ctx.addr_cells + ctx.size_cells;
+	if (reg == NULL) {
+		// No reg property; patch DT and allocate addresses
+		vd->vgic_gicd_base = INVALID_ADDRESS;
+		vd->vgic_gicr_base = INVALID_ADDRESS;
+		vd->vgic_patch_dt  = true;
+	} else if ((size_t)len >= (sizeof(fdt32_t) * 2U * reg_cells)) {
+		// Reg property is valid. Parse GICD and GICR addresses, and
+		// don't patch the DT.
+		index_t i	   = 0;
+		vd->vgic_gicd_base = fdt_read_num(&reg[i], ctx.addr_cells);
+		i += reg_cells;
+		vd->vgic_gicr_base = fdt_read_num(&reg[i], ctx.addr_cells);
+		vd->vgic_patch_dt  = false;
+	} else {
+		(void)printf("Truncated \"reg\" property in GIC node\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	// Virtual GICR is always GICv3, with no VLPIS, so size is 128K
+	const size_t gicr_size = (size_t)2U << 16;
+
+	if (fdt_getprop_u64(fdt, vgic_ofs, "redistributor-stride",
+			    &vd->vgic_gicr_stride) == OK) {
+		if ((vd->vgic_gicr_stride < gicr_size) ||
+		    !util_is_p2aligned(vd->vgic_gicr_stride, 16)) {
+			(void)printf(
+				"GIC node's \"redistributor-stride\" value (%#zx) is too small or misaligned\n",
+				vd->vgic_gicr_stride);
+			ret = ERROR_ARGUMENT_INVALID;
+			goto out;
+		}
+	} else {
+		// No stride property; default to the size of the GICR.
+		vd->vgic_gicr_stride = gicr_size;
+	}
+
+	ret = OK;
+
+out:
+	if (ret != OK) {
+		vd->vgic_gicr_stride = 0U;
+		vd->vgic_phandle     = ~0U;
+	} else {
+		vd->vgic_phandle = phandle;
+	}
+	return ret;
+}
+
+static listener_return_t
+parse_interrupts(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+		 const ctx_t *ctx)
+{
+	listener_return_t ret = RET_CLAIMED;
+	(void)ctx;
+
+	// Try to find the GIC from the explicit config path.
+	uint32_t    phandle = ~0U;
+	int	    len;
+	const char *path = fdt_stringlist_get(fdt, node_ofs, "config", 0, &len);
+	if ((path != NULL) && (len > 1) && (path[0] == '/')) {
+		int gic_ofs = fdt_path_offset(fdt, path);
+		if (gic_ofs < 0) {
+			(void)printf(
+				"Error: couldn't find GIC node \"%s\": %d\n",
+				path, gic_ofs);
+			ret = RET_ERROR;
+			goto out;
+		}
+		phandle = fdt_get_phandle(fdt, gic_ofs);
+	} else if ((len == -FDT_ERR_NOTFOUND) && (vd->vgic_phandle != ~0U)) {
+		// Property was missing (not invalid) and we already found the
+		// GIC from the root node; no error.
+		ret = RET_CONTINUE;
+		goto out;
+	} else if (fdt_getprop_u32(fdt, node_ofs, "config", &phandle) == OK) {
+		(void)printf(
+			"Warning: interrupts \"config\" property looks like a phandle (%#x), but should be a path\n",
+			phandle);
+	} else {
+		// Property is present, but doesn't look like either a path or
+		// a phandle
+		(void)printf("Error: couldn't read \"config\" property\n");
+		ret = RET_ERROR;
+		goto out;
+	}
+
+	if (phandle != vd->vgic_phandle) {
+		// Config specified a GIC, and it's not the same as the root
+		// interrupt-parent (or the latter was missing or invalid).
+		error_t err = platform_parse_gic(vd, fdt, phandle);
+		if (err != OK) {
+			(void)printf("Parsing GIC node failed: %" PRId32 "\n",
+				     (int32_t)err);
+			ret = RET_ERROR;
+			goto out;
+		}
+	}
+
+out:
+	return ret;
+}
+
+static listener_return_t
+parse_root(vm_config_parser_data_t *vd, const void *fdt, int node_ofs,
+	   const ctx_t *ctx)
+{
+	(void)ctx;
+	listener_return_t ret;
+
+	// Since the root node is the first node visited, we should not have
+	// already parsed the vm-config interrupts node. However, in cases where
+	// there are two DTs, the image DT may have tried to specify a GIC;
+	// doing this will fail because there is no way for interrupt-map
+	// and interrupt-parent properties in the VMM DT to name the GIC node,
+	// so we don't need to try to handle it.
+	if ((vd->vgic_phandle != 0U) && (vd->vgic_phandle != ~0U)) {
+		(void)printf("Image DT specified a GIC node (phandle %#x)\n",
+			     vd->vgic_phandle);
+		ret = RET_ERROR;
+		goto out;
+	}
+	vd->vgic_phandle = ~0U;
+
+	// Try to find the GIC from the root interrupt-parent.
+	uint32_t phandle;
+	if (fdt_getprop_u32(fdt, node_ofs, "interrupt-parent", &phandle) ==
+	    OK) {
+		// Try to parse the GIC node. Ignore an ERROR_UNIMPLEMENTED,
+		// which means the root interrupt controller is not a GIC; in
+		// that case we will obtain a link to the GIC from the VM
+		// configuration's interrupts phandle.
+		error_t err = platform_parse_gic(vd, fdt, phandle);
+		if ((err != OK) && (err != ERROR_UNIMPLEMENTED)) {
+			(void)printf("Unable to parse interrupt-parent: %u\n",
+				     err);
+			ret = RET_ERROR;
+			goto out;
+		}
+	}
+
+	ret = RET_CONTINUE;
+out:
 	return ret;
 }

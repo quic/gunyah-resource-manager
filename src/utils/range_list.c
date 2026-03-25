@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -238,7 +238,6 @@ range_list_remove(range_list_t *list, uint64_t base_address, size_t size,
 		goto out;
 	}
 
-	// ignore alignment if specified base address
 	if ((base_address != INVALID_ADDRESS) &&
 	    (util_add_overflows(base_address, size) ||
 	     (base_address < list->base_address) ||
@@ -252,7 +251,8 @@ range_list_remove(range_list_t *list, uint64_t base_address, size_t size,
 	// allocate in sub level
 	range_list_find_ret_t find_range_ret =
 		range_list_find_range(list, base_address, size, alignment);
-	if (find_range_ret.err != OK) {
+	if ((find_range_ret.err != OK) ||
+	    (find_range_ret.selected_range == NULL)) {
 		ret.err = find_range_ret.err;
 		goto out;
 	}
@@ -506,12 +506,6 @@ range_list_find_range(range_list_t *allocator, uint64_t base_address,
 		.err = ERROR_NORESOURCES,
 	};
 
-	if ((base_address != INVALID_ADDRESS) &&
-	    !util_is_baligned(base_address, alignment)) {
-		ret.err = ERROR_ARGUMENT_INVALID;
-		goto out;
-	}
-
 	range_t *cur = NULL;
 
 	// FIXME: might be able to find the just fit free range to avoid
@@ -551,7 +545,7 @@ range_list_find_range(range_list_t *allocator, uint64_t base_address,
 			}
 		}
 	}
-out:
+
 	return ret;
 }
 
@@ -628,8 +622,8 @@ range_list_update(range_list_t *list, uint64_t base_address, size_t size,
 	can_merge(range_left, selected_range, data, range_right, &merge_left,
 		  &merge_right);
 
-	// fast path only applies to change the current range and will not merge
-	// to neighours
+	// Fast path only applies to change the current range and will not merge
+	// to neighbours
 	if ((selected_range->base_address == base_address) &&
 	    (selected_range->size == size) && !merge_right && !merge_left) {
 		selected_range->data = data;
@@ -651,7 +645,7 @@ range_list_update(range_list_t *list, uint64_t base_address, size_t size,
 
 		ret = insert_range(list, left, &new_range, right);
 
-		// shouldn't faile since we just remove the same range
+		// Shouldn't fail since we just removed the same range
 		assert(ret == OK);
 	}
 out:

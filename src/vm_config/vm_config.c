@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -27,11 +27,13 @@
 #pragma clang diagnostic pop
 
 #include <compiler.h>
+#include <device_manager.h>
 #include <dt_overlay.h>
 #include <dtb_parser.h>
 #include <event.h>
 #include <guest_interface.h>
 #include <guest_rights.h>
+#include <heap_mgnt.h>
 #include <irq_arch.h>
 #include <irq_manager.h>
 #include <log.h>
@@ -39,12 +41,16 @@
 #include <memextent.h>
 #include <memparcel.h>
 #include <memparcel_msg.h>
+#include <panic.h>
 #include <platform.h>
+#include <platform_devices.h>
 #include <platform_vm_config.h>
 #include <resource-manager.h>
 #include <rm-rpc-fifo.h>
 #include <rm-rpc.h>
 #include <time.h>
+#include <uapi/mem.h>
+#include <vgic.h>
 #include <virq.h>
 #include <vm_client.h>
 #include <vm_config.h>
@@ -86,13 +92,6 @@ create_msgqueue(uint16_t queue_depth, uint16_t msg_size);
 static cap_id_result_t
 create_doorbell(void);
 
-static cap_id_result_t
-create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
-		   count_t vqs_num, vmaddr_t *frontend_ipa,
-		   virtio_device_type_t device_type, bool valid_device_type,
-		   bool sync_reset, vmaddr_t *backend_ipa, cap_id_t *me_cap,
-		   size_t *me_size, void **rm_addr);
-
 static error_t
 handle_rm_rpc(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 static error_t
@@ -108,6 +107,12 @@ handle_vcpu(vm_config_t *vmcfg, const vm_config_parser_data_t *data);
 static error_t
 handle_virtio_mmio(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 static error_t
+handle_pci(vm_config_t *vmcfg, vm_config_parser_data_t *data);
+static error_t
+handle_virtio_pci(vm_config_t *vmcfg, vm_config_parser_data_t *data);
+static error_t
+handle_virtio_iommu(vm_config_t *vmcfg, vm_config_parser_data_t *data);
+static error_t
 handle_iomems(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 static error_t
 handle_iomem_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data);
@@ -117,6 +122,8 @@ static error_t
 handle_interrupt_controller(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 static error_t
 handle_ids(vm_config_t *vmcfg, vm_config_parser_data_t *data);
+static error_t
+handle_resmem_fixed_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 static error_t
 handle_watchdog(vm_config_t *vmcfg, vm_config_parser_data_t *data);
 static error_t
@@ -138,15 +145,21 @@ static error_t
 vm_config_add_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 			  cap_id_t rm_cap, interrupt_data_t frontend_virq,
 			  interrupt_data_t backend_virq, virtio_mmio_data_t *d,
-			  bool export_to_dt, vmaddr_t frontend_ipa,
-			  vmaddr_t backend_ipa, cap_id_t me_cap, size_t me_size,
-			  void *rm_addr);
+			  vmaddr_t frontend_ipa, vmaddr_t backend_ipa,
+			  cap_id_t me_cap, size_t me_size, void *rm_addr);
+
+static error_t
+vm_config_add_virtio_pci(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
+			 cap_id_t rm_cap, interrupt_data_t backend_virq,
+			 virtio_pci_data_t *d, vmaddr_t backend_ipa,
+			 cap_id_t me_cap, size_t me_size, void *rm_addr);
 
 static vdevice_node_t *
 vm_config_add_doorbell(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
 		       bool source, interrupt_data_t virq, uint32_t label,
 		       const char *generate, bool export_to_dt,
 		       bool source_can_clear);
+
 static error_t
 vm_config_add_msgqueue(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
 		       bool tx, interrupt_data_t vm_virq,
@@ -161,9 +174,15 @@ vm_config_add_msgqueue_pair(vm_config_t *vmcfg, msg_queue_pair_data_t *data,
 static error_t
 vm_config_add_rm_rpc(vm_config_t *vmcfg, rm_rpc_data_t *data, cap_id_t rx,
 		     cap_id_t tx);
+
 static error_t
-vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
-		       interrupt_data_t bark_virq, bool allow_management);
+vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap, watchdog_data_t *d,
+		       bool allow_management);
+
+static error_t
+vm_config_add_pci(vm_config_t *vmcfg, cap_id_t pci_cap, const pci_data_t *data,
+		  vmaddr_t config_ipa, size_t config_size, vmaddr_t npmem_ipa,
+		  size_t npmem_size, uint32_t irq_slots);
 
 static void
 handle_msgqueue_pair_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
@@ -199,9 +218,11 @@ handle_shm_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
 static void
 handle_watchdog_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
 static void
-handle_virtio_mmio_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
+handle_virtio_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
 static void
 handle_iomem_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
+static void
+handle_pci_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
 static void
 handle_vpm_group_destruction(vm_config_t *vmcfg, vdevice_node_t **node);
 static void
@@ -222,7 +243,8 @@ check_default_peer(vm_config_t *self, vm_t *peer)
 	assert(self != NULL);
 	assert(self->vm != NULL);
 
-	return (peer != NULL) && (self->vm->owner == peer->vmid);
+	return (peer != NULL) &&
+	       ((self->vm->owner == peer->vmid) || (peer->vmid == VMID_HLOS));
 }
 
 // FIXME: define a dedicate API to generate handle
@@ -277,12 +299,11 @@ revert_map_virq(vmid_t vmid, uint32_t irq)
 }
 
 static error_t
-add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d);
-
-static void
 get_vdev_watchdog_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 		       vector_t *descs)
 {
+	error_t ret;
+
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
@@ -295,44 +316,63 @@ get_vdev_watchdog_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 		item.resource_capid_low =
 			(uint32_t)(vwdt->manager_cap & 0xffffffffU);
 		item.resource_capid_high = (uint32_t)(vwdt->manager_cap >> 32);
-		vector_push_back(descs, item);
+		ret			 = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
+	} else {
+		// Ignore
+		ret = OK;
 	}
+
+	return ret;
 }
 
-static void
-get_vdev_virtio_mmio_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
-			  vector_t *descs)
+static error_t
+get_vdev_virtio_backend_desc(vmid_t self, vmid_t vmid,
+			     const vdevice_node_t *node, vector_t *descs)
 {
+	error_t ret;
+
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
 
-	struct vdevice_virtio_mmio *vio = node->config.virtio_mmio;
+	struct vdevice_virtio *vio = node->config.virtio;
 	assert(vio != NULL);
 
-	if (vio->backend == self) {
+	if (vio->backend.valid && (vio->backend.vm == self)) {
 		item.resource_type  = (uint8_t)RSC_VIRTIO_MMIO;
-		item.resource_label = vio->label;
+		item.resource_label = vio->backend.label;
 		item.resource_capid_low =
-			(uint32_t)(vio->backend_cap & 0xffffffffU);
-		item.resource_capid_high  = (uint32_t)(vio->backend_cap >> 32);
-		item.resource_virq_number = virq_get_number(vio->backend_virq);
+			(uint32_t)(vio->backend.cap & 0xffffffffU);
+		item.resource_capid_high  = (uint32_t)(vio->backend.cap >> 32);
+		item.resource_virq_number = virq_get_number(vio->backend.virq);
 		item.resource_base_address_low =
-			(uint32_t)(vio->backend_ipa & 0xffffffffU);
+			(uint32_t)(vio->backend.ipa & 0xffffffffU);
 		item.resource_base_address_high =
-			(uint32_t)(vio->backend_ipa >> 32);
-		item.resource_size_low = (uint32_t)(vio->me_size & 0xffffffffU);
-		item.resource_size_high = (uint32_t)(vio->me_size >> 32);
-		vector_push_back(descs, item);
+			(uint32_t)(vio->backend.ipa >> 32);
+		item.resource_size_low =
+			(uint32_t)(vio->backend.me_size & 0xffffffffU);
+		item.resource_size_high =
+			(uint32_t)(vio->backend.me_size >> 32);
+		ret = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else {
 		// Ignore
+		ret = OK;
 	}
+
+	return ret;
 }
 
-static void
+static error_t
 get_vdev_virtual_pm_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 			 vector_t *descs)
 {
+	error_t		       ret;
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
@@ -347,16 +387,24 @@ get_vdev_virtual_pm_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 			(uint32_t)(vpm->peer_cap & 0xffffffffU);
 		item.resource_capid_high  = (uint32_t)(vpm->peer_cap >> 32);
 		item.resource_virq_number = virq_get_number(vpm->peer_virq);
-		vector_push_back(descs, item);
+		ret			  = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else {
 		// Ignore
+		ret = OK;
 	}
+
+	return ret;
 }
 
-static void
+static error_t
 get_vdev_msg_queue_pair_desc(vmid_t self, vmid_t vmid,
 			     const vdevice_node_t *node, vector_t *descs)
 {
+	error_t ret;
+
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
@@ -370,7 +418,11 @@ get_vdev_msg_queue_pair_desc(vmid_t self, vmid_t vmid,
 			(uint32_t)(mq->tx_vm_cap & 0xffffffffU);
 		item.resource_capid_high  = (uint32_t)(mq->tx_vm_cap >> 32);
 		item.resource_virq_number = virq_get_number(mq->tx_vm_virq);
-		vector_push_back(descs, item);
+		ret			  = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+			goto out;
+		}
 
 		// Rx msgqueue from self vdevice list
 		item.resource_type  = (uint8_t)RSC_MSG_QUEUE_RECV;
@@ -379,7 +431,11 @@ get_vdev_msg_queue_pair_desc(vmid_t self, vmid_t vmid,
 			(uint32_t)(mq->rx_vm_cap & 0xffffffffU);
 		item.resource_capid_high  = (uint32_t)(mq->rx_vm_cap >> 32);
 		item.resource_virq_number = virq_get_number(mq->rx_vm_virq);
-		vector_push_back(descs, item);
+		ret			  = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+			goto out;
+		}
 	} else if ((mq->peer == self) && (!mq->has_peer_vdevice)) {
 		// returns resource info if there is no peer vdevice
 		// Currently, only use peer-default (PVM), the vdevice
@@ -391,7 +447,11 @@ get_vdev_msg_queue_pair_desc(vmid_t self, vmid_t vmid,
 			(uint32_t)(mq->tx_peer_cap & 0xffffffffU);
 		item.resource_capid_high  = (uint32_t)(mq->tx_peer_cap >> 32);
 		item.resource_virq_number = virq_get_number(mq->tx_peer_virq);
-		vector_push_back(descs, item);
+		ret			  = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+			goto out;
+		}
 
 		// Rx msgqueue from peer vdevice list
 		item.resource_type  = (uint8_t)RSC_MSG_QUEUE_RECV;
@@ -400,16 +460,26 @@ get_vdev_msg_queue_pair_desc(vmid_t self, vmid_t vmid,
 			(uint32_t)(mq->rx_peer_cap & 0xffffffffU);
 		item.resource_capid_high  = (uint32_t)(mq->rx_peer_cap >> 32);
 		item.resource_virq_number = virq_get_number(mq->rx_peer_virq);
-		vector_push_back(descs, item);
+		ret			  = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+			goto out;
+		}
 	} else {
 		// Ignore
+		ret = OK;
 	}
+
+out:
+	return ret;
 }
 
-static void
+static error_t
 get_vdev_msg_queue_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 			vector_t *descs)
 {
+	error_t ret;
+
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
@@ -423,7 +493,10 @@ get_vdev_msg_queue_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 		item.resource_capid_low = (uint32_t)(mq->vm_cap & 0xffffffffU);
 		item.resource_capid_high  = (uint32_t)(mq->vm_cap >> 32);
 		item.resource_virq_number = virq_get_number(mq->vm_virq);
-		vector_push_back(descs, item);
+		ret			  = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else if (mq->peer == self) {
 		// Msgqueue from peer vdevice list
 		item.resource_type  = (mq->tx) ? (uint8_t)RSC_MSG_QUEUE_RECV
@@ -433,16 +506,24 @@ get_vdev_msg_queue_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 			(uint32_t)(mq->peer_cap & 0xffffffffU);
 		item.resource_capid_high  = (uint32_t)(mq->peer_cap >> 32);
 		item.resource_virq_number = virq_get_number(mq->peer_virq);
-		vector_push_back(descs, item);
+		ret			  = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else {
 		// Ignore
+		ret = OK;
 	}
+
+	return ret;
 }
 
-static void
+static error_t
 get_vdev_doorbell_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 		       vector_t *descs)
 {
+	error_t ret;
+
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
@@ -456,10 +537,17 @@ get_vdev_doorbell_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 		item.resource_capid_low	 = (uint32_t)(db->vm_cap & 0xffffffffU);
 		item.resource_capid_high = (uint32_t)(db->vm_cap >> 32);
 		// The 0 here should be changed to VIRQ_INVALID.
-		// FIXME:
+		// FIXME: QC RM issue #39
 		item.resource_virq_number =
 			db->source ? 0U : virq_get_number(db->vm_virq);
-		vector_push_back(descs, item);
+		if (!db->source && db->vm_virq.is_sdei) {
+			ret = OK;
+		} else {
+			ret = vector_push_back(descs, item);
+		}
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else if ((db->peer == self) && (!db->has_peer_vdevice)) {
 		// returns resource info if there is no peer vdevice
 
@@ -471,19 +559,31 @@ get_vdev_doorbell_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 			(uint32_t)(db->peer_cap & 0xffffffffU);
 		item.resource_capid_high = (uint32_t)(db->peer_cap >> 32);
 		// The 0 here should be changed to VIRQ_INVALID.
-		// FIXME:
+		// FIXME: QC RM issue #39
 		item.resource_virq_number =
 			db->source ? virq_get_number(db->peer_virq) : 0U;
-		vector_push_back(descs, item);
+		if (db->source && db->peer_virq.is_sdei) {
+			ret = OK;
+		} else {
+			ret = vector_push_back(descs, item);
+		}
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else {
 		// Ignore
+		ret = OK;
 	}
+
+	return ret;
 }
 
-static void
+static error_t
 get_vdev_memory_extent_desc(vmid_t self, vmid_t vmid,
 			    const vdevice_node_t *node, vector_t *descs)
 {
+	error_t ret;
+
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
@@ -499,7 +599,10 @@ get_vdev_memory_extent_desc(vmid_t self, vmid_t vmid,
 			(uint32_t)(vme->owner_host_cap & 0xffffffffU);
 		item.resource_capid_high =
 			(uint32_t)(vme->owner_host_cap >> 32);
-		vector_push_back(descs, item);
+		ret = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else if ((vme->manager == self) && (vme->owner == vmid) &&
 		   (vme->manager_guest_cap != CSPACE_CAP_INVALID)) {
 		item.resource_type  = (uint8_t)RSC_MEMORY_EXTENT;
@@ -508,16 +611,24 @@ get_vdev_memory_extent_desc(vmid_t self, vmid_t vmid,
 			(uint32_t)(vme->manager_guest_cap & 0xffffffffU);
 		item.resource_capid_high =
 			(uint32_t)(vme->manager_guest_cap >> 32);
-		vector_push_back(descs, item);
+		ret = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else {
 		// Ignore
+		ret = OK;
 	}
+
+	return ret;
 }
 
-static void
+static error_t
 get_vdev_addrspace_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 			vector_t *descs)
 {
+	error_t ret;
+
 	rm_hyp_resource_resp_t item = {
 		.partner_vmid = vmid,
 	};
@@ -525,52 +636,61 @@ get_vdev_addrspace_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 	struct vdevice_address_space *vas = node->config.address_space;
 	assert(vas != NULL);
 
-	if ((vas->owner == self) && (vas->vm_cap != CSPACE_CAP_INVALID)) {
-		item.resource_type	= (uint8_t)RSC_ADDRESS_SPACE;
-		item.resource_capid_low = (uint32_t)(vas->vm_cap & 0xffffffffU);
-		item.resource_capid_high = (uint32_t)(vas->vm_cap >> 32);
-		vector_push_back(descs, item);
-	} else if ((vas->manager == self) && (vas->owner == vmid)) {
+	if ((vas->manager == self) && (vas->owner == vmid)) {
 		item.resource_type = (uint8_t)RSC_ADDRESS_SPACE;
 		item.resource_capid_low =
 			(uint32_t)(vas->manager_map_cap & 0xffffffffU);
 		item.resource_capid_high =
 			(uint32_t)(vas->manager_map_cap >> 32);
-		vector_push_back(descs, item);
+		ret = vector_push_back(descs, item);
+		if (ret != OK) {
+			LOG_ERR(ret);
+		}
 	} else {
 		// Ignore
+		ret = OK;
 	}
+
+	return ret;
 }
 
 static rm_error_t
 get_vdev_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 	      vector_t *descs)
 {
+	error_t err;
+
+	rm_error_t ret;
+
 	if (!node->visible) {
+		ret = RM_OK;
 		goto out;
 	}
 
 	if (node->type == VDEV_DOORBELL) {
-		get_vdev_doorbell_desc(self, vmid, node, descs);
+		err = get_vdev_doorbell_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_MSG_QUEUE) {
-		get_vdev_msg_queue_desc(self, vmid, node, descs);
+		err = get_vdev_msg_queue_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_MSG_QUEUE_PAIR) {
-		get_vdev_msg_queue_pair_desc(self, vmid, node, descs);
+		err = get_vdev_msg_queue_pair_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_VIRTUAL_PM) {
-		get_vdev_virtual_pm_desc(self, vmid, node, descs);
-	} else if (node->type == VDEV_VIRTIO_MMIO) {
-		get_vdev_virtio_mmio_desc(self, vmid, node, descs);
+		err = get_vdev_virtual_pm_desc(self, vmid, node, descs);
+	} else if (node->type == VDEV_VIRTIO) {
+		err = get_vdev_virtio_backend_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_WATCHDOG) {
-		get_vdev_watchdog_desc(self, vmid, node, descs);
+		err = get_vdev_watchdog_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_MEMORY_EXTENT) {
-		get_vdev_memory_extent_desc(self, vmid, node, descs);
+		err = get_vdev_memory_extent_desc(self, vmid, node, descs);
 	} else if (node->type == VDEV_ADDRESS_SPACE) {
-		get_vdev_addrspace_desc(self, vmid, node, descs);
+		err = get_vdev_addrspace_desc(self, vmid, node, descs);
 	} else {
 		// Other vdevice types not supplied in get resources
+		err = OK;
 	}
+
+	ret = rm_error_from_hyp(err);
 out:
-	return RM_OK;
+	return ret;
 }
 
 rm_error_t
@@ -592,7 +712,7 @@ vm_config_get_resource_descs(vmid_t self, vmid_t vmid, vector_t *descs)
 		goto out;
 	}
 
-	if (owner || rm_caps_for_hlos) {
+	if (owner || rm_caps_for_hlos || (vmid == self)) {
 		// Add vcpu info
 		count_t vcpu_count = vector_size(vmcfg->vcpus);
 		for (index_t i = 0; i < vcpu_count; i++) {
@@ -606,14 +726,26 @@ vm_config_get_resource_descs(vmid_t self, vmid_t vmid, vector_t *descs)
 			rm_hyp_resource_resp_t item = { 0 };
 			item.resource_type	    = (uint8_t)RSC_VIRTUAL_CPU;
 			item.resource_label	    = vcpu->affinity_index;
-			item.resource_capid_low =
-				(uint32_t)(vcpu->owner_cap & 0xffffffffU);
-			item.resource_capid_high =
-				(uint32_t)(vcpu->owner_cap >> 32);
 			item.resource_virq_number =
 				virq_get_number(vcpu->proxy_virq);
-
-			vector_push_back(descs, item);
+			if (vmid == self) {
+				item.resource_capid_low =
+					(uint32_t)(vcpu->vm_cap & 0xffffffffU);
+				item.resource_capid_high =
+					(uint32_t)(vcpu->vm_cap >> 32);
+			} else {
+				item.resource_capid_low =
+					(uint32_t)(vcpu->owner_cap &
+						   0xffffffffU);
+				item.resource_capid_high =
+					(uint32_t)(vcpu->owner_cap >> 32);
+			}
+			error_t err = vector_push_back(descs, item);
+			if (err != OK) {
+				LOG_ERR(err);
+				ret = RM_ERROR_NOMEM;
+				goto out;
+			}
 		}
 	}
 
@@ -642,6 +774,8 @@ vm_config_get_resource_descs(vmid_t self, vmid_t vmid, vector_t *descs)
 			break;
 		}
 	}
+
+	ret = heap_mgnt_get_resource_descs(self, vmid, descs);
 
 out:
 	return ret;
@@ -681,8 +815,8 @@ out:
 }
 
 error_t
-vm_config_add_vcpu(vm_config_t *vmcfg, cap_id_t rm_cap, uint32_t affinity_index,
-		   bool boot_vcpu, const char *patch)
+vm_config_add_vcpu(vm_config_t *vmcfg, cap_id_t rm_cap, index_t address_index,
+		   index_t affinity_index, bool boot_vcpu, const char *patch)
 {
 	error_t ret;
 	vcpu_t *vcpu = (vcpu_t *)calloc(1, sizeof(*vcpu));
@@ -695,6 +829,7 @@ vm_config_add_vcpu(vm_config_t *vmcfg, cap_id_t rm_cap, uint32_t affinity_index,
 	vcpu->master_cap     = rm_cap;
 	vcpu->vm_cap	     = CSPACE_CAP_INVALID;
 	vcpu->owner_cap	     = CSPACE_CAP_INVALID;
+	vcpu->address_index  = address_index;
 	vcpu->affinity_index = affinity_index;
 	vcpu->boot_vcpu	     = boot_vcpu;
 	vcpu->vmid	     = vmcfg->vm->vmid;
@@ -995,9 +1130,10 @@ vm_config_add_vpm_group(vm_config_t *vmcfg, vmid_t peer, cap_id_t rm_cap,
 	// Copy vpm cap to the peer VM's cspace with query rights
 	gunyah_hyp_cspace_copy_cap_from_result_t copy_ret;
 
-	copy_ret = gunyah_hyp_cspace_copy_cap_from(rm_get_rm_cspace(), rm_cap,
-						   peer_cfg->cspace,
-						   CAP_RIGHTS_VPM_GROUP_QUERY);
+	copy_ret = gunyah_hyp_cspace_copy_cap_from(
+		rm_get_rm_cspace(), rm_cap, peer_cfg->cspace,
+		CAP_RIGHTS_VPM_GROUP_QUERY | CAP_RIGHTS_VPM_GROUP_WAKEUP |
+			CAP_RIGHTS_VPM_GROUP_SET_THRESHOLD);
 	if (copy_ret.error != OK) {
 		(void)printf("Failed: to copy vpm cap\n");
 		ret = copy_ret.error;
@@ -1173,55 +1309,21 @@ out:
 }
 
 static error_t
-vm_config_add_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
-			  cap_id_t rm_cap, interrupt_data_t frontend_virq,
-			  interrupt_data_t backend_virq, virtio_mmio_data_t *d,
-			  bool export_to_dt, vmaddr_t frontend_ipa,
-			  vmaddr_t backend_ipa, cap_id_t me_cap, size_t me_size,
-			  void *rm_addr)
+vm_config_add_virtio_backend(vdevice_node_t *node, struct vdevice_virtio *cfg,
+			     const vm_config_t *backend_cfg, cap_id_t rm_cap,
+			     interrupt_data_t		 backend_virq,
+			     const virtio_common_data_t *d,
+			     vmaddr_t backend_ipa, cap_id_t me_cap,
+			     size_t me_size, void *rm_addr)
 {
-	error_t ret = OK;
+	error_t ret;
 
-	vdevice_node_t *node = calloc(1, sizeof(*node));
-	if (node == NULL) {
-		(void)printf("Failed: to alloc vdevice node\n");
-		goto out;
-	}
-
-	node->type	   = VDEV_VIRTIO_MMIO;
-	node->export_to_dt = export_to_dt;
-	node->visible	   = true;
-	node->handle	   = get_vdevice_resource_handle();
-
-	char *patch = NULL;
-	if (d->patch != NULL) {
-		assert(d->general.generate == NULL);
-		patch = strdup(d->patch);
-	} else if (d->general.generate != NULL) {
-		node->generate = strdup(d->general.generate);
-	} else {
-		node->generate = strdup("/vsoc/qcom,virtio_mmio");
-	}
-
-	if ((patch == NULL) && (node->generate == NULL)) {
-		(void)printf("Failed: strdup of virtio_mmio path\n");
-		ret = ERROR_NOMEM;
-		goto error_generate;
-	}
-
-	ret = handle_compatibles(node, &d->general);
-	if (ret != OK) {
+	error_t err = handle_compatibles(node, &d->general);
+	if (err != OK) {
 		(void)printf("Failed: save compatible in virtio node\n");
+		ret = err;
 		goto error_push_comp;
 	}
-
-	struct vdevice_virtio_mmio *cfg = calloc(1, sizeof(*cfg));
-	if (cfg == NULL) {
-		(void)printf("Failed: to alloc virtio_mmio config\n");
-		ret = ERROR_NOMEM;
-		goto error_cfg_alloc;
-	}
-	node->config.virtio_mmio = cfg;
 
 	// Copy virtio_mmio cap to the backend vm with config and assert rights
 	gunyah_hyp_cspace_copy_cap_from_result_t copy_ret;
@@ -1232,68 +1334,209 @@ vm_config_add_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 			CAP_RIGHTS_VIRTIO_BACKEND_ASSERT_VIRQ);
 	if (copy_ret.error != OK) {
 		(void)printf("Failed: to copy backend cap\n");
+		ret = copy_ret.error;
 		goto error_backend_cap;
 	}
 	cap_id_t backend_cap = copy_ret.new_cap;
 
-	error_t err;
-
-	// Bind frontend's VIRQ to the MMIO interface's IRQ source
-	ret = gunyah_hyp_virtio_mmio_frontend_bind_virq(
-		rm_cap, frontend_cfg->vic, virq_get_number(frontend_virq));
-	if (ret != OK) {
-		(void)printf("Failed: to bind FE virq\n");
-		goto error_bind_fe;
-	}
-
 	// Bind backend's VIRQ to the backend notification IRQ source
-	ret = gunyah_hyp_virtio_backend_bind_virq(
+	err = gunyah_hyp_virtio_backend_bind_virq(
 		rm_cap, backend_cfg->vic, virq_get_number(backend_virq));
-	if (ret != OK) {
+	if (err != OK) {
+		ret = err;
 		(void)printf("Failed: to bind BE virq\n");
 		goto error_bind_be;
 	}
 
-	cfg->backend	   = backend_cfg->vm->vmid;
-	cfg->master_cap	   = rm_cap;
-	cfg->label	   = d->general.label;
-	cfg->frontend_virq = frontend_virq;
-	cfg->backend_cap   = backend_cap;
-	cfg->backend_virq  = backend_virq;
-	cfg->frontend_ipa  = frontend_ipa;
-	cfg->backend_ipa   = backend_ipa;
-	cfg->dma_base	   = d->dma_base;
-	cfg->dma_coherent  = d->dma_coherent;
-	cfg->need_allocate = d->need_allocate;
-	cfg->base_ipa	   = d->mem_base_ipa;
-	cfg->me_cap	   = me_cap;
-	cfg->me_size	   = me_size;
-	cfg->rm_addr	   = rm_addr;
-	cfg->patch	   = patch;
+	cfg->master_cap	 = rm_cap;
+	cfg->device_type = d->device_type;
+
+	cfg->backend.valid   = true;
+	cfg->backend.label   = d->general.label;
+	cfg->backend.cap     = backend_cap;
+	cfg->backend.vm	     = backend_cfg->vm->vmid;
+	cfg->backend.ipa     = backend_ipa;
+	cfg->backend.me_size = me_size;
+	cfg->backend.me_cap  = me_cap;
+	cfg->backend.rm_addr = rm_addr;
+	cfg->backend.virq    = backend_virq;
+
+	ret = OK;
+
+error_bind_be:
+	if (ret != OK) {
+		err = gunyah_hyp_cspace_delete_cap_from(backend_cfg->cspace,
+							backend_cap);
+		assert(err == OK);
+	}
+error_backend_cap:
+	if (ret != OK) {
+		free_compatibles(node);
+	}
+error_push_comp:
+	return ret;
+}
+
+static error_t
+vm_config_add_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
+			  cap_id_t rm_cap, interrupt_data_t frontend_virq,
+			  interrupt_data_t backend_virq, virtio_mmio_data_t *d,
+			  vmaddr_t frontend_ipa, vmaddr_t backend_ipa,
+			  cap_id_t me_cap, size_t me_size, void *rm_addr)
+{
+	error_t ret;
+
+	vdevice_node_t *node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		(void)printf("Failed: to alloc vdevice node\n");
+		ret = ERROR_NOMEM;
+		goto out;
+	}
+
+	node->type	   = VDEV_VIRTIO;
+	node->bus	   = VDEVICE_BUS_MMIO;
+	node->export_to_dt = true;
+	node->visible	   = true;
+	node->handle	   = get_vdevice_resource_handle();
+
+	struct vdevice_virtio *cfg = calloc(1, sizeof(*cfg));
+	if (cfg == NULL) {
+		(void)printf("Failed: to alloc virtio_mmio config\n");
+		ret = ERROR_NOMEM;
+		goto error_cfg_alloc;
+	}
+	node->config.virtio = cfg;
+
+	// Bind frontend's VIRQ to the MMIO interface's IRQ source
+	error_t err = gunyah_hyp_virtio_mmio_frontend_bind_virq(
+		rm_cap, frontend_cfg->vic, virq_get_number(frontend_virq));
+	if (err != OK) {
+		(void)printf("Failed: to bind FE virq\n");
+		ret = err;
+		goto error_bind_fe;
+	}
+
+	char *patch = NULL;
+	if (d->common.patch != NULL) {
+		assert(d->common.general.generate == NULL);
+		patch = strdup(d->common.patch);
+	} else if (d->common.general.generate != NULL) {
+		node->generate = strdup(d->common.general.generate);
+	} else {
+		node->generate = strdup("/vsoc/qcom,virtio_mmio");
+	}
+
+	if ((patch == NULL) && (node->generate == NULL)) {
+		(void)printf("Failed: strdup of virtio_mmio path\n");
+		ret = ERROR_NOMEM;
+		goto error_generate;
+	}
+
+	err = vm_config_add_virtio_backend(node, cfg, backend_cfg, rm_cap,
+					   backend_virq, &d->common,
+					   backend_ipa, me_cap, me_size,
+					   rm_addr);
+	if (err != OK) {
+		ret = err;
+		goto error_add_backend;
+	}
+
+	cfg->patch = patch;
+
+	cfg->mmio.label		= d->common.general.label;
+	cfg->mmio.virq		= frontend_virq;
+	cfg->mmio.ipa		= frontend_ipa;
+	cfg->mmio.size		= me_size;
+	cfg->mmio.have_shm	= d->have_shm;
+	cfg->mmio.dma_base	= d->dma_base;
+	cfg->mmio.dma_coherent	= d->dma_coherent;
+	cfg->mmio.need_allocate = d->need_allocate;
+	cfg->mmio.dma_base_ipa	= d->dma_base_ipa;
 
 	list_append(vdevice_node_t, &frontend_cfg->vdevice_nodes, node,
 		    vdevice_);
 
-	if (ret == OK) {
+	ret = OK;
+
+error_add_backend:
+	if (ret != OK) {
+		free(patch);
+		free(node->generate);
+	}
+error_generate:
+	if (ret != OK) {
+		err = gunyah_hyp_virtio_mmio_frontend_unbind_virq(rm_cap);
+		assert(err == OK);
+	}
+error_bind_fe:
+	if (ret != OK) {
+		free(cfg);
+	}
+error_cfg_alloc:
+	if (ret != OK) {
+		free(node);
+	}
+out:
+	return ret;
+}
+
+static error_t
+vm_config_add_virtio_pci(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
+			 cap_id_t rm_cap, interrupt_data_t backend_virq,
+			 virtio_pci_data_t *d, vmaddr_t backend_ipa,
+			 cap_id_t me_cap, size_t me_size, void *rm_addr)
+{
+	error_t ret;
+
+	vdevice_node_t *node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		(void)printf("Failed: to alloc vdevice node\n");
+		ret = ERROR_NOMEM;
 		goto out;
 	}
 
-error_bind_be:
-	err = gunyah_hyp_virtio_mmio_frontend_unbind_virq(rm_cap);
-	assert(err == OK);
-error_bind_fe:
-	err = gunyah_hyp_cspace_delete_cap_from(backend_cfg->cspace,
-						backend_cap);
-	assert(err == OK);
-error_backend_cap:
-	free(cfg);
+	node->type	   = VDEV_VIRTIO;
+	node->bus	   = VDEVICE_BUS_PCI;
+	node->export_to_dt = false;
+	node->visible	   = true;
+	node->handle	   = get_vdevice_resource_handle();
+
+	struct vdevice_virtio *cfg = calloc(1, sizeof(*cfg));
+	if (cfg == NULL) {
+		(void)printf("Failed: to alloc virtio_pci config\n");
+		ret = ERROR_NOMEM;
+		goto error_cfg_alloc;
+	}
+	node->config.virtio = cfg;
+
+	error_t err = vm_config_add_virtio_backend(node, cfg, backend_cfg,
+						   rm_cap, backend_virq,
+						   &d->common, backend_ipa,
+						   me_cap, me_size, rm_addr);
+	if (err != OK) {
+		ret = err;
+		goto error_add_backend;
+	}
+
+	node->pci.slot_index	 = d->pci_slot_index;
+	node->pci.bus_phandle	 = d->pci_bus_phandle;
+	node->pci.bus_config_ipa = INVALID_ADDRESS;
+	node->pci.function_cap	 = rm_cap;
+	node->pci.has_legacy_irq = true;
+
+	list_append(vdevice_node_t, &frontend_cfg->vdevice_nodes, node,
+		    vdevice_);
+
+	ret = OK;
+
+error_add_backend:
+	if (ret != OK) {
+		free(cfg);
+	}
 error_cfg_alloc:
-	free_compatibles(node);
-error_push_comp:
-	free(patch);
-	free(node->generate);
-error_generate:
-	free(node);
+	if (ret != OK) {
+		free(node);
+	}
 out:
 	return ret;
 }
@@ -1619,7 +1862,7 @@ peer_config_add_msgqueue_pair(vm_config_t		  *vmcfg,
 
 	if (check_default_peer(vmcfg, peer_vm)) {
 		// Since "peer-default" is used in the DT node, its peer does
-		// not have a correspoding vdevice for the msgqueue_pair. We
+		// not have a corresponding vdevice for the msgqueue_pair. We
 		// need to create a temporal vdevice to later update the values
 		// of self.
 
@@ -1638,7 +1881,7 @@ peer_config_add_msgqueue_pair(vm_config_t		  *vmcfg,
 		peer_cfg->tx_max_msg_size = data->msg_size;
 		peer_cfg->rx_max_msg_size = data->msg_size;
 
-		// What is tx for self is rx for peer and viceversa
+		// What is TX for self is RX for peer and vice-versa
 		ret = configure_msgqueue_pair(peer_vm->vm_config, &peer_cfg,
 					      rm_rx_cap, rm_tx_cap, true,
 					      VIRQ_DATA_INVALID,
@@ -2183,70 +2426,61 @@ out:
 	return ret;
 }
 
-#if (defined(PLATFORM_QCOM_WDT_VREG_HLOS) && PLATFORM_QCOM_WDT_VREG_HLOS) ||   \
-	(defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT)
-static error_t
-vm_config_attach_watchdog_vdevice(const vm_config_t *vmcfg, size_t size)
+typedef struct {
+	error_t e;
+	virq_t	bite_virq;
+} add_watchdog_helper_ret_t;
+
+static add_watchdog_helper_ret_t
+vm_config_add_watchdog_helper(vm_config_t *vmcfg, watchdog_data_t *d)
 {
-	error_t ret = gunyah_hyp_addrspace_attach_vdevice(
-		vmcfg->addrspace, vmcfg->watchdog, 0U,
-		rm_get_watchdog_address(), size,
-		(addrspace_attach_vdevice_flags_t){ 0U });
+	error_t ret, err;
 
-	return ret;
-}
-#endif
+	virq_t bite_virq = VIRQ_INVALID;
 
-static error_t
-vm_config_check_watchdog_vdevice(const vm_config_t *vmcfg)
-{
-	error_t ret = OK;
+	vm_address_range_result_t alloc_ret;
 
-#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
-	// Allocate two consecutive 64K frames
-	ret = vm_config_attach_watchdog_vdevice(vmcfg, 0x20000);
-	if (ret != OK) {
-		(void)printf("Failed to attach watchdog virtual device: %d\n",
-			     ret);
-	}
-#elif defined(PLATFORM_QCOM_WDT_VREG_HLOS) && PLATFORM_QCOM_WDT_VREG_HLOS
-	// Only HLOS can have QCOM watchdog with virtual register emulation
-	if (vmcfg->vm->vmid == (vmid_t)AC_VM_HLOS) {
-		ret = vm_config_attach_watchdog_vdevice(vmcfg, PAGE_SIZE);
+#if (defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT) ||                       \
+	(defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG)
+	if (d->type != WATCHDOG_SMC_BASED) {
+		alloc_ret = vm_address_range_alloc(vmcfg->vm,
+						   VM_MEMUSE_PLATFORM_VDEVICE,
+						   d->base, INVALID_ADDRESS,
+						   d->size, d->alignment);
+		if (alloc_ret.err == OK) {
+			if (d->base == INVALID_ADDRESS) {
+				assert(!d->defined_addr);
+				// Pass the newly created IPA
+				d->base = alloc_ret.base;
+			} else if (d->base != alloc_ret.base) {
+				(void)printf(
+					"Allocated IPA doesn't match the actual address\n");
+				ret = ERROR_ADDR_INVALID;
+				goto err_free_address;
+			} else {
+				// IPA is allocated correctly.
+			}
+		} else {
+			ret = alloc_ret.err;
+			(void)printf(
+				"Failed to allocate IPA for watchdog, error %d\n",
+				ret);
+			goto out;
+		}
+
+		ret = gunyah_hyp_addrspace_attach_vdevice(
+			vmcfg->addrspace, vmcfg->watchdog, 0U, d->base, d->size,
+			(addrspace_attach_vdevice_flags_t){ 0U });
 		if (ret != OK) {
 			(void)printf(
-				"Failed to attach watchdog virtual device: %d\n",
+				"Failed to attach virtual watchdog device: %d\n",
 				ret);
+			goto err_free_address;
 		}
 	}
 #else
-	(void)vmcfg;
+	(void)alloc_ret;
 #endif
-
-	return ret;
-}
-
-static error_t
-vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
-		       interrupt_data_t bark_virq, bool allow_management)
-{
-	error_t ret;
-
-	if (vmcfg->watchdog == CSPACE_CAP_INVALID) {
-		ret = ERROR_DENIED;
-		goto out;
-	}
-
-	vdevice_node_t *node = calloc(1, sizeof(*node));
-	if (node == NULL) {
-		ret = ERROR_NOMEM;
-		goto out;
-	}
-
-	ret = vm_config_check_watchdog_vdevice(vmcfg);
-	if (ret != OK) {
-		goto err_attach_vdevice;
-	}
 
 	// If no bind options are set, it will assume that its a bark virq
 	watchdog_bind_option_flags_t bind_bark_options =
@@ -2254,20 +2488,18 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 
 	// Bind the watchdog bark vIRQ to VM's VIC
 	ret = gunyah_hyp_watchdog_bind_virq(vmcfg->watchdog, vmcfg->vic,
-					    virq_get_number(bark_virq),
+					    d->bark_virq.irq,
 					    bind_bark_options);
 	if (ret != OK) {
-		goto err_bind_bark_virq;
+		goto err_free_address;
 	}
-
-	error_t err;
 
 	uint32_result_t irq_ret = alloc_map_virq(VMID_RM);
 	if (irq_ret.e != OK) {
 		ret = irq_ret.e;
-		goto err_reserve_virq;
+		goto err_unbind_bark_virq;
 	}
-	interrupt_data_t bite_virq = virq_edge(irq_ret.r);
+	bite_virq = irq_ret.r;
 
 	watchdog_bind_option_flags_t bind_bite_options =
 		watchdog_bind_option_flags_default();
@@ -2275,34 +2507,138 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 
 	// Bind the watchdog bite virq to RM's vic
 	ret = gunyah_hyp_watchdog_bind_virq(vmcfg->watchdog, rm_get_rm_vic(),
-					    virq_get_number(bite_virq),
-					    bind_bite_options);
+					    bite_virq, bind_bite_options);
 	if (ret != OK) {
-		goto err_bind_bite_virq;
+		goto err_revert_bite_virq;
 	}
 
 	// Register event to handle watchdog bite virq
 	rm_error_t rm_err = vm_mgnt_register_event(VM_EVENT_SRC_WDOG_BITE,
 						   &vmcfg->vm->wdog_bite_event,
-						   vmcfg->vm,
-						   virq_get_number(bite_virq));
+						   vmcfg->vm, bite_virq);
 	if (rm_err != RM_OK) {
 		ret = ERROR_DENIED;
-		goto err_register_event;
+		goto err_unbind_bite_virq;
 	}
 
-	node->type	   = VDEV_WATCHDOG;
-	node->export_to_dt = true;
+	ret = OK;
+	goto out;
+
+err_unbind_bite_virq:
+	err = gunyah_hyp_watchdog_unbind_virq(vmcfg->watchdog,
+					      bind_bite_options);
+	assert(err == OK);
+err_revert_bite_virq:
+	revert_map_virq(VMID_RM, bite_virq);
+err_unbind_bark_virq:
+	err = gunyah_hyp_watchdog_unbind_virq(vmcfg->watchdog,
+					      bind_bark_options);
+	assert(err == OK);
+err_free_address:
+#if (defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT) ||                       \
+	(defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG)
+	if (d->type != WATCHDOG_SMC_BASED) {
+		err = vm_address_range_free(vmcfg->vm,
+					    VM_MEMUSE_PLATFORM_VDEVICE,
+					    alloc_ret.base, alloc_ret.size);
+		assert(err == OK);
+	}
+#endif
+out:
+	return (add_watchdog_helper_ret_t){
+		.e	   = ret,
+		.bite_virq = bite_virq,
+	};
+}
+
+static vdevice_node_t *
+vm_config_alloc_watchdog_node(const watchdog_data_t *d)
+{
+	vdevice_node_t *node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		goto out;
+	}
+
+	bool export_to_dt;
+#if (defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT) ||                       \
+	(defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG)
+	export_to_dt = !d->defined_irq || !d->defined_addr;
+#else
+	export_to_dt = !d->defined_irq;
+#endif
+
+	node->type = VDEV_WATCHDOG;
+#if (defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT) ||                       \
+	(defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG)
+	node->bus = d->defined_addr ? VDEVICE_BUS_MMIO : VDEVICE_BUS_NONE;
+#endif
+	node->export_to_dt = export_to_dt;
 	node->visible	   = true;
 
-#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
-	node->generate = strdup("/watchdog");
-#else
-	node->generate = strdup("/hypervisor/qcom,gh-watchdog");
+	assert(d->node_path != NULL);
+
+out:
+	return node;
+}
+
+static struct vdevice_watchdog *
+vm_config_alloc_watchdog_vdevice(watchdog_data_t *d, virq_t bite_virq,
+				 vmid_t manager, cap_id_t manager_cap)
+{
+	struct vdevice_watchdog *cfg = calloc(1, sizeof(*cfg));
+	if (cfg == NULL) {
+		goto out;
+	}
+
+	cfg->type = d->type;
+#if (defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT) ||                       \
+	(defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG)
+	cfg->defined_addr = d->defined_addr;
+	cfg->base	  = d->base;
+	cfg->size	  = d->size;
+	cfg->addr_cells	  = d->addr_cells;
+	cfg->size_cells	  = d->size_cells;
 #endif
-	if (node->generate == NULL) {
+	cfg->defined_bark_virq = d->defined_irq;
+	cfg->bark_virq	       = d->bark_virq;
+	cfg->bite_virq	       = virq_edge(bite_virq);
+	cfg->manager	       = manager;
+	cfg->manager_cap       = manager_cap;
+	if (d->node_path != NULL) {
+		cfg->node_path = strdup(d->node_path);
+		if (cfg->node_path == NULL) {
+			free(cfg);
+			cfg = NULL;
+			goto out;
+		}
+	}
+
+out:
+	return cfg;
+}
+
+static error_t
+vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap, watchdog_data_t *d,
+		       bool allow_management)
+{
+	error_t ret, err;
+
+	if (vmcfg->watchdog == CSPACE_CAP_INVALID) {
+		ret = ERROR_DENIED;
+		goto out;
+	}
+
+	add_watchdog_helper_ret_t add_watchdog_helper_ret =
+		vm_config_add_watchdog_helper(vmcfg, d);
+	if (add_watchdog_helper_ret.e != OK) {
+		ret = add_watchdog_helper_ret.e;
+		goto out;
+	}
+
+	vdevice_node_t *node = vm_config_alloc_watchdog_node(d);
+	if (node == NULL) {
 		ret = ERROR_NOMEM;
-		goto err_generate_strdup;
+		goto out;
 	}
 
 	cap_id_t     manager_cap = CSPACE_CAP_INVALID;
@@ -2313,7 +2649,7 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 		if ((manager_vm == NULL) || (manager_vm->vm_config == NULL)) {
 			(void)printf("Failed: invalid owner VM\n");
 			ret = ERROR_ARGUMENT_INVALID;
-			goto err_copy_mgnt_cap;
+			goto err_free_node;
 		}
 
 		manager_cfg = manager_vm->vm_config;
@@ -2328,39 +2664,18 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 		if (copy_ret.error != OK) {
 			(void)printf("Failed: copy vcpu cap from rm cspace\n");
 			ret = copy_ret.error;
-			goto err_copy_mgnt_cap;
+			goto err_free_node;
 		}
 
 		manager_cap = copy_ret.new_cap;
 	}
 
-	struct vdevice_watchdog *cfg = calloc(1, sizeof(*cfg));
+	struct vdevice_watchdog *cfg = vm_config_alloc_watchdog_vdevice(
+		d, add_watchdog_helper_ret.bite_virq, manager, manager_cap);
 	if (cfg == NULL) {
 		ret = ERROR_NOMEM;
-		goto err_allocate_cfg;
+		goto err_delete_cap;
 	}
-
-	assert(cfg != NULL);
-	cfg->bark_virq	 = bark_virq;
-	cfg->bite_virq	 = bite_virq;
-	cfg->manager	 = manager;
-	cfg->manager_cap = manager_cap;
-
-#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
-	// Reserve two consecutive 64K frames for the SBSA virtual device
-	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
-		vmcfg->vm, VM_MEMUSE_PLATFORM_VDEVICE, INVALID_ADDRESS,
-		INVALID_ADDRESS, 0x20000U, 0x10000U);
-	if (alloc_ret.err != OK) {
-		err = alloc_ret.err;
-		(void)printf(
-			"Failed to allocate IPA for virtual SBSA, error %" PRId32
-			"\n",
-			(int32_t)err);
-		goto err_free_cfg;
-	}
-	cfg->ipa = alloc_ret.base;
-#endif
 
 	node->config.watchdog = cfg;
 
@@ -2368,39 +2683,159 @@ vm_config_add_watchdog(vm_config_t *vmcfg, cap_id_t rm_cap,
 	ret = OK;
 	goto out;
 
-#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
-err_free_cfg:
-	free(cfg);
-#endif
-err_allocate_cfg:
+err_delete_cap:
 	if (manager != VMID_HYP) {
 		assert(manager_cfg != NULL);
 		err = gunyah_hyp_cspace_delete_cap_from(manager_cfg->cspace,
 							manager_cap);
 		assert(err == OK);
 	}
-err_copy_mgnt_cap:
-	free(node->generate);
-err_generate_strdup:
-	vm_mgnt_deregister_event(&vmcfg->vm->wdog_bite_event,
-				 virq_get_number(bite_virq));
-err_register_event:
-	err = gunyah_hyp_watchdog_unbind_virq(vmcfg->watchdog,
-					      bind_bite_options);
-	assert(err == OK);
-err_bind_bite_virq:
-	revert_map_virq(VMID_RM, virq_get_number(bite_virq));
-err_reserve_virq:
-	err = gunyah_hyp_watchdog_unbind_virq(vmcfg->watchdog,
-					      bind_bark_options);
-	assert(err == OK);
-err_bind_bark_virq:
-err_attach_vdevice:
+err_free_node:
 	free(node);
 out:
 	if (ret != OK) {
 		LOG_ERR(ret);
 	}
+	return ret;
+}
+
+static error_t
+vm_config_add_pci(vm_config_t *vmcfg, cap_id_t pci_cap, const pci_data_t *data,
+		  vmaddr_t config_ipa, size_t config_size, vmaddr_t npmem_ipa,
+		  size_t npmem_size, uint32_t irq_slots)
+{
+	error_t ret;
+
+	vdevice_node_t *node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		(void)printf("Failed: to alloc PCI vdevice\n");
+		ret = ERROR_NOMEM;
+		goto out_node_alloc;
+	}
+
+	node->type	   = VDEV_PCI;
+	node->bus	   = VDEVICE_BUS_MMIO;
+	node->export_to_dt = true;
+	node->visible	   = false;
+
+	char *patch = NULL;
+	if (data->patch != NULL) {
+		assert(data->general.generate == NULL);
+		patch = strdup(data->patch);
+	} else if (data->general.generate != NULL) {
+		node->generate = strdup(data->general.generate);
+	} else {
+		node->generate = strdup("/vsoc/pcie");
+	}
+
+	if ((patch == NULL) && (node->generate == NULL)) {
+		(void)printf("Failed: to alloc PCI generate string\n");
+		ret = ERROR_NOMEM;
+		goto out_generate_alloc;
+	}
+
+	ret = handle_compatibles(node, &data->general);
+	if (ret != OK) {
+		(void)printf("Failed: save compatible in PCI node\n");
+		goto out_handle_compatibles;
+	}
+
+	struct vdevice_pci *cfg = calloc(1, sizeof(*cfg));
+	if (cfg == NULL) {
+		(void)printf("Failed: to alloc PCI config\n");
+		ret = ERROR_NOMEM;
+		goto out_cfg_alloc;
+	}
+
+	node->config.pci = cfg;
+
+	cfg->master_cap = pci_cap;
+	cfg->patch	= patch;
+
+	cfg->config_ipa	 = config_ipa;
+	cfg->config_size = config_size;
+	cfg->npmem_ipa	 = npmem_ipa;
+	cfg->npmem_size	 = npmem_size;
+
+	cfg->linux_pci_domain = data->linux_pci_domain;
+
+	cfg->msi_vdevices	    = data->msi_vdevices;
+	cfg->msi_passthrough	    = data->msi_passthrough;
+	cfg->msi_passthrough_base   = data->msi_passthrough_base;
+	cfg->msi_passthrough_length = data->msi_passthrough_length;
+	cfg->msi_parent_phandle	    = data->msi_parent_phandle;
+
+	cfg->irq_parent_phandle = data->irq_parent_phandle;
+
+	cfg->dma_coherent	= data->dma_coherent;
+	cfg->have_memory_region = data->have_memory_region;
+	cfg->need_allocate	= data->need_allocate;
+	cfg->dma_base_ipa	= data->dma_base_ipa;
+	cfg->label		= data->general.label;
+
+	index_t irq_slot;
+	for (irq_slot = 0U; irq_slot < util_array_size(cfg->legacy_virqs);
+	     irq_slot++) {
+		if (!data->irq_vdevices) {
+			// Legacy IRQs are disabled for this RC
+			cfg->legacy_virqs[irq_slot] = VIRQ_DATA_INVALID;
+			continue;
+		}
+
+		if ((irq_slots & util_bit(irq_slot)) == 0U) {
+			// Slot can't make use of a legacy IRQ
+			cfg->legacy_virqs[irq_slot] = VIRQ_DATA_INVALID;
+			continue;
+		}
+
+		uint32_result_t irq_ret = alloc_map_virq(vmcfg->vm->vmid);
+		if (irq_ret.e != OK) {
+			ret			    = irq_ret.e;
+			cfg->legacy_virqs[irq_slot] = VIRQ_DATA_INVALID;
+			goto out_irq_alloc;
+		}
+		cfg->legacy_virqs[irq_slot] = virq_level(irq_ret.r);
+
+		error_t bind_err = gunyah_hyp_vic_bind_virq(
+			cfg->master_cap, vmcfg->vic, irq_ret.r, irq_slot);
+		if (bind_err != OK) {
+			(void)printf(
+				"error: binding IRQ %d for vpci slot %d: %d\n",
+				irq_ret.r, irq_slot, bind_err);
+			ret = bind_err;
+			goto out_irq_alloc;
+		}
+	}
+
+	list_append(vdevice_node_t, &vmcfg->vdevice_nodes, node, vdevice_);
+	ret = OK;
+
+out_irq_alloc:
+	if (ret != OK) {
+		for (; irq_slot < util_array_size(cfg->legacy_virqs);
+		     irq_slot--) {
+			if (cfg->legacy_virqs[irq_slot].irq != VIRQ_INVALID) {
+				revert_map_virq(
+					vmcfg->vm->vmid,
+					cfg->legacy_virqs[irq_slot].irq);
+			}
+		}
+		free(cfg);
+	}
+out_cfg_alloc:
+	if (ret != OK) {
+		free_compatibles(node);
+	}
+out_handle_compatibles:
+	if (ret != OK) {
+		free(patch);
+		free(node->generate);
+	}
+out_generate_alloc:
+	if (ret != OK) {
+		free(node);
+	}
+out_node_alloc:
 	return ret;
 }
 
@@ -2731,8 +3166,6 @@ configure_doorbell_with_peer(const vm_config_t	     *vmcfg,
 	assert(vmcfg != NULL);
 	vmid_t vmid = vmcfg->vm->vmid;
 
-	interrupt_data_t vm_virq = defined_virq;
-
 	cap_rights_t rights_mask;
 	if (cfg->source) {
 		// Copy doorbell cap to source VM cspace with send rights
@@ -2741,7 +3174,7 @@ configure_doorbell_with_peer(const vm_config_t	     *vmcfg,
 				       ? CAP_RIGHTS_DOORBELL_RECEIVE
 				       : 0U);
 
-		cfg->vm_virq = (interrupt_data_t){ 0 };
+		cfg->vm_virq = VIRQ_DATA_INVALID;
 	} else {
 		if (alloc_irq) {
 			uint32_result_t irq_ret = alloc_map_virq(vmid);
@@ -2749,12 +3182,13 @@ configure_doorbell_with_peer(const vm_config_t	     *vmcfg,
 				ret = irq_ret.e;
 				goto out;
 			}
-			vm_virq = virq_edge(irq_ret.r);
+			cfg->vm_virq = virq_edge(irq_ret.r);
 		} else {
-			ret = map_virq(vmid, virq_get_number(vm_virq));
+			ret = map_virq(vmid, virq_get_number(defined_virq));
 			if (ret != OK) {
 				goto out;
 			}
+			cfg->vm_virq = defined_virq;
 		}
 
 		// Copy doorbell cap to recv VM cspace with receive rights
@@ -2773,13 +3207,12 @@ configure_doorbell_with_peer(const vm_config_t	     *vmcfg,
 
 	if (!cfg->source) {
 		// Bind VIRQ to recv VM's VIC
-		ret = gunyah_hyp_doorbell_bind_virq(rm_cap, vmcfg->vic,
-						    virq_get_number(vm_virq));
+		ret = gunyah_hyp_doorbell_bind_virq(
+			rm_cap, vmcfg->vic, virq_get_number(cfg->vm_virq));
 		if (ret != OK) {
 			(void)printf("Failed: to bind dbl virq\n");
 			goto out_delete_cap;
 		}
-		cfg->vm_virq = vm_virq;
 	}
 
 	cfg->vm_cap = vm_cap;
@@ -2793,7 +3226,7 @@ out_delete_cap:
 	}
 out_return_virq:
 	if ((ret != OK) && (!cfg->source)) {
-		revert_map_virq(vmid, virq_get_number(vm_virq));
+		revert_map_virq(vmid, virq_get_number(cfg->vm_virq));
 	}
 out:
 	if (ret != OK) {
@@ -2805,13 +3238,12 @@ out:
 static error_t
 vm_config_add_doorbell_with_peer_config_vdevice(
 	vm_config_t *vmcfg, const doorbell_data_t *data, cap_id_t rm_cap,
-	struct vdevice_doorbell *peer_cfg, vm_t *peer_vm, vdevice_node_t *node)
+	struct vdevice_doorbell *peer_cfg, vm_t *peer_vm, vdevice_node_t **node)
 {
 	error_t ret, err;
 
-	interrupt_data_t vm_virq = VIRQ_DATA_INVALID;
-	cap_id_t	 vm_cap	 = CSPACE_CAP_INVALID;
-	vmid_t		 self	 = vmcfg->vm->vmid;
+	cap_id_t vm_cap = CSPACE_CAP_INVALID;
+	vmid_t	 self	= vmcfg->vm->vmid;
 
 	struct vdevice_doorbell *cfg = calloc(1, sizeof(*cfg));
 	if (cfg == NULL) {
@@ -2819,16 +3251,21 @@ vm_config_add_doorbell_with_peer_config_vdevice(
 		ret = ERROR_NOMEM;
 		goto out;
 	}
-	node->config.doorbell = cfg;
-
-	if (data->defined_irq) {
-		vm_virq = data->irq;
-	}
+	(*node)->config.doorbell = cfg;
 
 	cfg->source	      = data->is_source;
 	cfg->source_can_clear = data->source_can_clear;
-	err		      = configure_doorbell_with_peer(vmcfg, cfg, rm_cap,
-							     !data->defined_irq, vm_virq);
+
+	if (data->is_source && data->defined_irq &&
+	    !check_default_peer(vmcfg, peer_vm)) {
+		(void)printf(
+			"Defined irq for non-default peer dbl not allowed\n");
+		ret = ERROR_DENIED;
+		goto out_free_cfg;
+	}
+
+	err = configure_doorbell_with_peer(vmcfg, cfg, rm_cap,
+					   !data->defined_irq, data->irq);
 	if (err != OK) {
 		ret = err;
 		goto out_free_cfg;
@@ -2842,7 +3279,7 @@ vm_config_add_doorbell_with_peer_config_vdevice(
 		cfg->peer_id = strdup(data->peer_id);
 		if (cfg->peer_id == NULL) {
 			ret = ERROR_NOMEM;
-			goto out_free_cfg;
+			goto out_teardown_vm_dbl;
 		}
 	}
 
@@ -2860,9 +3297,21 @@ vm_config_add_doorbell_with_peer_config_vdevice(
 		// not have a corresponding vdevice for the doorbell. We
 		// need to create a temporal vdevice to later update the values
 		// of self.
-
 		assert(peer_vm != NULL);
 		assert(peer_cfg == NULL);
+
+		// If this is a source with a defined peer VIRQ, require the
+		// configuration to be trusted. It is not safe to allow an
+		// untrusted configuration to bind IRQs in the peer VM, even if
+		// they are not currently bound, since a driver may still have
+		// registered them.
+		if (data->is_source && data->defined_irq &&
+		    !vmcfg->trusted_config) {
+			(void)printf(
+				"doorbell: Untrusted config must not define peer IRQ\n");
+			ret = ERROR_DENIED;
+			goto out_free_peer_id;
+		}
 
 		peer_cfg = calloc(1, sizeof(*peer_cfg));
 		if (peer_cfg == NULL) {
@@ -2874,11 +3323,12 @@ vm_config_add_doorbell_with_peer_config_vdevice(
 		peer_cfg_alloc = true;
 
 		// if we are 'source' peer is 'destination'
+		peer_cfg->label		   = data->general.label;
 		peer_cfg->source	   = !data->is_source;
 		peer_cfg->source_can_clear = data->source_can_clear;
 		err = configure_doorbell_with_peer(peer_vm->vm_config, peer_cfg,
-						   rm_cap, true,
-						   VIRQ_DATA_INVALID);
+						   rm_cap, !data->defined_irq,
+						   data->irq);
 		if (err != OK) {
 			ret = err;
 			goto out_free_default_peer_cfg;
@@ -2889,13 +3339,24 @@ vm_config_add_doorbell_with_peer_config_vdevice(
 	} else {
 		// Peer VM also has a vdevice node for this doorbell
 		cfg->has_peer_vdevice = true;
+
+		// In this case there cannot be a defined IRQ for the peer
+		// (because it might already have been allocated or might be
+		// fixed in the peer's doorbell configuration) so bail out if
+		// one has been set.
+		if (data->is_source && data->defined_irq) {
+			(void)printf(
+				"doorbell: Can't define fixed IRQ for peer\n");
+			ret = ERROR_DENIED;
+			goto out_free_peer_id;
+		}
 	}
 
 	cfg->has_valid_peer = false;
 
 	if (peer_cfg != NULL) {
-		if ((peer_cfg->label != cfg->label) &&
-		    (peer_cfg->source == cfg->source) &&
+		if ((peer_cfg->label != cfg->label) ||
+		    (peer_cfg->source == cfg->source) ||
 		    (peer_cfg->source_can_clear != cfg->source_can_clear)) {
 			(void)printf(
 				"doorbell: config not identical between two VMs\n");
@@ -2912,7 +3373,7 @@ vm_config_add_doorbell_with_peer_config_vdevice(
 		// Update peer with self info
 		peer_cfg->peer		 = self;
 		peer_cfg->peer_cap	 = vm_cap;
-		peer_cfg->peer_virq	 = vm_virq;
+		peer_cfg->peer_virq	 = cfg->vm_virq;
 		peer_cfg->has_valid_peer = true;
 	}
 
@@ -2923,7 +3384,7 @@ vm_config_add_doorbell_with_peer_config_vdevice(
 		cfg->peer = peer_vm->vmid;
 	}
 
-	list_append(vdevice_node_t, &vmcfg->vdevice_nodes, node, vdevice_);
+	list_append(vdevice_node_t, &vmcfg->vdevice_nodes, *node, vdevice_);
 
 	ret = OK;
 
@@ -2935,10 +3396,10 @@ out_free_default_peer_cfg:
 	if (ret == OK) {
 		goto out;
 	}
-out_teardown_vm_dbl:
-	handle_doorbell_destruction(vmcfg, &node);
 out_free_peer_id:
 	free(cfg->peer_id);
+out_teardown_vm_dbl:
+	handle_doorbell_destruction(vmcfg, node);
 out_free_cfg:
 	free(cfg);
 out:
@@ -2988,7 +3449,7 @@ vm_config_add_doorbell_with_peer(vm_config_t	       *vmcfg,
 	}
 
 	ret = vm_config_add_doorbell_with_peer_config_vdevice(
-		vmcfg, data, rm_cap, peer_cfg, peer_vm, node);
+		vmcfg, data, rm_cap, peer_cfg, peer_vm, &node);
 
 	if (ret == OK) {
 		goto out;
@@ -3175,7 +3636,22 @@ handle_rm_rpc(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 		if (d->is_console_dev) {
 			assert(!console_created);
 
-			vm_console_t *console = vm_console_create(vmcfg->vm);
+			vmid_t owner_vmid = vmcfg->vm->owner;
+			if (d->console_owner != NULL) {
+				vm_t *owner_vm =
+					vm_lookup_by_id(d->console_owner);
+				if (owner_vm == NULL) {
+					ret = ERROR_DENIED;
+					goto out;
+				}
+				ret = vm_register_peers(vmcfg->vm, owner_vm);
+				if (ret != OK) {
+					goto out;
+				}
+				owner_vmid = owner_vm->vmid;
+			}
+			vm_console_t *console =
+				vm_console_create(vmcfg->vm, owner_vmid);
 			if (console == NULL) {
 				ret = ERROR_DENIED;
 				goto out;
@@ -3215,7 +3691,7 @@ vcpu_activate_and_bind_proxy_virq(vm_config_t			*vmcfg,
 				  uint64_t    functional_vcpus)
 {
 	error_t ret;
-	// FIXME:
+	// FIXME: QC RM issue #51
 	assert(vcpu_count <= 64U);
 
 	for (index_t i = 0U; i < vcpu_count; i++) {
@@ -3238,12 +3714,12 @@ vcpu_activate_and_bind_proxy_virq(vm_config_t			*vmcfg,
 
 		ret = gunyah_hyp_object_activate(caps[i]);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed vcpu activate\n");
+			(void)printf("vcpu: failed vcpu activate\n");
 			goto out;
 		}
 
 		ret = vm_config_add_vcpu(
-			vmcfg, caps[i],
+			vmcfg, caps[i], vcpu_data->address_index,
 			(data->affinity == VM_CONFIG_AFFINITY_PROXY)
 				? i
 				: data->affinity_map[i],
@@ -3274,7 +3750,7 @@ vcpu_activate_and_bind_proxy_virq(vm_config_t			*vmcfg,
 				VCPU_VIRQ_TYPE_VCPU_RUN_WAKEUP);
 			if (ret != OK) {
 				(void)printf(
-					"handle_vcpu: failed to bind proxy_virq %d\n",
+					"vcpu: failed to bind proxy_virq %d\n",
 					ret);
 
 				revert_map_virq(owner,
@@ -3298,7 +3774,7 @@ create_vcpus(const vm_config_t *vmcfg, cap_id_t *caps, count_t vcpu_count,
 	     uint64_t functional_vcpus)
 {
 	error_t ret = OK;
-	// FIXME:
+	// FIXME: QC RM issue #51
 	assert(vcpu_count <= 64U);
 
 	for (index_t idx = 0U; idx < vcpu_count; idx++) {
@@ -3310,7 +3786,7 @@ create_vcpus(const vm_config_t *vmcfg, cap_id_t *caps, count_t vcpu_count,
 		vcpu = gunyah_hyp_partition_create_thread(vmcfg->partition,
 							  rm_get_rm_cspace());
 		if (vcpu.error != OK) {
-			(void)printf("handle_vcpu: failed create thread\n");
+			(void)printf("vcpu: failed create thread\n");
 			ret = vcpu.error;
 			goto out;
 		}
@@ -3330,7 +3806,7 @@ handle_vcpu_set_attrs(const vm_config_t		    *vmcfg,
 		      uint64_t functional_vcpus)
 {
 	error_t ret = OK;
-	// FIXME:
+	// FIXME: QC RM issue #51
 	assert(vcpu_count <= 64U);
 
 	for (index_t idx = 0U; idx < vcpu_count; idx++) {
@@ -3338,7 +3814,9 @@ handle_vcpu_set_attrs(const vm_config_t		    *vmcfg,
 			continue;
 		}
 
-		cap_id_t vcpu_cap = caps[idx];
+		cap_id_t     vcpu_cap = caps[idx];
+		vcpu_data_t *vcpu =
+			vector_at_ptr(vcpu_data_t, data->vcpus, idx);
 
 		cpu_index_t affinity;
 
@@ -3353,32 +3831,32 @@ handle_vcpu_set_attrs(const vm_config_t		    *vmcfg,
 		ret = gunyah_hyp_vcpu_set_affinity(
 			vcpu_cap, affinity, VCPU_AFFINITY_TYPE_CPU_INDEX);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed set affinity\n");
+			(void)printf("vcpu: failed set affinity\n");
 			goto out;
 		}
 
 		ret = gunyah_hyp_vcpu_set_priority(vcpu_cap, priority);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed set priority\n");
+			(void)printf("vcpu: failed set priority\n");
 			goto out;
 		}
 
 		ret = gunyah_hyp_vcpu_set_timeslice(vcpu_cap, timeslice);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed set timeslice\n");
+			(void)printf("vcpu: failed set timeslice\n");
 			goto out;
 		}
 
 		ret = gunyah_hyp_cspace_attach_thread(vmcfg->cspace, vcpu_cap);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed attach cspace\n");
+			(void)printf("vcpu: failed attach cspace\n");
 			goto out;
 		}
 
 		ret = gunyah_hyp_addrspace_attach_thread(vmcfg->addrspace,
 							 vcpu_cap);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed attach addrspace\n");
+			(void)printf("vcpu: failed attach addrspace\n");
 			goto out;
 		}
 
@@ -3386,35 +3864,55 @@ handle_vcpu_set_attrs(const vm_config_t		    *vmcfg,
 			ret = gunyah_hyp_watchdog_attach_vcpu(vmcfg->watchdog,
 							      vcpu_cap);
 			if (ret != OK) {
-				(void)printf(
-					"handle_vcpu: failed attach watchdog\n");
+				(void)printf("vcpu: failed attach watchdog\n");
 				goto out;
 			}
 		}
 
 		if (vmcfg->vpm_group != CSPACE_CAP_INVALID) {
-			ret = gunyah_hyp_vpm_group_attach_vcpu(vmcfg->vpm_group,
-							       vcpu_cap, idx);
+			ret = gunyah_hyp_vpm_group_attach_vcpu(
+				vmcfg->vpm_group, vcpu_cap,
+				vcpu->address_index);
 			if (ret != OK) {
-				(void)printf(
-					"handle_vcpu: failed attach vpm\n");
+				(void)printf("vcpu: failed attach vpm\n");
 				goto out;
 			}
 		}
 
-		// Currently we don't maintain a separate vcpu->vic_index to
-		// handle skipped non-functional vcpus.
-		// FIXME:
-		ret = gunyah_hyp_vic_attach_vcpu(vmcfg->vic, vcpu_cap, idx);
+		ret = gunyah_hyp_vic_attach_vcpu(vmcfg->vic, vcpu_cap,
+						 vcpu->address_index);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed attach vic\n");
+			(void)printf("vcpu: failed attach vic\n");
 			goto out;
 		}
 
 		ret = gunyah_hyp_vcpu_configure(vcpu_cap, vcpu_options);
 		if (ret != OK) {
-			(void)printf("handle_vcpu: failed vcpu configure\n");
+			(void)printf("vcpu: failed vcpu configure\n");
 			goto out;
+		}
+
+		if (data->el1_virt_timer_irq != 0U) {
+			ret = gunyah_hyp_vcpu_set_local_virq(
+				vcpu_cap, VCPU_LOCAL_VIRQ_TYPE_VIRTUAL_TIMER,
+				data->el1_virt_timer_irq);
+			if (ret != OK) {
+				(void)printf(
+					"vcpu: failed to set el1 virt timer irq %d\n",
+					ret);
+				goto out;
+			}
+		}
+		if (data->el1_phys_timer_irq != 0U) {
+			ret = gunyah_hyp_vcpu_set_local_virq(
+				vcpu_cap, VCPU_LOCAL_VIRQ_TYPE_PHYSICAL_TIMER,
+				data->el1_phys_timer_irq);
+			if (ret != OK) {
+				(void)printf(
+					"vcpu: failed to set el1 phys timer irq %d\n",
+					ret);
+				goto out;
+			}
 		}
 	}
 
@@ -3572,9 +4070,15 @@ handle_vcpu_creation(vm_config_t *vmcfg, const vm_config_parser_data_t *data,
 		     nanoseconds_t timeslice, vcpu_option_flags_t vcpu_options,
 		     const vm_t *owner_vm)
 {
-	error_t ret = OK;
+	error_t ret;
 
 	assert((vcpu_count > 0U) && (vcpu_count < CPU_INDEX_INVALID));
+
+	uint64_t functional_vcpus = 0U;
+	ret = resolve_vcpu_affinities(data, vcpu_count, &functional_vcpus);
+	if (ret != OK) {
+		goto err_resolve_affinities;
+	}
 
 	cap_id_t *caps = (cap_id_t *)calloc(vcpu_count, sizeof(caps[0]));
 	if (caps == NULL) {
@@ -3584,12 +4088,6 @@ handle_vcpu_creation(vm_config_t *vmcfg, const vm_config_parser_data_t *data,
 	}
 	for (index_t i = 0; i < vcpu_count; i++) {
 		caps[i] = CSPACE_CAP_INVALID;
-	}
-
-	uint64_t functional_vcpus = 0U;
-	ret = resolve_vcpu_affinities(data, vcpu_count, &functional_vcpus);
-	if (ret != OK) {
-		goto err_create_thread;
 	}
 
 	ret = create_vcpus(vmcfg, caps, vcpu_count, functional_vcpus);
@@ -3631,6 +4129,7 @@ err_create_thread:
 	}
 	free(caps);
 err_alloc_caps:
+err_resolve_affinities:
 
 	return ret;
 }
@@ -3676,28 +4175,229 @@ out:
 	return ret;
 }
 
+static cap_id_result_t
+create_pci(const vm_config_t *vmcfg, count_t config_bits, count_t npmem_bits,
+	   vmaddr_t *config_ipa, size_t *config_size, vmaddr_t *npmem_ipa,
+	   size_t *npmem_size, uint32_t *irq_slots, uint32_t bus_phandle)
+{
+	cap_id_result_t ret;
+
+	// Allocate IPA for the non-prefetchable memory aperture. This
+	// can be any power of two size; 1GiB is a typical choice for a
+	// real bus, but for Virtio we don't need that much. Also, it is
+	// better for this to be a 32-bit address if possible, so the bus
+	// doesn't need to alias the aperture for 32-bit BARs.
+	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
+		vmcfg->vm, VM_MEMUSE_VDEVICE, *npmem_ipa, INVALID_ADDRESS,
+		util_bit(npmem_bits), util_bit(npmem_bits));
+	if (alloc_ret.err != OK) {
+		ret = cap_id_result_error(alloc_ret.err);
+		goto error_npmem_ipa_allocation;
+	}
+	vmaddr_t	npmem_alloc_ipa = alloc_ret.base;
+	vpci_aperture_t npmem_aperture	= vpci_aperture_default();
+	vpci_aperture_set_base(&npmem_aperture, npmem_alloc_ipa);
+	vpci_aperture_set_bits(&npmem_aperture, npmem_bits);
+
+	// Allocate IPA for the PCIe ECAM region. The size of this region is
+	// required to be 1MiB per bus for between 2 and 256 buses.
+	alloc_ret = vm_address_range_alloc(vmcfg->vm, VM_MEMUSE_VDEVICE,
+					   *config_ipa, INVALID_ADDRESS,
+					   util_bit(config_bits),
+					   util_bit(config_bits));
+	if (alloc_ret.err != OK) {
+		ret = cap_id_result_error(alloc_ret.err);
+		goto error_config_ipa_allocation;
+	}
+	vmaddr_t	config_alloc_ipa = alloc_ret.base;
+	vpci_aperture_t config_aperture	 = vpci_aperture_default();
+	vpci_aperture_set_base(&config_aperture, config_alloc_ipa);
+	vpci_aperture_set_bits(&config_aperture, config_bits);
+
+	// Create and configure the VPCI object
+	gunyah_hyp_partition_create_vpci_result_t vpci_ret =
+		gunyah_hyp_partition_create_vpci(rm_get_rm_partition(),
+						 rm_get_rm_cspace());
+	if (vpci_ret.error != OK) {
+		ret = cap_id_result_error(vpci_ret.error);
+		goto error_create_vpci;
+	}
+
+	error_t err = gunyah_hyp_vpci_configure(
+		vpci_ret.new_cap, vmcfg->addrspace, vmcfg->vic, config_aperture,
+		npmem_aperture, vpci_aperture_default(),
+		vpci_aperture_default(), vpci_option_flags_default());
+	if (err != OK) {
+		ret = cap_id_result_error(err);
+		goto error_config_vpci;
+	}
+
+	*config_ipa  = config_alloc_ipa;
+	*config_size = util_bit(config_bits);
+	*npmem_ipa   = npmem_alloc_ipa;
+	*npmem_size  = util_bit(npmem_bits);
+	*irq_slots   = 0U; // Host bridge doesn't need a VIRQ
+
+	// Loop through the other objects looking for devices to attach
+	vdevice_node_t *node = NULL;
+	loop_list(node, &vmcfg->vdevice_nodes, vdevice_)
+	{
+		if (node->bus != VDEVICE_BUS_PCI) {
+			// Not a PCI device
+			continue;
+		}
+
+		if (node->pci.bus_config_ipa != INVALID_ADDRESS) {
+			// Already attached to a bus
+			continue;
+		}
+
+		if ((node->pci.bus_phandle != DTO_PHANDLE_UNSET) &&
+		    (node->pci.bus_phandle != bus_phandle)) {
+			// Configured for attachment to a different bus
+			continue;
+		}
+
+		gunyah_hyp_vpci_attach_result_t attach_ret =
+			gunyah_hyp_vpci_attach(vpci_ret.new_cap,
+					       node->pci.slot_index,
+					       node->pci.function_cap);
+		if (attach_ret.error != OK) {
+			ret = cap_id_result_error(attach_ret.error);
+			goto error_config_vpci;
+		}
+		assert(attach_ret.slot_index < 32U);
+
+		if (node->pci.has_legacy_irq) {
+			*irq_slots |= (uint32_t)util_bit(attach_ret.slot_index);
+		}
+
+		node->pci.bus_config_ipa = config_alloc_ipa;
+		node->pci.slot_index	 = attach_ret.slot_index;
+	}
+
+	// Activate the VPCI object
+	err = gunyah_hyp_object_activate(vpci_ret.new_cap);
+	if (err != OK) {
+		ret = cap_id_result_error(err);
+		err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+							vpci_ret.new_cap);
+		assert(err == OK);
+		goto out;
+	}
+
+	ret = cap_id_result_ok(vpci_ret.new_cap);
+
+	goto out;
+
+error_config_vpci:
+	err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+						vpci_ret.new_cap);
+	assert(err == OK);
+error_create_vpci:
+	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VDEVICE,
+				    config_alloc_ipa, util_bit(config_bits));
+	assert(err == OK);
+error_config_ipa_allocation:
+	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VDEVICE,
+				    npmem_alloc_ipa, util_bit(npmem_bits));
+	assert(err == OK);
+error_npmem_ipa_allocation:
+out:
+	return ret;
+}
+
 static error_t
-handle_vcpu_config_vpm_grp(const vm_config_t		 *vmcfg,
-			   const vm_config_parser_data_t *data)
+add_pci(vm_config_t *vmcfg, const pci_data_t *d)
+{
+	error_t ret;
+
+	vmaddr_t config_ipa  = d->config_base_ipa;
+	size_t	 config_size = 0U;
+	vmaddr_t npmem_ipa   = d->npmem_base_ipa;
+	size_t	 npmem_size  = 0U;
+	uint32_t irq_slots   = 0U;
+
+	cap_id_result_t vpci = create_pci(vmcfg, d->config_bits, d->npmem_bits,
+					  &config_ipa, &config_size, &npmem_ipa,
+					  &npmem_size, &irq_slots,
+					  d->bus_phandle);
+	if (vpci.e != OK) {
+		ret = vpci.e;
+		goto out;
+	}
+
+	ret = vm_config_add_pci(vmcfg, vpci.r, d, config_ipa, config_size,
+				npmem_ipa, npmem_size, irq_slots);
+	if (ret != OK) {
+		error_t err = gunyah_hyp_cspace_delete_cap_from(
+			rm_get_rm_cspace(), vpci.r);
+		assert(err == OK);
+	}
+
+out:
+	return ret;
+}
+
+static error_t
+handle_pci(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 {
 	error_t ret = OK;
 
-	if ((data->affinity == VM_CONFIG_AFFINITY_PROXY) &&
-	    !vmcfg->watchdog_enabled) {
-		vpm_group_option_flags_t flags =
-			vpm_group_option_flags_default();
-		vpm_group_option_flags_set_no_aggregation(&flags, true);
-		ret = gunyah_hyp_vpm_group_configure(vmcfg->vpm_group, flags);
-		if (ret == ERROR_UNIMPLEMENTED) {
-			(void)printf(
-				"Warning: handle_vcpu: vpm group config unsupported\n");
+	if (data->pci_buses == NULL) {
+		goto out;
+	}
+
+	size_t cnt = vector_size(data->pci_buses);
+
+	for (index_t i = 0; i < cnt; ++i) {
+		pci_data_t *d = vector_at_ptr(pci_data_t, data->pci_buses, i);
+
+		ret = add_pci(vmcfg, d);
+		if (ret != OK) {
 			goto out;
-		} else if (ret != OK) {
-			(void)printf("handle_vcpu: failed config vpm group\n");
-			goto out;
-		} else {
-			// Configure succeeded
 		}
+	}
+
+out:
+	return ret;
+}
+
+error_t
+vm_config_configure_vpm_group(const vm_config_t		    *vmcfg,
+			      const vm_config_parser_data_t *data)
+{
+	error_t ret;
+
+	vpm_group_option_flags_t flags = vpm_group_option_flags_default();
+	vpm_group_option_flags_set_explicit_wakeup(&flags,
+						   vmcfg->vpm_explicit_wakeup);
+
+	bool disable_vpm_aggregation = (data != NULL) &&
+				       data->disable_vpm_aggregation;
+
+	if ((data != NULL) && (data->affinity == VM_CONFIG_AFFINITY_PROXY) &&
+	    (vmcfg->watchdog == CSPACE_CAP_INVALID)) {
+		// For proxy-scheduled VMs, PSCI aggregation is only useful for
+		// auto-freezing the watchdog. If there is no watchdog, disable
+		// aggregation.
+		disable_vpm_aggregation = true;
+	}
+
+	if (disable_vpm_aggregation) {
+		vpm_group_option_flags_set_no_aggregation(&flags, true);
+	}
+
+	ret = gunyah_hyp_vpm_group_configure(vmcfg->vpm_group, flags);
+	if (ret == ERROR_UNIMPLEMENTED) {
+		(void)printf(
+			"Warning: handle_vcpu: vpm group config unsupported\n");
+		goto out;
+	} else if (ret != OK) {
+		(void)printf("vcpu: failed configure vpm group\n");
+		goto out;
+	} else {
+		// Configure succeeded
 	}
 
 out:
@@ -3796,6 +4496,30 @@ handle_vcpu(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 		goto err_vcpu_count;
 	}
 
+	if (data->enabled_cpu_count == 0U) {
+		(void)printf(
+			"Error: at least one vCPU must be enabled at VM boot\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto err_vcpu_count;
+	}
+
+	if ((data->affinity != VM_CONFIG_AFFINITY_PROXY) &&
+	    (vcpu_count != data->affinity_map_cnt)) {
+		(void)printf(
+			"parse_cpus: cpu and affinity count don't match\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto err_vcpu_count;
+	}
+
+	if (data->enable_vpm_psci &&
+	    (data->affinity != VM_CONFIG_AFFINITY_PROXY) &&
+	    (data->idle_state_count != vcpu_count)) {
+		(void)printf(
+			"parse_cpus: PSCI enabled for non-proxy VM but not all CPUs have idle states\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto err_vcpu_count;
+	}
+
 	error_t err;
 
 	if (data->enable_vpm_psci) {
@@ -3811,7 +4535,14 @@ handle_vcpu(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 
 		vmcfg->vpm_group = vg.new_cap;
 
-		ret = handle_vcpu_config_vpm_grp(vmcfg, data);
+		// If system_suspend is supported, we should default to vpm
+		// explicit wakeup.
+		if (rm_get_has_system_suspend()) {
+			assert(rm_get_system_power() != CSPACE_CAP_INVALID);
+			vmcfg->vpm_explicit_wakeup = true;
+		}
+
+		ret = vm_config_configure_vpm_group(vmcfg, data);
 		if (ret != OK) {
 			goto err_config_vpm;
 		}
@@ -3822,7 +4553,7 @@ handle_vcpu(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 			goto err_active_vpm;
 		}
 
-		// For some VMs vpm groups, we must reserve and bind a VIRQ to
+		// For some VM's vpm groups, we must reserve and bind a VIRQ to
 		// the owner for signalling VM suspend
 		if (data->enable_vpm_psci_virq) {
 			peer = vmcfg->vm->owner;
@@ -3853,6 +4584,18 @@ handle_vcpu(vm_config_t *vmcfg, const vm_config_parser_data_t *data)
 		goto err_vcpu_options;
 	}
 
+	if (rm_get_sve_supported() && !data->sve_not_allowed) {
+		vcpu_option_flags_set_sve_allowed(&vcpu_options, true);
+	}
+
+	if (rm_get_sme_supported() && data->sme_allowed) {
+		vcpu_option_flags_set_sme_allowed(&vcpu_options, true);
+	}
+
+	if (rm_get_sdei_supported() && data->sdei_allowed) {
+		vcpu_option_flags_set_sdei_allowed(&vcpu_options, true);
+	}
+
 	ret = handle_vcpu_creation(vmcfg, data, vcpu_count, priority, timeslice,
 				   vcpu_options, owner_vm);
 
@@ -3878,16 +4621,44 @@ err_sched_prop:
 }
 
 static error_t
-handle_watchdog(vm_config_t *vmcfg, vm_config_parser_data_t *data)
+handle_watchdog_alloc_map_virq(vm_config_t *vmcfg, virq_t *bark_virq,
+			       bool virq_valid)
 {
-	error_t ret = OK;
+	error_t ret;
 
-	if (!rm_get_watchdog_supported() || !vmcfg->watchdog_enabled) {
-		vmcfg->watchdog = CSPACE_CAP_INVALID;
-		goto out;
+	if (virq_valid) {
+		// Reserve bark virq number in case it is allocated by other use
+		// cases.
+		ret = map_virq(vmcfg->vm->vmid, *bark_virq);
+		if (ret != OK) {
+			goto out;
+		}
+	} else {
+		uint32_result_t bark_virq_ret = alloc_map_virq(vmcfg->vm->vmid);
+		if (bark_virq_ret.e != OK) {
+			ret = bark_virq_ret.e;
+			goto out;
+		}
+		*bark_virq = bark_virq_ret.r;
 	}
 
-	vmid_t vmid = vmcfg->vm->vmid;
+	ret = OK;
+out:
+	return ret;
+}
+
+static error_t
+handle_watchdog(vm_config_t *vmcfg, vm_config_parser_data_t *data)
+{
+	error_t ret, err;
+	count_t wdog_count = vector_size(data->watchdog);
+
+	if (!rm_get_watchdog_supported() || !vmcfg->watchdog_allowed ||
+	    (wdog_count == 0U)) {
+		vmcfg->watchdog = CSPACE_CAP_INVALID;
+		ret		= OK;
+		goto out;
+	}
 
 	// Create the watchdog
 	gunyah_hyp_partition_create_watchdog_result_t wdt;
@@ -3897,56 +4668,59 @@ handle_watchdog(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 		ret = wdt.error;
 		goto out;
 	}
-
-	error_t err;
+	vmcfg->watchdog = wdt.new_cap;
 
 	watchdog_option_flags_t watchdog_options =
 		watchdog_option_flags_default();
 
 	watchdog_option_flags_set_critical_bite(
 		&watchdog_options, data->crash_fatal && vmcfg->trusted_config);
+	watchdog_option_flags_set_fatal_bite(
+		&watchdog_options, data->bite_fatal && vmcfg->trusted_config);
 
 	ret = gunyah_hyp_watchdog_configure(wdt.new_cap, watchdog_options);
 	if (ret != OK) {
-		goto err_config;
+		goto err_delete_cap;
 	}
 
 	ret = gunyah_hyp_object_activate(wdt.new_cap);
 	if (ret != OK) {
-		goto err_activate;
+		goto err_delete_cap;
 	}
-	vmcfg->watchdog = wdt.new_cap;
 
-	uint32_result_t irq_ret = alloc_map_virq(vmid);
-	if (irq_ret.e != OK) {
-		ret = irq_ret.e;
-		goto err_alloc_virq;
+	watchdog_data_t *d_ptr;
+	// We always use the first watchdog node as the real one.
+	d_ptr = vector_at_ptr(watchdog_data_t, data->watchdog, 0U);
+	assert(d_ptr->type != WATCHDOG_UNSPECIFIED);
+
+	ret = handle_watchdog_alloc_map_virq(vmcfg, &d_ptr->bark_virq.irq,
+					     d_ptr->defined_irq);
+	if (ret != OK) {
+		goto err_delete_cap;
 	}
-	interrupt_data_t bark_virq = virq_edge(irq_ret.r);
 
 	// Add the watchdog, and allow the owner to manage the watchdog if the
 	// VM is proxy-scheduled (and therefore might be starved of CPU time by
 	// the owner)
-	ret = vm_config_add_watchdog(vmcfg, wdt.new_cap, bark_virq,
+	ret = vm_config_add_watchdog(vmcfg, wdt.new_cap, d_ptr,
 				     data->affinity ==
 					     VM_CONFIG_AFFINITY_PROXY);
+	if (ret != OK) {
+		goto err_revert_virq;
+	}
 
-	if (ret != OK) {
-		revert_map_virq(vmid, virq_get_number(bark_virq));
-	}
-err_alloc_virq:
-err_activate:
-err_config:
-	if ((ret != OK) && (vmcfg->watchdog != CSPACE_CAP_INVALID)) {
-		err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
-							vmcfg->watchdog);
-		assert(err == OK);
-		vmcfg->watchdog = CSPACE_CAP_INVALID;
-	}
+	ret = OK;
+
+	goto out;
+
+err_revert_virq:
+	revert_map_virq(vmcfg->vm->vmid, d_ptr->bark_virq.irq);
+err_delete_cap:
+	err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+						wdt.new_cap);
+	assert(err == OK);
+	vmcfg->watchdog = CSPACE_CAP_INVALID;
 out:
-	if (ret != OK) {
-		LOG_ERR(ret);
-	}
 	return ret;
 }
 
@@ -4020,7 +4794,7 @@ handle_shm(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 			vmid_t self = vmcfg->vm->vmid;
 			vmid_t peer = get_peer(vmcfg, d->peer);
 
-			// FIXME:
+			// FIXME: QC RM issue #37
 			// Refactor these doorbells to use new handler code.
 			// SHM does not support adding non existing peers yet,
 			// so leave this for now.
@@ -4056,33 +4830,39 @@ out:
 }
 
 static cap_id_result_t
-create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
-		   count_t vqs_num, vmaddr_t *frontend_ipa,
-		   virtio_device_type_t device_type, bool valid_device_type,
-		   bool sync_reset, vmaddr_t *backend_ipa, cap_id_t *me_cap,
-		   size_t *me_size, void **rm_addr)
+create_virtio_backend(const vm_config_t *backend_cfg, count_t vqs_num,
+		      virtio_transport_type_t transport_type,
+		      virtio_device_type_t device_type, bool sync_reset,
+		      vmaddr_t *backend_ipa, interrupt_data_t *backend_virq,
+		      cap_id_t *me_cap, size_t *me_size, void **rm_addr,
+		      bool per_queue_irqs)
 {
 	cap_id_result_t ret;
 
 	// We need to dynamically allocate one page for the virtio memory and
 	// attach it to a memextent. For this, we have to derive a memextent
-	// from the RM's memextent and map this allocated range as read-only for
-	// the frontend and read-write for the backend.
+	// from the RM's memextent and map this allocated range as read-write
+	// for the backend. The first 0x100 bytes of this are reserved for the
+	// MMIO common registers, and are unused for PCI.
+	size_t virtio_common_size = 0x100;
+	size_t virtio_device_size = PAGE_SIZE - virtio_common_size;
 
-	size_t virtio_size = PAGE_SIZE;
-
-	void *rm_ipa = aligned_alloc(PAGE_SIZE, virtio_size);
+	void *rm_ipa = util_alloc_pages(PAGE_SIZE);
 	if (rm_ipa == NULL) {
 		ret = cap_id_result_error(ERROR_NOMEM);
 		goto out;
 	}
-	(void)memset(rm_ipa, 0, virtio_size);
 
-	size_t offset = (size_t)((vmaddr_t)rm_ipa - rm_get_me_ipa_base());
+	heap_lookup_me_ret_t lookup_ret =
+		heap_mgnt_lookup_rm_me((uintptr_t)rm_ipa);
+	assert(lookup_ret.err == OK);
+
+	size_t	 offset = lookup_ret.offset;
+	cap_id_t rm_me	= lookup_ret.me_cap;
 
 	cap_id_result_t me_ret = memextent_create(
-		offset, virtio_size, MEMEXTENT_TYPE_BASIC, PGTABLE_ACCESS_RW,
-		MEMEXTENT_MEMTYPE_DEVICE, rm_get_me());
+		offset, PAGE_SIZE, MEMEXTENT_TYPE_BASIC, PGTABLE_ACCESS_RW,
+		MEMEXTENT_MEMTYPE_DEVICE, rm_me);
 	if (me_ret.e != OK) {
 		ret = cap_id_result_error(me_ret.e);
 		goto error_create_me;
@@ -4098,13 +4878,38 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 		ret = cap_id_result_error(vio_ret.error);
 		goto error_create_virtio;
 	}
+
 	virtio_backend_option_flags_t flags =
 		virtio_backend_option_flags_default();
-	virtio_backend_option_flags_set_valid_device_type(&flags,
-							  valid_device_type);
+
+	// If the device type and transport type are both 0, leave the valid bit
+	// clear to be compatible with old versions of Gunyah that don't support
+	// specifying them.
+	virtio_backend_option_flags_set_valid_type(
+		&flags, (device_type != VIRTIO_DEVICE_TYPE_INVALID) ||
+				(transport_type != VIRTIO_TRANSPORT_TYPE_MMIO));
+	virtio_backend_option_flags_set_per_queue_irqs(&flags, per_queue_irqs);
+	virtio_backend_interface_type_t interface_type =
+		virtio_backend_interface_type_default();
 	virtio_backend_option_flags_set_sync_reset(&flags, sync_reset);
-	err = gunyah_hyp_virtio_mmio_configure(vio_ret.new_cap, me_ret.r,
-					       vqs_num, flags, device_type);
+	virtio_backend_interface_type_set_device(&interface_type, device_type);
+	virtio_backend_interface_type_set_transport(&interface_type,
+						    transport_type);
+
+	// The ME layout is equal to the default for MMIO, so we only need to
+	// specify it for other transports.
+	virtio_backend_option_flags_set_valid_me_layout(
+		&flags, transport_type != VIRTIO_TRANSPORT_TYPE_MMIO);
+	virtio_backend_memextent_layout_t me_layout =
+		virtio_backend_memextent_layout_default();
+	virtio_backend_memextent_layout_set_devcfg_size(&me_layout,
+							virtio_device_size);
+	virtio_backend_memextent_layout_set_devcfg_offset(&me_layout,
+							  virtio_common_size);
+
+	err = gunyah_hyp_virtio_backend_configure(vio_ret.new_cap, me_ret.r,
+						  vqs_num, flags,
+						  interface_type, me_layout);
 	if (err != OK) {
 		ret = cap_id_result_error(err);
 		goto error_configure_virtio;
@@ -4116,34 +4921,15 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 		goto error_activate_virtio;
 	}
 
-	// Allocate IPA for frontend
-	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
-		frontend_cfg->vm, VM_MEMUSE_VDEVICE, INVALID_ADDRESS,
-		INVALID_ADDRESS, virtio_size, PAGE_SIZE);
-	if (alloc_ret.err != OK) {
-		ret = cap_id_result_error(alloc_ret.err);
-		goto error_frontend_ipa_allocation;
-	}
-	vmaddr_t frontend_alloc_ipa = alloc_ret.base;
-
 	// Allocate IPA for backend
-	alloc_ret = vm_address_range_alloc(backend_cfg->vm, VM_MEMUSE_VDEVICE,
-					   INVALID_ADDRESS, INVALID_ADDRESS,
-					   virtio_size, PAGE_SIZE);
+	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
+		backend_cfg->vm, VM_MEMUSE_VDEVICE, INVALID_ADDRESS,
+		INVALID_ADDRESS, PAGE_SIZE, PAGE_SIZE);
 	if (alloc_ret.err != OK) {
 		ret = cap_id_result_error(alloc_ret.err);
 		goto error_backend_ipa_allocation;
 	}
 	vmaddr_t backend_alloc_ipa = alloc_ret.base;
-
-	// Map it read-only for the frontend
-	err = vm_memory_map(frontend_cfg->vm, VM_MEMUSE_VDEVICE, me_ret.r,
-			    frontend_alloc_ipa, PGTABLE_ACCESS_R,
-			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
-	if (err != OK) {
-		ret = cap_id_result_error(err);
-		goto error_frontend_me_map;
-	}
 
 	// Map it read-write for the backend, so that it can modify the
 	// configuration space
@@ -4155,43 +4941,77 @@ create_virtio_mmio(vm_config_t *frontend_cfg, vm_config_t *backend_cfg,
 		goto error_backend_me_map;
 	}
 
-	ret = cap_id_result_ok(vio_ret.new_cap);
-
-	*frontend_ipa = frontend_alloc_ipa;
-	*backend_ipa  = backend_alloc_ipa;
-	*me_cap	      = me_ret.r;
-	*me_size      = virtio_size;
-	*rm_addr      = rm_ipa;
-
-	if (ret.e == OK) {
-		goto out;
+	// Allocate a VIRQ for the backend
+	uint32_result_t irq_ret = alloc_map_virq(backend_cfg->vm->vmid);
+	if (irq_ret.e != OK) {
+		ret = cap_id_result_error(irq_ret.e);
+		goto error_get_backend_virq;
 	}
 
+	ret = cap_id_result_ok(vio_ret.new_cap);
+
+	*backend_virq = virq_edge(irq_ret.r);
+	*backend_ipa  = backend_alloc_ipa;
+	*me_cap	      = me_ret.r;
+	*me_size      = PAGE_SIZE;
+	*rm_addr      = rm_ipa;
+
+error_get_backend_virq:
+	if (ret.e != OK) {
+		err = vm_memory_unmap(backend_cfg->vm, VM_MEMUSE_VDEVICE,
+				      me_ret.r, backend_alloc_ipa);
+		assert(err == OK);
+	}
 error_backend_me_map:
-	err = vm_memory_unmap(frontend_cfg->vm, VM_MEMUSE_VDEVICE, me_ret.r,
-			      frontend_alloc_ipa);
-	assert(err == OK);
-error_frontend_me_map:
-	err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VDEVICE,
-				    backend_alloc_ipa, virtio_size);
-	assert(err == OK);
+	if (ret.e != OK) {
+		err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VDEVICE,
+					    backend_alloc_ipa, PAGE_SIZE);
+		assert(err == OK);
+	}
 error_backend_ipa_allocation:
-	err = vm_address_range_free(frontend_cfg->vm, VM_MEMUSE_VDEVICE,
-				    frontend_alloc_ipa, virtio_size);
-	assert(err == OK);
-error_frontend_ipa_allocation:
 error_activate_virtio:
 error_configure_virtio:
-	err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
-						vio_ret.new_cap);
-	assert(err == OK);
+	if (ret.e != OK) {
+		err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+							vio_ret.new_cap);
+		assert(err == OK);
+	}
 error_create_virtio:
-	memextent_delete(me_ret.r);
+	if (ret.e != OK) {
+		memextent_delete(me_ret.r);
+	}
 error_create_me:
-	free(rm_ipa);
+	if (ret.e != OK) {
+		util_free_pages(rm_ipa, PAGE_SIZE);
+	}
 
 out:
 	return ret;
+}
+
+static void
+rollback_virtio_backend(const vm_config_t *backend_cfg, void *rm_addr,
+			cap_id_t me_cap, cap_id_t vio,
+			interrupt_data_t backend_virq, uintptr_t backend_ipa,
+			size_t me_size)
+{
+	error_t err;
+
+	revert_map_virq(backend_cfg->vm->vmid, virq_get_number(backend_virq));
+
+	err = vm_memory_unmap(backend_cfg->vm, VM_MEMUSE_VDEVICE, me_cap,
+			      backend_ipa);
+	assert(err == OK);
+
+	err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VDEVICE,
+				    backend_ipa, me_size);
+	assert(err == OK);
+
+	err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(), vio);
+	assert(err == OK);
+
+	memextent_delete(me_cap);
+	util_free_pages(rm_addr, PAGE_SIZE);
 }
 
 static error_t
@@ -4199,7 +5019,7 @@ add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d)
 {
 	error_t ret = OK;
 
-	vmid_t backend = d->peer;
+	vmid_t backend = get_peer(frontend_cfg, d->common.peer);
 
 	vm_t *backend_vm = vm_lookup(backend);
 	if ((backend_vm == NULL) || (backend_vm->vm_config == NULL)) {
@@ -4210,16 +5030,16 @@ add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d)
 
 	vm_config_t *backend_cfg = backend_vm->vm_config;
 
-	vmaddr_t frontend_ipa = 0x0;
-	vmaddr_t backend_ipa  = 0x0;
-	cap_id_t me_cap	      = CSPACE_CAP_INVALID;
-	size_t	 me_size      = 0U;
-	void	*rm_addr      = NULL;
+	vmaddr_t	 backend_ipa;
+	interrupt_data_t backend_virq;
+	cap_id_t	 me_cap;
+	size_t		 me_size;
+	void		*rm_addr;
 
-	cap_id_result_t vio = create_virtio_mmio(
-		frontend_cfg, backend_cfg, d->vqs_num, &frontend_ipa,
-		d->device_type, d->valid_device_type, d->sync_reset,
-		&backend_ipa, &me_cap, &me_size, &rm_addr);
+	cap_id_result_t vio = create_virtio_backend(
+		backend_cfg, d->common.vqs_num, VIRTIO_TRANSPORT_TYPE_MMIO,
+		d->common.device_type, d->common.sync_reset, &backend_ipa,
+		&backend_virq, &me_cap, &me_size, &rm_addr, false);
 	if (vio.e != OK) {
 		ret = vio.e;
 		goto out;
@@ -4229,8 +5049,26 @@ add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d)
 
 	error_t err;
 
-	// Reserve VIRQs for front- and backend
+	// Allocate IPA for frontend
+	vm_address_range_result_t alloc_ret = vm_address_range_alloc(
+		frontend_cfg->vm, VM_MEMUSE_VDEVICE, INVALID_ADDRESS,
+		INVALID_ADDRESS, me_size, PAGE_SIZE);
+	if (alloc_ret.err != OK) {
+		ret = alloc_ret.err;
+		goto error_frontend_ipa_allocation;
+	}
+	vmaddr_t frontend_ipa = alloc_ret.base;
 
+	// Map the backend ME read-only for the frontend
+	err = vm_memory_map(frontend_cfg->vm, VM_MEMUSE_VDEVICE, me_cap,
+			    frontend_ipa, PGTABLE_ACCESS_R,
+			    PGTABLE_VM_MEMTYPE_DEVICE_NGNRE);
+	if (err != OK) {
+		ret = err;
+		goto error_frontend_me_map;
+	}
+
+	// Reserve VIRQs for front- and backend
 	uint32_result_t irq_ret = alloc_map_virq(frontend);
 	if (irq_ret.e != OK) {
 		ret = irq_ret.e;
@@ -4238,45 +5076,38 @@ add_virtio_mmio(vm_config_t *frontend_cfg, virtio_mmio_data_t *d)
 	}
 	interrupt_data_t frontend_virq = virq_edge(irq_ret.r);
 
-	// or else it will get the same virq number
-	assert(backend != frontend);
-
-	irq_ret = alloc_map_virq(backend);
-	if (irq_ret.e != OK) {
-		ret = irq_ret.e;
-		goto error_get_backend_virq;
-	}
-	interrupt_data_t backend_virq = virq_edge(irq_ret.r);
-
-	ret = vm_config_add_virtio_mmio(frontend_cfg, backend_cfg, vio.r,
-					frontend_virq, backend_virq, d, true,
+	err = vm_config_add_virtio_mmio(frontend_cfg, backend_cfg, vio.r,
+					frontend_virq, backend_virq, d,
 					frontend_ipa, backend_ipa, me_cap,
 					me_size, rm_addr);
-	if (ret == OK) {
-		goto out;
+	if (err != OK) {
+		ret = err;
+		goto error_add_config;
 	}
 
-	revert_map_virq(backend, virq_get_number(backend_virq));
-error_get_backend_virq:
-	revert_map_virq(frontend, virq_get_number(frontend_virq));
+	ret = OK;
+
+error_add_config:
+	if (ret != OK) {
+		revert_map_virq(frontend, virq_get_number(frontend_virq));
+	}
 error_get_frontend_virq:
-	err = vm_memory_unmap(backend_cfg->vm, VM_MEMUSE_VDEVICE, me_cap,
-			      backend_ipa);
-	assert(err == OK);
-	err = vm_memory_unmap(frontend_cfg->vm, VM_MEMUSE_VDEVICE, me_cap,
-			      frontend_ipa);
-	assert(err == OK);
-	err = vm_address_range_free(backend_cfg->vm, VM_MEMUSE_VDEVICE,
-				    backend_ipa, me_size);
-	assert(err == OK);
-	err = vm_address_range_free(frontend_cfg->vm, VM_MEMUSE_VDEVICE,
-				    frontend_ipa, me_size);
-	assert(err == OK);
-	// XXX need to do much more than delete cap here ?
-	err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(), vio.r);
-	assert(err == OK);
-	memextent_delete(me_cap);
-	free(rm_addr);
+	if (ret != OK) {
+		err = vm_memory_unmap(frontend_cfg->vm, VM_MEMUSE_VDEVICE,
+				      me_cap, frontend_ipa);
+		assert(err == OK);
+	}
+error_frontend_me_map:
+	if (ret != OK) {
+		err = vm_address_range_free(frontend_cfg->vm, VM_MEMUSE_VDEVICE,
+					    frontend_ipa, me_size);
+		assert(err == OK);
+	}
+error_frontend_ipa_allocation:
+	if (ret != OK) {
+		rollback_virtio_backend(backend_cfg, rm_addr, me_cap, vio.r,
+					backend_virq, backend_ipa, me_size);
+	}
 out:
 	return ret;
 }
@@ -4305,13 +5136,215 @@ out:
 	return ret;
 }
 
+static cap_id_t
+virtio_iommu_smmu_handle_to_iommu_cap(uint64_t smmu_handle)
+{
+	(void)smmu_handle;
+	return rm_get_smmuv3_cap(0U);
+}
+
+static error_t
+add_virtio_pci(vm_config_t *frontend_cfg, virtio_pci_data_t *d)
+{
+	error_t ret = OK;
+
+	vmid_t backend = get_peer(frontend_cfg, d->common.peer);
+
+	vm_t *backend_vm = vm_lookup(backend);
+	if ((backend_vm == NULL) || (backend_vm->vm_config == NULL)) {
+		(void)printf("Failed: invalid backend\n");
+		ret = ERROR_ARGUMENT_INVALID;
+		goto out;
+	}
+
+	vm_config_t *backend_cfg = backend_vm->vm_config;
+
+	vmaddr_t	 backend_ipa;
+	interrupt_data_t backend_virq;
+	cap_id_t	 me_cap;
+	size_t		 me_size;
+	void		*rm_addr;
+
+	cap_id_result_t vio = create_virtio_backend(
+		backend_cfg, d->common.vqs_num, VIRTIO_TRANSPORT_TYPE_PCI,
+		d->common.device_type, d->common.sync_reset, &backend_ipa,
+		&backend_virq, &me_cap, &me_size, &rm_addr, d->per_queue_irqs);
+	if (vio.e != OK) {
+		ret = vio.e;
+		goto out;
+	}
+
+	error_t err = vm_config_add_virtio_pci(frontend_cfg, backend_cfg, vio.r,
+					       backend_virq, d, backend_ipa,
+					       me_cap, me_size, rm_addr);
+	if (err != OK) {
+		ret = err;
+		goto error_add_config;
+	}
+
+	ret = OK;
+
+error_add_config:
+	if (ret != OK) {
+		rollback_virtio_backend(backend_cfg, rm_addr, me_cap, vio.r,
+					backend_virq, backend_ipa, me_size);
+	}
+out:
+	return ret;
+}
+
+static error_t
+handle_virtio_pci(vm_config_t *vmcfg, vm_config_parser_data_t *data)
+{
+	error_t ret = OK;
+
+	if (data->virtio_pcis == NULL) {
+		goto out;
+	}
+
+	size_t cnt = vector_size(data->virtio_pcis);
+
+	for (index_t i = 0; i < cnt; ++i) {
+		virtio_pci_data_t *d =
+			vector_at_ptr(virtio_pci_data_t, data->virtio_pcis, i);
+
+		ret = add_virtio_pci(vmcfg, d);
+		if (ret != OK) {
+			goto out;
+		}
+	}
+out:
+	return ret;
+}
+
+static error_t
+add_virtio_iommu(vm_config_t *vmcfg, virtio_iommu_data_t *d)
+{
+	error_t ret = OK;
+
+	gunyah_hyp_partition_create_virtio_iommu_result_t iommu_ret;
+
+	iommu_ret = gunyah_hyp_partition_create_virtio_iommu(
+		rm_get_rm_partition(), rm_get_rm_cspace());
+	if (iommu_ret.error != OK) {
+		ret = iommu_ret.error;
+		goto out;
+	}
+
+	cap_id_t iommu_cap =
+		virtio_iommu_smmu_handle_to_iommu_cap(d->smmu_handle);
+	if (iommu_cap == CSPACE_CAP_INVALID) {
+		ret = ERROR_ARGUMENT_INVALID;
+		goto err_config;
+	}
+
+	virtio_iommu_options_t options = virtio_iommu_options_default();
+	virtio_iommu_options_set_max_streams(&options, d->max_streams);
+
+	ret = gunyah_hyp_virtio_iommu_configure(iommu_ret.new_cap, iommu_cap,
+						options, vmcfg->addrspace);
+	if (ret != OK) {
+		goto err_config;
+	}
+
+	ret = gunyah_hyp_object_activate(iommu_ret.new_cap);
+	if (ret != OK) {
+		goto err_activate;
+	}
+
+	vdevice_node_t *node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		(void)printf("Failed: to alloc vdevice node\n");
+		ret = ERROR_NOMEM;
+		goto err_node;
+	}
+
+	node->type		 = VDEV_VIRTIO;
+	node->bus		 = VDEVICE_BUS_PCI;
+	node->pci.bus_config_ipa = INVALID_ADDRESS;
+	node->pci.bus_phandle	 = DTO_PHANDLE_UNSET;
+
+	// Do we need to set Leagacy interrupts for SVM?
+	// Let GIC use 'mbi-ranges' instead? How do we know?
+	node->pci.has_legacy_irq = true;
+
+	// Let Guest specify the slot to match their DT config
+	node->pci.slot_index   = d->pci_slot_index;
+	node->pci.function_cap = iommu_ret.new_cap;
+
+	// Export to DT not needed as the static PCI device config provided by
+	// user in the DT should be ok, we dont need to update anything. This is
+	// just configration.
+	// The user needs to provide an existing node in the DT so other devices
+	// can refer to the IOMMU using 'iommu-map'.
+	node->export_to_dt = false;
+	node->visible	   = true;
+	node->handle	   = get_vdevice_resource_handle();
+
+	struct vdevice_virtio *cfg = calloc(1, sizeof(*cfg));
+	if (cfg == NULL) {
+		(void)printf(
+			"Failed to allocate Virtio-IOMMU configuration buffer\n");
+		ret = ERROR_NOMEM;
+		goto error_cfg_alloc;
+	}
+
+	cfg->master_cap	    = iommu_ret.new_cap;
+	cfg->device_type    = VIRTIO_DEVICE_TYPE_IOMMU;
+	node->config.virtio = cfg;
+
+	list_append(vdevice_node_t, &vmcfg->vdevice_nodes, node, vdevice_);
+	ret = OK;
+
+error_cfg_alloc:
+	if (ret != OK) {
+		free(node);
+	}
+
+err_node:
+err_activate:
+err_config:
+	if ((ret != OK) && (iommu_ret.new_cap != CSPACE_CAP_INVALID)) {
+		ret = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+							iommu_ret.new_cap);
+		assert(ret == OK);
+	}
+
+out:
+	return ret;
+}
+
+static error_t
+handle_virtio_iommu(vm_config_t *vmcfg, vm_config_parser_data_t *data)
+{
+	error_t ret = OK;
+	if (data->virtio_iommus == NULL) {
+		goto out;
+	}
+
+	size_t cnt = vector_size(data->virtio_iommus);
+
+	for (index_t i = 0; i < cnt; ++i) {
+		virtio_iommu_data_t *d = vector_at_ptr(virtio_iommu_data_t,
+						       data->virtio_iommus, i);
+
+		ret = add_virtio_iommu(vmcfg, d);
+		if (ret != OK) {
+			goto out;
+		}
+	}
+
+out:
+	return ret;
+}
+
 // This API validates the IO memory range provided via the VM's DT config
 // is valid. Checks if the passed address range i.e., the IPA and the size
 // is either mapped to HLOS or configured via passthrough device assignments.
 // In case the IO memory range is part of passthrough device assignments the
 // pagetable access parsed from the DT config is validated against the
 // passthrough configuration.
-// parmeters
+// parameters
 // vmid - VM ID for which the IO memory range mapping is requested.
 // ipa - Start address requested for mapping.
 // size - Size of the IO memory range to be mapped.
@@ -4393,6 +5426,14 @@ handle_iomem_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 			goto iomem_err;
 		}
 
+#if defined(CONFIG_PLATFORM_DEVICES) && CONFIG_PLATFORM_DEVICES
+		if (platform_is_device_mmio(phys)) {
+			LOG("%s: skipping platform device at 0x%lx--0x%lx\n",
+			    __func__, phys, phys + size);
+			continue;
+		}
+#endif
+
 		if (util_array_size(iomem_range_access_to_pgtable_access) <=
 		    (size_t)d->access) {
 			ret = ERROR_DENIED;
@@ -4402,8 +5443,7 @@ handle_iomem_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 			iomem_range_access_to_pgtable_access[d->access];
 
 		vm_address_range_result_t as_ret = vm_address_range_alloc(
-			vmcfg->vm, VM_MEMUSE_IO, ipa, phys, size,
-			ADDRESS_RANGE_NO_ALIGNMENT);
+			vmcfg->vm, VM_MEMUSE_IO, ipa, phys, size, PAGE_SIZE);
 		if (as_ret.err != OK) {
 			ret = as_ret.err;
 			goto iomem_err;
@@ -4486,6 +5526,7 @@ handle_iomems(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 		}
 
 		node->type	   = VDEV_IOMEM;
+		node->bus	   = VDEVICE_BUS_MMIO;
 		node->export_to_dt = true;
 		node->visible	   = true;
 
@@ -4619,19 +5660,6 @@ vm_config_init_addrspace(vm_config_t *vmcfg)
 		goto out_destroy_addrspace;
 	}
 
-	// Register a default VMMIO region for unauthenticated VMs
-	if (vm->auth_type != VM_AUTH_TYPE_PLATFORM) {
-		// The address range is from Google's protected virtual platform
-		// spec, which is not platform-specific.
-		err = gunyah_hyp_addrspace_configure_range(
-			as.new_cap, 0UL, 0x40000000UL,
-			ADDRSPACE_RANGE_CONFIGURE_OP_ADD_VMMIO);
-		if (err != OK) {
-			LOG_ERR(err);
-			goto out_destroy_addrspace;
-		}
-	}
-
 	// If demand paging is enabled, register the paged address ranges
 	size_t paged_ranges =
 		vmcfg->mem_demand_paging
@@ -4646,7 +5674,7 @@ vm_config_init_addrspace(vm_config_t *vmcfg)
 			ADDRSPACE_RANGE_CONFIGURE_OP_ADD_PRIVATE);
 		if (err != OK) {
 			LOG_ERR(err);
-			goto out;
+			goto out_destroy_addrspace;
 		}
 	}
 
@@ -4666,10 +5694,10 @@ vm_config_init_addrspace(vm_config_t *vmcfg)
 	goto out;
 
 out_destroy_addrspace:
-	vm_creation_vm_info_area_teardown(vmcfg);
-
 	err = gunyah_hyp_cspace_delete_cap_from(rm_cspace_cap, as.new_cap);
 	assert(err == OK);
+
+	vm_creation_vm_info_area_teardown(vmcfg);
 out:
 	return err;
 }
@@ -4924,6 +5952,70 @@ err_alloc_node:
 }
 
 static error_t
+add_addrspace_self_cap(vm_config_t *vmcfg)
+{
+	error_t err;
+
+	cap_rights_t copy_mask = CAP_RIGHTS_ADDRSPACE_CONFIGURE_RANGE;
+	if (vmcfg->mem_demand_paging) {
+		copy_mask |= CAP_RIGHTS_ADDRSPACE_MODIFY_PROTECTED;
+	}
+
+	gunyah_hyp_cspace_copy_cap_from_result_t copy_ret =
+		gunyah_hyp_cspace_copy_cap_from(rm_get_rm_cspace(),
+						vmcfg->addrspace, vmcfg->cspace,
+						copy_mask);
+	if (copy_ret.error != OK) {
+		(void)printf("Failed: copy address space cap from rm cspace\n");
+		err = copy_ret.error;
+		goto out;
+	}
+	vmcfg->addrspace_self_cap = copy_ret.new_cap;
+
+	gunyah_hyp_addrspace_info_area_add_entry_result_t add_ret;
+	addrspace_info_area_entry_type_t		  entry_type =
+		addrspace_info_area_entry_type_default();
+
+	cap_rights_t rights = copy_mask & CAP_RIGHTS_ADDRSPACE_MODIFY_PROTECTED;
+
+	addrspace_info_area_rootvm_addrspace_cap_t addrspace_cap_entry = {
+		.addrspace_cap = vmcfg->addrspace_self_cap,
+		.rights	       = cap_rights_addrspace_cast(rights),
+	};
+	addrspace_info_area_entry_type_set_id(
+		&entry_type, ADDRSPACE_INFO_AREA_ROOTVM_ADDRSPACE_CAP);
+	addrspace_info_area_entry_type_set_owner(
+		&entry_type, ADDRSPACE_INFO_AREA_ID_OWNER_ROOTVM);
+
+	addrspace_info_area_entry_data_info_t data_info =
+		addrspace_info_area_entry_data_info_default();
+	addrspace_info_area_entry_data_info_set_size(
+		&data_info, sizeof(addrspace_cap_entry));
+	addrspace_info_area_entry_data_info_set_alignment(
+		&data_info, alignof(addrspace_cap_entry));
+
+	add_ret = gunyah_hyp_addrspace_info_area_add_entry(
+		vmcfg->addrspace, entry_type, (user_ptr_t)&addrspace_cap_entry,
+		data_info);
+	if ((add_ret.error != OK) && (add_ret.error != ERROR_UNIMPLEMENTED)) {
+		err = add_ret.error;
+		LOG_ERR(err);
+		goto err_addrspace_info;
+	}
+
+	err = OK;
+
+err_addrspace_info:
+	if (err != OK) {
+		error_t delete_err = gunyah_hyp_cspace_delete_cap_from(
+			vmcfg->cspace, vmcfg->addrspace_self_cap);
+		assert(delete_err == OK);
+	}
+out:
+	return err;
+}
+
+static error_t
 add_addrspace(vm_config_t *vmcfg, const vm_config_t *owner_cfg)
 {
 	error_t err;
@@ -4969,29 +6061,14 @@ add_addrspace(vm_config_t *vmcfg, const vm_config_t *owner_cfg)
 	if (copy_ret.error != OK) {
 		(void)printf("Failed: copy address space cap from rm cspace\n");
 		err = copy_ret.error;
-		goto err_cap_copy;
+		goto err_cap_copy_owner;
 	}
 	cfg->manager_map_cap = copy_ret.new_cap;
 
-	if (protected) {
-		copy_ret = gunyah_hyp_cspace_copy_cap_from(
-			rm_get_rm_cspace(), vmcfg->addrspace, vmcfg->cspace,
-			CAP_RIGHTS_ADDRSPACE_MODIFY_PROTECTED);
-		if (copy_ret.error != OK) {
-			(void)printf(
-				"Failed: copy address space cap from rm cspace\n");
-			err = copy_ret.error;
-			goto err_cap_copy;
-		}
-		cfg->vm_cap = copy_ret.new_cap;
-	} else {
-		cfg->vm_cap = CSPACE_CAP_INVALID;
-	}
-
-	err = OK;
 	list_append(vdevice_node_t, &vmcfg->vdevice_nodes, node, vdevice_);
 
-err_cap_copy:
+	err = OK;
+err_cap_copy_owner:
 	if (err != OK) {
 		free(cfg);
 	}
@@ -5005,6 +6082,105 @@ err_strdup:
 	}
 err_alloc_node:
 	return err;
+}
+
+static error_t
+handle_vmmio_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data)
+{
+	error_t ret;
+	size_t	cnt = vector_size(data->vmmio_ranges);
+
+	if ((cnt > 0U) && !vmcfg->trusted_config && vmcfg->vm->mem_private) {
+		// If the VM has private memory, we can't allow an untrusted
+		// configuration to explicitly specify VMMIO ranges, because
+		// the VMM might try to trick the VM into writing private data
+		// to a VMMIO range instead of to normal memory.
+		//
+		// Note that we don't check data->vmmio_ranges_set; it's ok for
+		// an untrusted config to explicitly say that there are no VMMIO
+		// ranges.
+		ret = ERROR_DENIED;
+		LOG_ERR(ret);
+		goto out;
+	}
+
+	if (data->affinity != VM_CONFIG_AFFINITY_PROXY) {
+		// VMMIO only works for proxy-scheduled VMs, because at present
+		// the only way to report a fault to the VMM is by returning it
+		// from vcpu_run().
+		if (cnt > 0U) {
+			ret = ERROR_UNIMPLEMENTED;
+			LOG_ERR(ret);
+		} else {
+			ret = OK;
+		}
+		goto out;
+	}
+
+	// If this is an unauthenticated or AVF protected VM and the DT didn't
+	// specify the VMMIO ranges, add a default VMMIO region for backwards
+	// compatibility with older AVF. Note that this depends on the presence
+	// of the DT property, not the number of registered ranges, because we
+	// want to respect an explicit empty list of ranges.
+	if (!data->vmmio_ranges_set &&
+	    ((vmcfg->vm->auth_type == VM_AUTH_TYPE_ANDROID) ||
+	     (vmcfg->vm->auth_type == VM_AUTH_TYPE_NONE))) {
+		(void)printf(
+			"warning: vmmio-ranges not set, using legacy default\n");
+		mem_range_t r = {
+			.base = 0U,
+			.size = 0x40000000U,
+		};
+		ret = vector_push_back(data->vmmio_ranges, r);
+		if (ret != OK) {
+			LOG_ERR(ret);
+			goto out;
+		}
+		cnt++;
+	}
+
+	(void)printf("VM %d has %zd trapped VMMIO range(s):\n", vmcfg->vm->vmid,
+		     cnt);
+
+	for (index_t idx = 0; idx < cnt; idx++) {
+		mem_range_t *d =
+			vector_at_ptr(mem_range_t, data->vmmio_ranges, idx);
+
+		vmaddr_t ipa  = d->base;
+		size_t	 size = d->size;
+
+		(void)printf("\tbase: %#010zx size: %#zx\n", (size_t)ipa, size);
+
+		if (util_add_overflows(ipa, size - 1U)) {
+			ret = ERROR_DENIED;
+			LOG_ERR(ret);
+			goto out;
+		}
+
+		// Note that we use PLATFORM_VDEVICE here, which permits
+		// overlaps with physical device ranges. This should be safe
+		// because the VMMIO ranges are coming from trusted config.
+		vm_address_range_result_t as_ret = vm_address_range_alloc(
+			vmcfg->vm, VM_MEMUSE_PLATFORM_VDEVICE, ipa,
+			INVALID_ADDRESS, size, ADDRESS_RANGE_NO_ALIGNMENT);
+		if (as_ret.err != OK) {
+			ret = as_ret.err;
+			LOG_ERR(ret);
+			goto out;
+		}
+
+		error_t config_err = gunyah_hyp_addrspace_configure_range(
+			vmcfg->addrspace, ipa, size,
+			ADDRSPACE_RANGE_CONFIGURE_OP_ADD_VMMIO);
+		if (config_err != OK) {
+			ret = config_err;
+			LOG_ERR(ret);
+			goto out;
+		}
+	}
+	ret = OK;
+out:
+	return ret;
 }
 
 static error_t
@@ -5106,6 +6282,57 @@ out:
 	return ret;
 }
 
+static error_t
+handle_addrspace_self_cap(vm_config_t *vmcfg)
+{
+	error_t ret;
+
+	bool protected = vmcfg->vm->mem_private;
+	if (protected) {
+		ret = add_addrspace_self_cap(vmcfg);
+	} else {
+		ret = OK;
+	}
+
+	return ret;
+}
+
+static error_t
+handle_vsmmuv2_cap(vm_config_t *vmcfg)
+{
+	error_t	 ret;
+	cap_id_t rm_partition_cap = rm_get_rm_partition();
+	cap_id_t rm_cspace_cap	  = rm_get_rm_cspace();
+
+	// create vsmmuv2 partition
+	gunyah_hyp_partition_create_vsmmuv2_result_t vsmmu_create_res =
+		gunyah_hyp_partition_create_vsmmuv2(rm_partition_cap,
+						    rm_cspace_cap);
+
+	if (vsmmu_create_res.error != OK) {
+		ret = vsmmu_create_res.error;
+		goto out;
+	}
+	cap_id_t vsmmu_cap = vsmmu_create_res.new_cap;
+
+	// activate the vsmmuv2 object
+	ret = gunyah_hyp_object_activate(vsmmu_cap);
+	if (ret != OK) {
+		goto out;
+	}
+
+	// attach the vsmuv2 to vm addrspace
+	ret = gunyah_hyp_addrspace_attach_vdma(vmcfg->addrspace, vsmmu_cap, 0U);
+	if (ret != OK) {
+		goto out;
+	}
+
+	vmcfg->vsmmuv2_cap = vsmmu_cap;
+	ret		   = OK;
+out:
+	return ret;
+}
+
 error_t
 vm_config_update_parsed(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 {
@@ -5119,6 +6346,9 @@ vm_config_update_parsed(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 #if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
 	vmcfg->insecure_console = data->insecure_console;
 #endif // PLATFORM_ALLOW_INSECURE_CONSOLE
+
+	vmcfg->allow_unprotected = data->allow_unprotected;
+	vmcfg->no_dtb_patch	 = data->no_dtb_patch;
 
 	// Update and validate the normal memory range.
 	//
@@ -5197,6 +6427,13 @@ vm_config_update_parsed(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	ret = handle_ids(vmcfg, data);
 	if (ret != OK) {
 		(void)printf("Error: failed to handle VM IDs\n");
+		goto out;
+	}
+
+	ret = handle_resmem_fixed_ranges(vmcfg, data);
+	if (ret != OK) {
+		(void)printf(
+			"Error: failed to handle reserved memory ranges\n");
 		goto out;
 	}
 
@@ -5453,9 +6690,34 @@ vm_config_create_vdevices(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 		goto out;
 	}
 
+	// Virtio-IOMMU needs to be processed before vPCI to attach correctly
+	ret = handle_virtio_iommu(vmcfg, data);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle virtio_iommu\n");
+		goto out;
+	}
+
 	ret = handle_virtio_mmio(vmcfg, data);
 	if (ret != OK) {
 		(void)printf("Error: failed to handle virtio_mmio\n");
+		goto out;
+	}
+
+	ret = handle_virtio_pci(vmcfg, data);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle virtio_pci\n");
+		goto out;
+	}
+
+	ret = handle_pci(vmcfg, data);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle virtual PCI buses\n");
+		goto out;
+	}
+
+	ret = vgic_vm_config_add(vmcfg, data);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle virtual GIC\n");
 		goto out;
 	}
 
@@ -5465,12 +6727,29 @@ vm_config_create_vdevices(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 		goto out;
 	}
 
+	ret = handle_vmmio_ranges(vmcfg, data);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle vmmio ranges\n");
+		goto out;
+	}
+
 	ret = handle_demand_paging(vmcfg);
 	if (ret != OK) {
 		(void)printf("Error: failed to handle demand paging\n");
 		goto out;
 	}
 
+	ret = handle_addrspace_self_cap(vmcfg);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle demand paging\n");
+		goto out;
+	}
+
+	ret = handle_vsmmuv2_cap(vmcfg);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle vsmmuv2 creation\n");
+		goto out;
+	}
 out:
 	return ret;
 }
@@ -5563,7 +6842,7 @@ vm_config_get_console(vmid_t self)
 }
 
 // This function evaluates and returns whether console for SVM is allowed or not
-// parmeters
+// parameters
 // self - VM ID for which the console status is requested.
 // return - 'true' If the PLATFORM_ALLOW_INSECURE_CONSOLE is enabled and
 // insecure_console value parsed from DT is true or if it is a non secured
@@ -5571,7 +6850,7 @@ vm_config_get_console(vmid_t self)
 bool
 vm_config_check_console_allowed(vmid_t self)
 {
-	bool console_enabled = !platform_get_security_state();
+	bool console_enabled = !platform_is_in_secure_state();
 #if defined(PLATFORM_ALLOW_INSECURE_CONSOLE) && PLATFORM_ALLOW_INSECURE_CONSOLE
 	vm_t *vm = vm_lookup(self);
 	if ((vm != NULL) && (vm->vm_config != NULL) &&
@@ -5603,6 +6882,10 @@ vm_config_alloc(vm_t *vm, cap_id_t cspace, cap_id_t partition)
 	if (vmcfg->iomem_ranges == NULL) {
 		goto err_out;
 	}
+	vmcfg->resmem_fixed_ranges = vector_init(resmem_range_t, 1U, 1U);
+	if (vmcfg->resmem_fixed_ranges == NULL) {
+		goto err_out;
+	}
 
 	// Set the image and firmware bases to invalid default addresses and
 	// the sizes to be unlimited. These values can be updated by either an
@@ -5614,14 +6897,20 @@ vm_config_alloc(vm_t *vm, cap_id_t cspace, cap_id_t partition)
 	vmcfg->fw_ipa_base  = INVALID_ADDRESS;
 	vmcfg->fw_size_max  = ~(size_t)0U;
 
-	vmcfg->partition	= partition;
-	vmcfg->cspace		= cspace;
-	vmcfg->addrspace	= CSPACE_CAP_INVALID;
-	vmcfg->vic		= CSPACE_CAP_INVALID;
-	vmcfg->vpm_group	= CSPACE_CAP_INVALID;
-	vmcfg->watchdog		= CSPACE_CAP_INVALID;
-	vmcfg->rtc		= CSPACE_CAP_INVALID;
-	vmcfg->minidump_allowed = false;
+	vmcfg->partition	  = partition;
+	vmcfg->cspace		  = cspace;
+	vmcfg->addrspace	  = CSPACE_CAP_INVALID;
+	vmcfg->vic		  = CSPACE_CAP_INVALID;
+	vmcfg->vpm_group	  = CSPACE_CAP_INVALID;
+	vmcfg->watchdog		  = CSPACE_CAP_INVALID;
+	vmcfg->rtc		  = CSPACE_CAP_INVALID;
+	vmcfg->addrspace_self_cap = CSPACE_CAP_INVALID;
+	vmcfg->vsmmuv2_cap	  = CSPACE_CAP_INVALID;
+	vmcfg->minidump_allowed	  = false;
+	for (count_t i = 0; i < (count_t)util_array_size(vmcfg->vgic_its);
+	     i++) {
+		vmcfg->vgic_its[i] = CSPACE_CAP_INVALID;
+	}
 
 	vmcfg->accepted_memparcels = vector_init(memparcel_t *, 1U, 1U);
 	if (vmcfg->accepted_memparcels == NULL) {
@@ -5641,6 +6930,9 @@ err_out:
 		if (vmcfg->iomem_ranges != NULL) {
 			vector_deinit(vmcfg->iomem_ranges);
 		}
+		if (vmcfg->resmem_fixed_ranges != NULL) {
+			vector_deinit(vmcfg->resmem_fixed_ranges);
+		}
 		if (vmcfg->accepted_memparcels != NULL) {
 			vector_deinit(vmcfg->accepted_memparcels);
 		}
@@ -5659,6 +6951,7 @@ vm_config_dealloc(vm_t *vm)
 
 	vector_deinit(vm->vm_config->accepted_memparcels);
 	vector_deinit(vm->vm_config->iomem_ranges);
+	vector_deinit(vm->vm_config->resmem_fixed_ranges);
 	vector_deinit(vm->vm_config->vcpus);
 
 	if (vm->vm_config->boot_ctx != NULL) {
@@ -5669,15 +6962,64 @@ vm_config_dealloc(vm_t *vm)
 	vm->vm_config = NULL;
 }
 
+static error_t
+vm_config_hlos_vpci_setup(vm_config_t *vmcfg)
+{
+	error_t ret;
+
+#if defined(PLATFORM_HLOS_NEEDS_VPCI) && PLATFORM_HLOS_NEEDS_VPCI
+	ret = platform_add_vpci_devices(vmcfg);
+	if (ret != OK) {
+		goto out;
+	}
+
+	pci_data_t d = {
+		// Allocate all addresses dynamically
+		.config_base_ipa = INVALID_ADDRESS,
+		.npmem_base_ipa	 = INVALID_ADDRESS,
+
+		// Allocate the smallest possible spec-compliant ECAM (2MB),
+		// and a modest npmem aperture that should be more than enough
+		// for the maximum supported number of virtual devices (31).
+		.config_bits = 21U,
+		.npmem_bits  = 20U,
+
+		// Route MSIs to the GICD.
+		.msi_vdevices	    = true,
+		.msi_parent_phandle = DTO_PHANDLE_UNSET,
+
+		// Enable legacy IRQs and route them to the GICD.
+		.irq_vdevices	    = true,
+		.irq_parent_phandle = DTO_PHANDLE_UNSET,
+
+		// Don't allow vdevices to attach automatically
+		.bus_phandle = DTO_PHANDLE_UNSET,
+
+#if defined(PLATFORM_HLOS_VPCI_LINUX_DOMAIN)
+		.linux_pci_domain = PLATFORM_HLOS_VPCI_LINUX_DOMAIN,
+#else
+		.linux_pci_domain = ~(uint32_t)0U,
+#endif
+	};
+	ret = add_pci(vmcfg, &d);
+out:
+#else
+	(void)vmcfg;
+	ret = OK;
+#endif
+
+	return ret;
+}
+
 error_t
 vm_config_hlos_vdevices_setup(vm_config_t *vmcfg, cap_id_t vic)
 {
 	const uint16_t depth = 8U;
 	const uint16_t size  = RM_RPC_MESSAGE_SIZE;
-	error_t	       ret   = OK;
+	error_t	       ret, err;
 
-	cap_id_result_t tx = cap_id_result_error(ERROR_DENIED);
-	cap_id_result_t rx = cap_id_result_error(ERROR_DENIED);
+	cap_id_result_t tx;
+	cap_id_result_t rx;
 
 	vmcfg->vic = vic;
 
@@ -5696,7 +7038,7 @@ vm_config_hlos_vdevices_setup(vm_config_t *vmcfg, cap_id_t vic)
 			"Error: failed to create hlos rx msg queue, err(%x)\n",
 			rx.e);
 		ret = rx.e;
-		goto out;
+		goto err_delete_tx;
 	}
 
 	rm_rpc_data_t d = {
@@ -5719,24 +7061,98 @@ vm_config_hlos_vdevices_setup(vm_config_t *vmcfg, cap_id_t vic)
 		(void)printf(
 			"Error: failed to add hlos rm rpc vdevice, err(%x)\n",
 			ret);
-		goto out;
+		goto err_delete_rx;
 	}
 
-	if (rm_get_watchdog_supported()) {
-#if defined(CONFIG_WATCHDOG_VIRQ)
-		const interrupt_data_t watchdog_bark_virq =
-			virq_level(CONFIG_WATCHDOG_VIRQ);
+	watchdog_data_t wdog_data;
+	if (vmcfg->watchdog != CSPACE_CAP_INVALID) {
+		(void)memset(&wdog_data, 0, sizeof(wdog_data));
+
+#if defined(CONFIG_WATCHDOG_BARK_VIRQ)
+		// We use this function to reserve bark virq number in case it
+		// is allocated by other use cases.
+		ret = map_virq(vmcfg->vm->vmid, CONFIG_WATCHDOG_BARK_VIRQ);
+		if (ret != OK) {
+			goto err_delete_rx;
+		}
+		wdog_data.bark_virq = virq_level(CONFIG_WATCHDOG_BARK_VIRQ);
 #else
-		const interrupt_data_t watchdog_bark_virq = VIRQ_DATA_INVALID;
+		uint32_result_t bark_virq_ret = alloc_map_virq(vmcfg->vm->vmid);
+		if (bark_virq_ret.e != OK) {
+			ret = bark_virq_ret.e;
+			goto err_delete_rx;
+		}
+		wdog_data.bark_virq = virq_level(bark_virq_ret.r);
 #endif
+
+#if defined(CONFIG_WATCHDOG_BITE_VIRQ)
+		// We use this function to reserve bite virq number in case
+		// it is allocated by other use cases.
+		ret = map_virq(vmcfg->vm->vmid, CONFIG_WATCHDOG_BITE_VIRQ);
+		if (ret != OK) {
+			goto err_revert_bark_virq;
+		}
+#endif
+
+		// We assume that the watchdog must be declared in DT for HLOS
+		const size_t MAX_WDOG_NODE_PATH = 32U;
+		wdog_data.node_path = (char *)malloc(MAX_WDOG_NODE_PATH);
+		if (wdog_data.node_path == NULL) {
+			ret = ERROR_NOMEM;
+			goto err_revert_bite_virq;
+		}
+
+#if defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT
+		wdog_data.type	    = WATCHDOG_EMULATION_ARM_SBSA;
+		wdog_data.base	    = PLATFORM_SBSA_WDT_ADDR;
+		wdog_data.size	    = SBSA_WATCHDOG_SIZE;
+		wdog_data.alignment = SBSA_WATCHDOG_FRAME_STRIDE;
+
+		int32_t snprintf_ret = snprintf(wdog_data.node_path,
+						MAX_WDOG_NODE_PATH,
+						"/soc/watchdog@%08x",
+						(uint32_t)wdog_data.base);
+		if ((snprintf_ret < 0) ||
+		    ((size_t)snprintf_ret >= MAX_WDOG_NODE_PATH)) {
+			err = ERROR_ARGUMENT_INVALID;
+			goto err_revert_bite_virq;
+		}
+#elif defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG
+		wdog_data.type	    = WATCHDOG_EMULATION_QCOM;
+		wdog_data.base	    = rm_get_watchdog_address();
+		wdog_data.size	    = PAGE_SIZE;
+		wdog_data.alignment = PAGE_SIZE;
+
+		int32_t snprintf_ret = snprintf(wdog_data.node_path,
+						MAX_WDOG_NODE_PATH,
+						"/soc/qcom,wdt@%08x",
+						(uint32_t)wdog_data.base);
+		if ((snprintf_ret < 0) ||
+		    ((size_t)snprintf_ret >= MAX_WDOG_NODE_PATH)) {
+			err = ERROR_ARGUMENT_INVALID;
+			goto err_revert_bite_virq;
+		}
+#else
+		wdog_data.type = WATCHDOG_SMC_BASED;
+		(void)strlcpy(wdog_data.node_path,
+			      "/hypervisor/qcom,gh-watchdog",
+			      MAX_WDOG_NODE_PATH);
+#endif
+
 		ret = vm_config_add_watchdog(vmcfg, CSPACE_CAP_INVALID,
-					     watchdog_bark_virq, false);
+					     &wdog_data, false);
 		if (ret != OK) {
 			(void)printf(
 				"Error: failed to add hlos watchdog, err(%x)\n",
 				ret);
-			goto out;
+			goto err_revert_bite_virq;
 		}
+	}
+
+	ret = vm_config_hlos_vpci_setup(vmcfg);
+	if (ret != OK) {
+		(void)printf("Error: failed to set up virtual PCI bus\n");
+		goto err_revert_bite_virq;
 	}
 
 	// Process any vdevices that may have been added by peers before HLOS
@@ -5745,32 +7161,47 @@ vm_config_hlos_vdevices_setup(vm_config_t *vmcfg, cap_id_t vic)
 	if (ret != OK) {
 		(void)printf(
 			"Error: failed to handle vm_config add peer vdevices\n");
+		goto err_revert_bite_virq;
+	}
+
+	ret = vgic_vm_config_add(vmcfg, NULL);
+	if (ret != OK) {
+		(void)printf("Error: failed to handle virtual GIC\n");
 		goto out;
 	}
 
 	ret = platform_vm_config_hlos_vdevices_setup(vmcfg);
 	if (ret != OK) {
 		(void)printf("Error: failed to handle platform vm_config\n");
-		goto out;
+		goto err_revert_bite_virq;
 	}
 
-out:
-
+	ret = handle_vsmmuv2_cap(vmcfg);
 	if (ret != OK) {
-		error_t err;
-		if (tx.e == OK) {
-			err = gunyah_hyp_cspace_delete_cap_from(vmcfg->cspace,
-								tx.r);
-			assert(err == OK);
-		}
-
-		if (rx.e == OK) {
-			err = gunyah_hyp_cspace_delete_cap_from(vmcfg->cspace,
-								rx.r);
-			assert(err == OK);
-		}
+		(void)printf("Error: failed to handle HLOS vsmmuv2 creation\n");
 	}
 
+	goto out;
+
+err_revert_bite_virq:
+	if (vmcfg->watchdog != CSPACE_CAP_INVALID) {
+#if defined(CONFIG_WATCHDOG_BITE_VIRQ)
+		revert_map_virq(vmcfg->vm->vmid, CONFIG_WATCHDOG_BITE_VIRQ);
+#endif
+	}
+#if defined(CONFIG_WATCHDOG_BITE_VIRQ)
+err_revert_bark_virq:
+#endif
+	if (vmcfg->watchdog != CSPACE_CAP_INVALID) {
+		revert_map_virq(vmcfg->vm->vmid, wdog_data.bark_virq.irq);
+	}
+err_delete_rx:
+	err = gunyah_hyp_cspace_delete_cap_from(vmcfg->cspace, rx.r);
+	assert(err == OK);
+err_delete_tx:
+	err = gunyah_hyp_cspace_delete_cap_from(vmcfg->cspace, tx.r);
+	assert(err == OK);
+out:
 	return ret;
 }
 
@@ -5791,18 +7222,13 @@ handle_interrupt_controller(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 		goto out;
 	}
 
-	// Currently we configure the maximum number of vcpus for the VM, not
-	// considering how many vcpus may not actually be created due to
-	// non-functional cores.  We would need to pre-process the vcpus and
-	// figure out the number of vcpus to configure here. This means
-	// splitting and refactoring handle_vcpus() to do some calculation
-	// early.
-	// FIXME:
-	count_t vcpu_count = vector_size(data->vcpus);
-	if (vcpu_count == 0U) {
-		ret = ERROR_NORESOURCES;
+	// Ensure there are enough VCPU slots in the VIC to attach the highest-
+	// numbered VCPU.
+	if (data->vcpu_used_indices == 0U) {
+		ret = ERROR_ARGUMENT_INVALID;
 		goto out_destroy_vic;
 	}
+	count_t vcpu_count = compiler_msb(data->vcpu_used_indices) + 1U;
 
 	vic_option_flags_t vic_options = vic_option_flags_default();
 	vic_option_flags_set_disable_default_addr(&vic_options,
@@ -5810,7 +7236,7 @@ handle_interrupt_controller(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	// We use extended SPIs as long as hypervisor tells us it is supported.
 	// However, we may want to configure this based on device tree or the
 	// VM_CONFIG RPC.
-	// FIXME:
+	// FIXME: QC RM issue #53
 	count_t vm_max_virqs = rm_get_vic_max_virqs();
 
 	ret = gunyah_hyp_vic_configure(v.new_cap, vcpu_count, vm_max_virqs,
@@ -5819,19 +7245,14 @@ handle_interrupt_controller(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 		goto out_destroy_vic;
 	}
 
-	if ((vmcfg->vm != NULL) &&
-	    (vmcfg->vm->auth_type != VM_AUTH_TYPE_PLATFORM)) {
-		// Set up the MPIDR mapping to be linear, as is expected by
-		// most target-independent VMs.
-		//
-		// This should actually be derived from the parsed /cpu nodes,
-		// not just hard-coded. Also it should be in arch code.
-		// FIXME:
-		ret = gunyah_hyp_vgic_set_mpidr_mapping(v.new_cap, 0x7fff, 0, 8,
-							16, 24, false);
-		if (ret != OK) {
-			goto out;
-		}
+	// Set up the MPIDR mapping to match the VCPU addresses parsed from the
+	// DT.
+	ret = gunyah_hyp_vgic_set_mpidr_mapping(
+		v.new_cap, data->vcpu_addr_mask, data->vcpu_addr_shifts[0],
+		data->vcpu_addr_shifts[1], data->vcpu_addr_shifts[2],
+		data->vcpu_addr_shifts[3], false);
+	if (ret != OK) {
+		goto out;
 	}
 
 	ret = gunyah_hyp_object_activate(v.new_cap);
@@ -5909,6 +7330,13 @@ handle_irqs(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 				break;
 			}
 		} else if ((owner_ret.e == OK) && (owner_ret.r == VMID_HLOS)) {
+#if defined(CONFIG_PLATFORM_DEVICES) && CONFIG_PLATFORM_DEVICES
+			if (platform_is_device_irq(hw_irq)) {
+				LOG("%s: skipping device IRQ %u\n", __func__,
+				    hw_irq);
+				continue;
+			}
+#endif
 #if defined(PLATFORM_STATIC_IRQ_SHARE_ALLOWED) &&                              \
 	PLATFORM_STATIC_IRQ_SHARE_ALLOWED
 			ret = irq_manager_vm_static_lend(vmcfg->vm, virq,
@@ -5939,7 +7367,7 @@ err_denied:
 static error_t
 handle_ids(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 {
-	error_t ret = OK;
+	error_t ret;
 	assert(data != NULL);
 
 	vm_t *vm = vmcfg->vm;
@@ -5962,6 +7390,50 @@ handle_ids(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 	(void)strlcpy(vm->name, data->vm_name, VM_MAX_NAME_LEN);
 	vm->name_len = (uint16_t)strlen(vm->name);
 
+	// Limit peripheral VMID awareness to trusted VMs for now.
+	if ((data->allowed_periph_vmids != 0U) && !vmcfg->trusted_config) {
+		ret = ERROR_DENIED;
+		LOG_ERR(ret);
+		goto out;
+	}
+
+	// Fail if any disallowed peripheral VMIDs have been set as targets.
+	if ((data->used_periph_vmids & ~data->allowed_periph_vmids) != 0U) {
+		ret = ERROR_DENIED;
+		LOG_ERR(ret);
+		goto out;
+	}
+
+	ret = OK;
+out:
+	return ret;
+}
+
+static error_t
+handle_resmem_fixed_ranges(vm_config_t *vmcfg, vm_config_parser_data_t *data)
+{
+	error_t ret;
+
+	count_t range_count = vector_size(data->resmem_fixed_ranges);
+	for (index_t i = 0U; i < range_count; i++) {
+		const resmem_range_data_t *rdata = vector_at_ptr(
+			resmem_range_data_t, data->resmem_fixed_ranges, i);
+
+		resmem_range_t range = {
+			.label_valid = rdata->label_valid,
+			.label	     = rdata->label,
+			.ipa_base    = rdata->ipa_base,
+			.size	     = rdata->size,
+			.is_reusable = rdata->is_reusable,
+		};
+		ret = vector_push_back(vmcfg->resmem_fixed_ranges, range);
+		if (ret != OK) {
+			goto out;
+		}
+	}
+	ret = OK;
+
+out:
 	return ret;
 }
 
@@ -6008,6 +7480,18 @@ vm_config_destroy_vm_objects(vm_t *vm)
 	vm_config_t *vmcfg = vm->vm_config;
 	assert(vmcfg != NULL);
 
+	if (vmcfg->vsmmuv2_cap != CSPACE_CAP_INVALID) {
+		err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+							vmcfg->vsmmuv2_cap);
+		assert(err == OK);
+	}
+
+	if (vmcfg->addrspace_self_cap != CSPACE_CAP_INVALID) {
+		err = gunyah_hyp_cspace_delete_cap_from(
+			vmcfg->cspace, vmcfg->addrspace_self_cap);
+		assert(err == OK);
+	}
+
 	if (vmcfg->addrspace != CSPACE_CAP_INVALID) {
 		err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
 							vmcfg->addrspace);
@@ -6047,6 +7531,10 @@ vm_config_destroy_vm_objects(vm_t *vm)
 						vmcfg->cspace);
 	assert(err == OK);
 
+	if (vmcfg->mem_demand_paging) {
+		vector_deinit(vmcfg->mem_demand_paged_ranges);
+	}
+
 	vm_creation_vm_info_area_teardown(vmcfg);
 	vm_address_range_destroy(vm);
 	vm_memory_teardown(vm);
@@ -6062,6 +7550,7 @@ vm_config_delete_vdevice_node(vm_config_t *vmcfg, vdevice_node_t **node)
 
 	free((*node)->config.raw);
 	free((*node)->generate);
+	free((*node)->symbol);
 
 	free_compatibles(*node);
 
@@ -6312,6 +7801,16 @@ handle_watchdog_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 	struct vdevice_watchdog *cfg =
 		(struct vdevice_watchdog *)(*node)->config.watchdog;
 
+#if (defined(PLATFORM_SBSA_WDT) && PLATFORM_SBSA_WDT) ||                       \
+	(defined(PLATFORM_QCOM_WDT_REG) && PLATFORM_QCOM_WDT_REG)
+	if (cfg->type != WATCHDOG_SMC_BASED) {
+		err = vm_address_range_free(vmcfg->vm,
+					    VM_MEMUSE_PLATFORM_VDEVICE,
+					    cfg->base, cfg->size);
+		assert(err == OK);
+	}
+#endif
+
 	watchdog_bind_option_flags_t bind_bite_options =
 		watchdog_bind_option_flags_default();
 	watchdog_bind_option_flags_set_bite_virq(&bind_bite_options, true);
@@ -6325,6 +7824,7 @@ handle_watchdog_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 	err = gunyah_hyp_watchdog_unbind_virq(vmcfg->watchdog,
 					      bind_bark_options);
 	assert(err == OK);
+
 	revert_map_virq(vmcfg->vm->vmid, virq_get_number(cfg->bark_virq));
 
 	if (cfg->manager_cap != CSPACE_CAP_INVALID) {
@@ -6346,6 +7846,7 @@ handle_watchdog_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 
 	vmcfg->watchdog = CSPACE_CAP_INVALID;
 
+	free(cfg->node_path);
 	vm_config_delete_vdevice_node(vmcfg, node);
 }
 
@@ -6383,47 +7884,63 @@ handle_vpm_group_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 }
 
 static void
-handle_virtio_mmio_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
+handle_virtio_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 {
 	assert(vmcfg != NULL);
 	assert((node != NULL) && (*node != NULL));
 
-	struct vdevice_virtio_mmio *cfg = (*node)->config.virtio_mmio;
+	struct vdevice_virtio *cfg = (*node)->config.virtio;
 
 	cap_id_t virtio_cap = cfg->master_cap;
 
-	vm_t *backend_vm = vm_lookup(cfg->backend);
-	assert((backend_vm != NULL) && (backend_vm->vm_config != NULL));
-
 	error_t err;
 
-	revert_map_virq(cfg->backend, virq_get_number(cfg->backend_virq));
-	revert_map_virq(vmcfg->vm->vmid, virq_get_number(cfg->frontend_virq));
+	if ((*node)->bus == VDEVICE_BUS_MMIO) {
+		revert_map_virq(vmcfg->vm->vmid,
+				virq_get_number(cfg->mmio.virq));
 
-	err = vm_memory_unmap(vmcfg->vm, VM_MEMUSE_VDEVICE, cfg->me_cap,
-			      cfg->frontend_ipa);
-	assert(err == OK);
+		if (cfg->backend.valid) {
+			err = vm_memory_unmap(vmcfg->vm, VM_MEMUSE_VDEVICE,
+					      cfg->backend.me_cap,
+					      cfg->mmio.ipa);
+			assert(err == OK);
+		}
 
-	err = vm_memory_unmap(backend_vm, VM_MEMUSE_VDEVICE, cfg->me_cap,
-			      cfg->backend_ipa);
-	assert(err == OK);
+		err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VDEVICE,
+					    cfg->mmio.ipa, cfg->mmio.size);
+		assert(err == OK);
+	}
 
-	err = vm_address_range_free(backend_vm, VM_MEMUSE_VDEVICE,
-				    cfg->backend_ipa, cfg->me_size);
-	assert(err == OK);
+	if (cfg->backend.valid) {
+		vm_t *backend_vm = vm_lookup(cfg->backend.vm);
+		assert((backend_vm != NULL) && (backend_vm->vm_config != NULL));
 
-	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VDEVICE,
-				    cfg->frontend_ipa, cfg->me_size);
-	assert(err == OK);
+		revert_map_virq(cfg->backend.vm,
+				virq_get_number(cfg->backend.virq));
 
-	err = gunyah_hyp_cspace_delete_cap_from(backend_vm->vm_config->cspace,
-						cfg->backend_cap);
-	assert(err == OK);
+		err = vm_memory_unmap(backend_vm, VM_MEMUSE_VDEVICE,
+				      cfg->backend.me_cap, cfg->backend.ipa);
+		assert(err == OK);
+
+		err = vm_address_range_free(backend_vm, VM_MEMUSE_VDEVICE,
+					    cfg->backend.ipa,
+					    cfg->backend.me_size);
+		assert(err == OK);
+
+		err = gunyah_hyp_cspace_delete_cap_from(
+			backend_vm->vm_config->cspace, cfg->backend.cap);
+		assert(err == OK);
+
+		memextent_delete(cfg->backend.me_cap);
+		util_free_pages(cfg->backend.rm_addr, cfg->backend.me_size);
+	}
+
+	// IOMMU does nothing special here, just the CAP.
+
 	err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(), virtio_cap);
 	assert(err == OK);
 
-	memextent_delete(cfg->me_cap);
-	free(cfg->rm_addr);
+	free(cfg->patch);
 
 	vm_config_delete_vdevice_node(vmcfg, node);
 }
@@ -6439,6 +7956,41 @@ handle_iomem_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 	if (cfg->rm_sglist_len > 0U) {
 		free(cfg->rm_sglist);
 	}
+
+	vm_config_delete_vdevice_node(vmcfg, node);
+}
+
+static void
+handle_pci_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
+{
+	assert(vmcfg != NULL);
+	assert((node != NULL) && (*node != NULL));
+
+	struct vdevice_pci *cfg = (*node)->config.pci;
+
+	error_t err;
+
+	for (index_t irq_slot = 0U;
+	     irq_slot < util_array_size(cfg->legacy_virqs); irq_slot++) {
+		if (cfg->legacy_virqs[irq_slot].irq != VIRQ_INVALID) {
+			revert_map_virq(vmcfg->vm->vmid,
+					cfg->legacy_virqs[irq_slot].irq);
+		}
+	}
+
+	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VDEVICE,
+				    cfg->config_ipa, cfg->config_size);
+	assert(err == OK);
+
+	err = vm_address_range_free(vmcfg->vm, VM_MEMUSE_VDEVICE,
+				    cfg->npmem_ipa, cfg->npmem_size);
+	assert(err == OK);
+
+	err = gunyah_hyp_cspace_delete_cap_from(rm_get_rm_cspace(),
+						cfg->master_cap);
+	assert(err == OK);
+
+	free(cfg->patch);
 
 	vm_config_delete_vdevice_node(vmcfg, node);
 }
@@ -6493,12 +8045,6 @@ handle_address_space_destruction(vm_config_t *vmcfg, vdevice_node_t **node)
 		assert(err == OK);
 	}
 
-	if (cfg->vm_cap != CSPACE_CAP_INVALID) {
-		err = gunyah_hyp_cspace_delete_cap_from(vmcfg->cspace,
-							cfg->vm_cap);
-		assert(err == OK);
-	}
-
 	vm_config_delete_vdevice_node(vmcfg, node);
 }
 
@@ -6527,11 +8073,14 @@ vm_config_destroy_vdevice(vm_config_t *vmcfg, vdevice_node_t **node)
 	case VDEV_VIRTUAL_PM:
 		handle_vpm_group_destruction(vmcfg, node);
 		break;
-	case VDEV_VIRTIO_MMIO:
-		handle_virtio_mmio_destruction(vmcfg, node);
+	case VDEV_VIRTIO:
+		handle_virtio_destruction(vmcfg, node);
 		break;
 	case VDEV_IOMEM:
 		handle_iomem_destruction(vmcfg, node);
+		break;
+	case VDEV_PCI:
+		handle_pci_destruction(vmcfg, node);
 		break;
 	case VDEV_RTC:
 		(void)handle_rtc_teardown(vmcfg, node);
@@ -6542,7 +8091,7 @@ vm_config_destroy_vdevice(vm_config_t *vmcfg, vdevice_node_t **node)
 	case VDEV_ADDRESS_SPACE:
 		(void)handle_address_space_destruction(vmcfg, node);
 		break;
-	// FIXME:
+	// FIXME: QC RM issue #55
 	// Ideally all platform-specific vdevices should move to platform code.
 	case VDEV_MINIDUMP:
 	case VDEV_SMMU_V2:
@@ -6675,6 +8224,16 @@ kill_all_vcpus(const vm_t *vm)
 void
 vm_config_handle_exit(const vm_t *vm)
 {
+	if (vm->vm_config->watchdog != CSPACE_CAP_INVALID) {
+		// Freeze the watchdog to prevent a bark if the VM is
+		// proxy-scheduled.
+		error_t e = gunyah_hyp_watchdog_manage(
+			vm->vm_config->watchdog, WATCHDOG_MANAGE_OP_FREEZE);
+		if (e != OK) {
+			panic("Hyp watchdog failed\n");
+		}
+	}
+
 	kill_all_vcpus(vm);
 
 	while (!wait_for_vcpu_exit(vm)) {
@@ -6694,17 +8253,10 @@ vm_reset_handle_init(vm_t *vm)
 	vm->restart_allowed = true;
 #if defined(PLATFORM_ENABLE_TRUSTEDVM_RESTART) &&                              \
 	PLATFORM_ENABLE_TRUSTEDVM_RESTART
-
-#if defined(PLATFORM_VM_DEBUG_ACCESS_ALLOWED) &&                               \
-	PLATFORM_VM_DEBUG_ACCESS_ALLOWED
-	// Allow restart, if PVM is allowed to retain access to GVM memory
-	vm->restart_allowed = !platform_get_security_state();
-#else
 	// Allow restart of cleanly shutdown VMs or unprotected VMs.
 	if (vm->vm_config->trusted_config) {
 		vm->restart_allowed = vm->clean_shutdown || !vm->mem_private;
 	}
-#endif
 #else
 	if (vm->vm_config->trusted_config) {
 		vm->restart_allowed = false;

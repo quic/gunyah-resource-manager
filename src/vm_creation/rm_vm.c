@@ -1,4 +1,4 @@
-// © 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -52,7 +52,11 @@ rm_vm_create(const rm_env_data_t *env_data)
 	vmcfg->addrspace = env_data->addrspace_capid;
 	rm->priority	 = ROOTVM_PRIORITY;
 
-	ret = vm_config_add_vcpu(vmcfg, env_data->vcpu_capid,
+	vmcfg->mem_ipa_base = env_data->me_ipa_base;
+	vmcfg->mem_size_min = env_data->me_size;
+	vmcfg->mem_size_max = env_data->me_size;
+
+	ret = vm_config_add_vcpu(vmcfg, env_data->vcpu_capid, 0U,
 				 env_data->boot_core, true, NULL);
 	if (ret != OK) {
 		LOG_ERR(ret);
@@ -73,28 +77,11 @@ rm_vm_create(const rm_env_data_t *env_data)
 
 	// Reserve one page at 0 (if it wasn't already reserved for the root
 	// application or device MEs) to ensure that NULL doesn't get allocated
-	// as a valid address in the RM address space
-
-	bool	device_include_null = false;
-	count_t device_ranges_count = rm_get_device_ranges_count();
-	for (index_t i = 0U; i < device_ranges_count; i++) {
-		paddr_t dev_base;
-		size_t	dev_size;
-
-		rm_get_device_ranges(i, &dev_base, &dev_size);
-		if (dev_base == 0U) {
-			device_include_null = true;
-			break;
-		}
-	}
-	if ((env_data->me_ipa_base != 0U) && !device_include_null) {
-		ret = vm_address_range_alloc(rm, VM_MEMUSE_NORMAL, 0U, 0U,
-					     PAGE_SIZE, PAGE_SIZE)
-			      .err;
-		if (ret != OK) {
-			LOG_ERR(ret);
-			goto out;
-		}
+	// as a valid address in the RM address space. Ignore failures, since
+	// they mean that address 0 was already unavailable.
+	if (env_data->me_ipa_base != 0U) {
+		(void)vm_address_range_alloc(rm, VM_MEMUSE_NORMAL, 0U, 0U,
+					     PAGE_SIZE, PAGE_SIZE);
 	}
 
 	// Reserve the pre-mapped memextent containing the RM code & heap
@@ -103,6 +90,12 @@ rm_vm_create(const rm_env_data_t *env_data)
 				     env_data->me_ipa_base, env_data->me_size,
 				     0U)
 		      .err;
+	if (ret != OK) {
+		LOG_ERR(ret);
+		goto out;
+	}
+
+	ret = platform_vm_create(rm, false);
 	if (ret != OK) {
 		LOG_ERR(ret);
 		goto out;

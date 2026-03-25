@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -40,6 +40,10 @@
 #define DEFAULT_ADDR_CELLS (2)
 #define DEFAULT_SIZE_CELLS (1)
 
+static void
+dtb_parser_update_ctx_child(const void *fdt, int node_ofs, ctx_t *ctx,
+			    bool is_root_node);
+
 static error_t
 push_ctx(ctx_t ctxs[], int next_depth, const void *fdt, int node_ofs,
 	 const char *parent_name);
@@ -50,7 +54,7 @@ pop_ctx(ctx_t ctxs[], int prev_depth, int cur_depth);
 static listener_return_t
 check_listeners(dtb_parser_data_t *data, dtb_listener_t *listeners,
 		size_t listener_cnt, const void *fdt, int node_ofs,
-		const ctx_t *ctx, const char *path);
+		const ctx_t *ctx, const char *path, bool tainted_source);
 
 static listener_return_t
 check_path_listener(dtb_parser_data_t *data, dtb_listener_t *listener,
@@ -63,9 +67,8 @@ check_strings_prop_listener(dtb_parser_data_t	 *data,
 			    int node_ofs, const ctx_t *ctx);
 
 static listener_return_t
-check_compatible_listener(dtb_parser_data_t    *data,
-			  const dtb_listener_t *listener, const void *fdt,
-			  int node_ofs, const ctx_t *ctx);
+check_compatible_listener(dtb_parser_data_t *data, dtb_listener_t *listener,
+			  const void *fdt, int node_ofs, const ctx_t *ctx);
 
 static char *
 make_new_path(const char *path, const char *node, bool append_path_sep);
@@ -139,29 +142,41 @@ move_to_next_node(const void *fdt, int *cur_ofs_ptr, ctx_t ctxs[],
 			ret.err = ERROR_DENIED;
 			done	= true;
 		} else if (next_depth < 0) {
+			pop_ctx(ctxs, cur_depth, 0);
 			done = true;
-		} else {
-			if (!skip_child_nodes) {
-				error_t perr = OK;
-				if (next_depth == (cur_depth + 1)) {
-					perr = push_ctx(ctxs, next_depth, fdt,
-							cur_ofs, parent_name);
-				} else if (next_depth < cur_depth) {
+		} else if (!skip_child_nodes) {
+			error_t perr = OK;
+			if (next_depth == (cur_depth + 1)) {
+				perr = push_ctx(ctxs, next_depth, fdt, cur_ofs,
+						parent_name);
+			} else {
+				if (next_depth < cur_depth) {
 					pop_ctx(ctxs, cur_depth, next_depth);
 				} else {
 					assert(next_depth == cur_depth);
 				}
 
-				if (perr != OK) {
-					pop_ctx(ctxs, cur_depth, 0);
-					ret.err = ERROR_FAILURE;
-					goto out;
-				}
+				dtb_parser_update_ctx_child(fdt, cur_ofs,
+							    &ctxs[next_depth],
+							    next_depth == 0);
 			}
+
+			if (perr != OK) {
+				pop_ctx(ctxs, cur_depth, 0);
+				ret.err = ERROR_FAILURE;
+				goto out;
+			}
+		} else if (next_depth < cur_depth) {
+			pop_ctx(ctxs, cur_depth, next_depth);
+		} else {
+			// Skipping this node, nothing to do
 		}
 		cur_depth = next_depth;
 
 		if (skip_child_nodes && (next_depth <= skip_to_depth)) {
+			dtb_parser_update_ctx_child(fdt, cur_ofs,
+						    &ctxs[next_depth],
+						    next_depth == 0);
 			break;
 		}
 
@@ -176,24 +191,14 @@ out:
 // FIXME: might define it in configuration
 const char *gunyah_api_version = "1-0";
 
-dtb_parser_parse_dtb_ret_t
+error_t
 dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
-		     const dtb_parser_alloc_params_t *params)
+		     dtb_parser_data_t *data, bool tainted_source)
 {
-	dtb_parser_parse_dtb_ret_t ret = { .err = OK };
+	error_t ret;
 
 	assert(fdt != NULL);
 	assert(fdt_check_header(fdt) == 0);
-
-	// alloc data for return
-	assert(ops->alloc != NULL);
-	dtb_parser_data_t *data = ops->alloc(params);
-	if (data == NULL) {
-		ret.err = ERROR_NOMEM;
-		goto out;
-	}
-
-	ret.r = data;
 
 	ctx_t ctxs[MAX_DEPTH], *cur_ctxt;
 	(void)memset(ctxs, 0, sizeof(ctxs));
@@ -208,33 +213,33 @@ dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
 	// init ctx for root node
 	error_t perr = push_ctx(ctxs, cur_depth, fdt, cur_ofs, "");
 	if (perr != OK) {
-		ret.err = ERROR_FAILURE;
+		ret = ERROR_FAILURE;
 		goto out;
 	}
 
 	// NOTE: the parsing order is the same as device node defined, so if a
 	// device node is used before definition, we will get undefined issue.
 	bool done = false;
-	while (!done) {
+	do {
 		const char *node_name;
 		char	   *node_path;
 
 		cur_ctxt  = &ctxs[cur_depth];
 		node_name = fdt_get_name(fdt, cur_ofs, NULL);
 
-		node_path =
-			make_new_path(cur_ctxt->parent_path, node_name, false);
+		node_path = make_new_path(cur_ctxt->parent_path, node_name,
+					  cur_depth == 0);
 		if (node_path == NULL) {
-			ret.err = ERROR_FAILURE;
-			done	= true;
-			goto out;
+			ret  = ERROR_FAILURE;
+			done = true;
+			break;
 		}
 
-		skip_child_nodes    = false;
-		cur_ctxt->node_path = node_path;
-		listener_return_t listener_ret =
-			check_listeners(data, ops->listeners, ops->listener_cnt,
-					fdt, cur_ofs, cur_ctxt, node_path);
+		skip_child_nodes	       = false;
+		cur_ctxt->node_path	       = node_path;
+		listener_return_t listener_ret = check_listeners(
+			data, ops->listeners, ops->listener_cnt, fdt, cur_ofs,
+			cur_ctxt, node_path, tainted_source);
 
 		if (listener_ret == RET_SKIP_CHILD_NODES) {
 			skip_child_nodes = true;
@@ -251,9 +256,10 @@ dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
 			}
 			(void)printf("Fatal error in DTB parsing at node %s\n",
 				     path);
-			ret.err = ERROR_FAILURE;
-			done	= true;
+			ret  = ERROR_FAILURE;
+			done = true;
 		} else if (listener_ret == RET_STOP) {
+			ret  = OK;
 			done = true;
 		} else {
 			skip_to_next_node_ret_t skip_ret;
@@ -261,72 +267,111 @@ dtb_parser_parse_dtb(const void *fdt, const dtb_parser_ops_t *ops,
 						     &cur_depth, node_name,
 						     skip_child_nodes,
 						     skip_to_depth);
-			ret.err	 = skip_ret.err;
+			ret	 = skip_ret.err;
 			done	 = skip_ret.done;
 		}
+	} while (!done);
+
+	if (cur_depth > 0) {
+		pop_ctx(ctxs, cur_depth, 0);
 	}
+
+	free(ctxs[0].parent_path);
 out:
 	return ret;
-}
-
-error_t
-dtb_parser_free(const dtb_parser_ops_t *ops, dtb_parser_data_t *data)
-{
-	assert(ops != NULL);
-	assert(data != NULL);
-
-	ops->free(data);
-
-	return OK;
 }
 
 static bool
 ranges_are_direct(const void *fdt, int node_ofs, const ctx_t *ctx)
 {
-	bool	       is_direct;
+	bool is_direct;
+
+	// If there are too many address cells or size cells to parse into a
+	// uint64_t, we just assume that the ranges are not direct. In practice
+	// this only happens for PCI buses, which have 3 address cells and are
+	// not direct-mapped.
+	if ((ctx->child_addr_cells > 2U) || (ctx->child_size_cells > 2U)) {
+		is_direct = false;
+		goto out;
+	}
+
 	int	       ranges_len;
 	const fdt32_t *ranges = (const fdt32_t *)fdt_getprop(
 		fdt, node_ofs, "ranges", &ranges_len);
 	if (ranges == NULL) {
 		is_direct = false;
-	} else {
-		is_direct	    = true;
-		count_t range_cells = ctx->child_addr_cells + ctx->addr_cells +
-				      ctx->child_size_cells;
-		count_t ranges_count =
-			(count_t)((size_t)ranges_len / sizeof(uint32_t)) /
-			range_cells;
-
-		if ((size_t)ranges_len !=
-		    ((size_t)ranges_count * (size_t)range_cells *
-		     sizeof(uint32_t))) {
-			char path[MAX_PATH_LEN];
-			if (fdt_get_path(fdt, node_ofs, path,
-					 (int32_t)sizeof(path)) != 0) {
-				(void)strlcpy(path, "<unknown path>",
-					      sizeof(path));
-			}
-			(void)printf(
-				"Warning: ignoring extra data in ranges property of node %s\n",
-				path);
-		}
-
-		for (index_t i = 0U; i < ranges_count; i++) {
-			const fdt32_t *range = &ranges[i * range_cells];
-
-			uint64_t range_parent_addr =
-				fdt_read_num(range, ctx->child_addr_cells);
-			uint64_t range_child_addr = fdt_read_num(
-				&range[ctx->child_addr_cells], ctx->addr_cells);
-
-			if (range_parent_addr != range_child_addr) {
-				is_direct = false;
-				break;
-			}
-		}
+		goto out;
 	}
 
+	count_t range_cells =
+		ctx->child_addr_cells + ctx->addr_cells + ctx->child_size_cells;
+	count_t ranges_count =
+		(count_t)((size_t)ranges_len / sizeof(uint32_t)) / range_cells;
+
+	if ((size_t)ranges_len !=
+	    ((size_t)ranges_count * (size_t)range_cells * sizeof(uint32_t))) {
+		char path[MAX_PATH_LEN];
+		if (fdt_get_path(fdt, node_ofs, path, (int32_t)sizeof(path)) !=
+		    0) {
+			(void)strlcpy(path, "<unknown path>", sizeof(path));
+		}
+		(void)printf(
+			"Warning: ignoring extra data in ranges property of node %s\n",
+			path);
+	}
+
+	for (index_t i = 0U; i < ranges_count; i++) {
+		const fdt32_t *range = &ranges[i * range_cells];
+
+		uint64_t range_parent_addr =
+			fdt_read_num(range, ctx->child_addr_cells);
+		uint64_t range_child_addr = fdt_read_num(
+			&range[ctx->child_addr_cells], ctx->addr_cells);
+
+		if (range_parent_addr != range_child_addr) {
+			is_direct = false;
+			goto out;
+		}
+	}
+	is_direct = true;
+
+out:
 	return is_direct;
+}
+
+static void
+dtb_parser_update_ctx_child(const void *fdt, int node_ofs, ctx_t *ctx,
+			    bool is_root_node)
+{
+	// Determine the address and size cells for children of this node
+	ctx->child_addr_cells_default = false;
+	ctx->child_size_cells_default = false;
+
+	if (fdt_getprop_u32(fdt, node_ofs, "#address-cells",
+			    &ctx->child_addr_cells) != OK) {
+		ctx->child_addr_cells	      = DEFAULT_ADDR_CELLS;
+		ctx->child_addr_cells_default = true;
+	}
+
+	if (fdt_getprop_u32(fdt, node_ofs, "#size-cells",
+			    &ctx->child_size_cells) != OK) {
+		ctx->child_size_cells	      = DEFAULT_SIZE_CELLS;
+		ctx->child_size_cells_default = true;
+	}
+
+	// Determine whether this node's children are physically addressed
+	if (is_root_node) {
+		// Root node's children are always physically addressed
+		ctx->child_addr_is_phys = true;
+	} else if (!ctx->addr_is_phys) {
+		// This node's addresses aren't physical, so its children's
+		// can't be physical either
+		ctx->child_addr_is_phys = false;
+	} else {
+		// Read the ranges property to determine whether addresses are
+		// 1:1 mapped
+		ctx->child_addr_is_phys = ranges_are_direct(fdt, node_ofs, ctx);
+	}
 }
 
 void
@@ -342,7 +387,7 @@ dtb_parser_update_ctx(const void *fdt, int node_ofs, const ctx_t *parent,
 		child->addr_is_phys = true;
 	} else {
 #if 0
-		if (parent->child_cells_default) {
+		if (parent->child_addr_cells_default || parent->child_size_cells_default) {
 			// The parent failed to define address-cells and/or
 			// size-cells, contrary to the DT spec
 			char path[MAX_PATH_LEN];
@@ -360,35 +405,7 @@ dtb_parser_update_ctx(const void *fdt, int node_ofs, const ctx_t *parent,
 		child->addr_is_phys = parent->child_addr_is_phys;
 	}
 
-	// Determine the address and size cells for children of this node
-	child->child_cells_default = false;
-
-	if (fdt_getprop_u32(fdt, node_ofs, "#address-cells",
-			    &child->child_addr_cells) != OK) {
-		child->child_addr_cells	   = DEFAULT_ADDR_CELLS;
-		child->child_cells_default = true;
-	}
-
-	if (fdt_getprop_u32(fdt, node_ofs, "#size-cells",
-			    &child->child_size_cells) != OK) {
-		child->child_size_cells	   = DEFAULT_SIZE_CELLS;
-		child->child_cells_default = true;
-	}
-
-	// Determine whether this node's children are physically addressed
-	if (parent == NULL) {
-		// Root node's children are always physically addressed
-		child->child_addr_is_phys = true;
-	} else if (!child->addr_is_phys) {
-		// This node's addresses aren't physical, so its children's
-		// can't be physical either
-		child->child_addr_is_phys = false;
-	} else {
-		// Read the ranges property to determine whether addresses are
-		// 1:1 mapped
-		child->child_addr_is_phys =
-			ranges_are_direct(fdt, node_ofs, child);
-	}
+	dtb_parser_update_ctx_child(fdt, node_ofs, child, parent == NULL);
 }
 
 ctx_t
@@ -440,6 +457,7 @@ push_ctx(ctx_t ctxs[], int next_depth, const void *fdt, int node_ofs,
 	assert(next_depth >= 0);
 
 	ctx_t *child = &ctxs[next_depth];
+	assert(child->parent_path == NULL);
 
 	ctx_t *parent = NULL;
 	if (next_depth > 0) {
@@ -495,14 +513,24 @@ pop_ctx(ctx_t ctxs[], int prev_depth, int cur_depth)
 static listener_return_t
 check_listeners(dtb_parser_data_t *data, dtb_listener_t *listeners,
 		size_t listener_cnt, const void *fdt, int node_ofs,
-		const ctx_t *ctx, const char *path)
+		const ctx_t *ctx, const char *path, bool tainted_source)
 {
 	listener_return_t act = RET_CONTINUE;
+
+	const char *status =
+		fdt_stringlist_get(fdt, node_ofs, "status", 0, NULL);
+	if ((status != NULL) &&
+	    ((strcmp(status, "okay") != 0) || (strcmp(status, "ok") != 0))) {
+		goto out;
+	}
 
 	for (index_t i = 0; i < listener_cnt; ++i) {
 		dtb_listener_t *cur_listener = listeners + i;
 
-		if (cur_listener->type == BY_PATH) {
+		if (tainted_source && !cur_listener->safe) {
+			// Listener isn't safe for tainted sources, skip it
+			act = RET_CONTINUE;
+		} else if (cur_listener->type == BY_PATH) {
 			act = check_path_listener(data, cur_listener, fdt,
 						  node_ofs, ctx, path);
 		} else if (cur_listener->type == BY_STRING_PROP) {
@@ -519,6 +547,7 @@ check_listeners(dtb_parser_data_t *data, dtb_listener_t *listeners,
 		}
 	}
 
+out:
 	return act;
 }
 
@@ -576,22 +605,47 @@ check_strings_prop_listener(dtb_parser_data_t	 *data,
 }
 
 static listener_return_t
-check_compatible_listener(dtb_parser_data_t    *data,
-			  const dtb_listener_t *listener, const void *fdt,
-			  int node_ofs, const ctx_t *ctx)
+check_compatible_listener(dtb_parser_data_t *data, dtb_listener_t *listener,
+			  const void *fdt, int node_ofs, const ctx_t *ctx)
 {
-	listener_return_t ret = RET_CONTINUE;
+	listener_return_t ret;
+	int		  reg_ret;
 
-	int fdt_ret = fdt_node_check_compatible(fdt, node_ofs,
-						listener->compatible_string);
-
-	if (fdt_ret == 0) {
-		// match
-		ret = listener->action(data, fdt, node_ofs, ctx);
-	} else {
+	const char *compatible =
+		fdt_stringlist_get(fdt, node_ofs, "compatible", 0, NULL);
+	if (compatible == NULL) {
 		ret = RET_CONTINUE;
+		goto out;
 	}
 
+	if (listener->ctxt == NULL) {
+		listener->ctxt = calloc(1, sizeof(*listener->ctxt));
+		if (listener->ctxt == NULL) {
+			ret = RET_ERROR;
+			goto out_regcomp_failure;
+		}
+
+		reg_ret = regcomp(listener->ctxt, listener->compatible_string,
+				  (int)((uint32_t)REG_NOSUB |
+					(uint32_t)REG_EXTENDED));
+		if (reg_ret != 0) {
+			ret = RET_ERROR;
+			goto out_regcomp_failure;
+		}
+	}
+
+	reg_ret = regexec(listener->ctxt, compatible, 0, NULL, 0);
+	if (reg_ret == 0) {
+		// match
+		ret = listener->action(data, fdt, node_ofs, ctx);
+	} else if (reg_ret == REG_NOMATCH) {
+		ret = RET_CONTINUE;
+	} else {
+		ret = RET_ERROR;
+	}
+
+out_regcomp_failure:
+out:
 	return ret;
 }
 

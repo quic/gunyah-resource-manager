@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -55,7 +55,7 @@ cbuf_write(cbuf_t *cbuf, const void *data, size_t data_len)
 	size_t	       write_len = data_len;
 
 	// check if whole buffer fits the data
-	// NOTE: only writes the part which would not be overwriten. Check if
+	// NOTE: only writes the part which would not be overwritten. Check if
 	// it's expected behavior.
 	if (write_len > cbuf->capacity) {
 		// if not, adjust data and write_len
@@ -70,7 +70,7 @@ cbuf_write(cbuf_t *cbuf, const void *data, size_t data_len)
 			? cbuf->capacity - (cbuf->write_idx - cbuf->read_idx)
 			: cbuf->read_idx - cbuf->write_idx;
 	// if so, mark it, set read idx after write_idx + 1 before return
-	bool overwriten = remaining_sz < write_len;
+	bool overwritten = remaining_sz < write_len;
 
 	// check if remaining space (to the end of buf) fits the data
 	size_t sz_to_buf_end = cbuf->capacity - cbuf->write_idx;
@@ -90,7 +90,7 @@ cbuf_write(cbuf_t *cbuf, const void *data, size_t data_len)
 	}
 
 	// set read idx base on if overwrite
-	if (overwriten) {
+	if (overwritten) {
 		cbuf->read_idx = cbuf->write_idx;
 	}
 
@@ -116,7 +116,7 @@ cbuf_read(cbuf_t *cbuf, void *output, size_t output_len)
 	size_t first_part = memscpy(start, read_len,
 				    cbuf->data + cbuf->read_idx, sz_to_buf_end);
 
-	// read the seconf part from the start of the buf
+	// read the second part from the start of the buf
 	size_t rest = read_len - first_part;
 	if (rest > 0U) {
 		memscpy(start + first_part, rest, cbuf->data, cbuf->capacity);

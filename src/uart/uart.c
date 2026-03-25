@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -26,7 +26,7 @@ register_uart(void)
 
 	rm_error_t e = RM_OK;
 
-	if (uart_registered || platform_get_security_state()) {
+	if (uart_registered || platform_is_in_secure_state()) {
 		goto err;
 	}
 

@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -18,6 +18,16 @@ memparcel_map_rm(mem_handle_t handle, size_t offset, size_t size);
 
 error_t
 memparcel_unmap_rm(mem_handle_t handle);
+
+// Protect the memparcel from VM before using/modifying in RM
+error_t
+memparcel_protect(mem_handle_t handle);
+
+// Unprotect the memparcel after done using in RM. This call unprotects
+// immediately after the call, so care need to be taken to make sure these
+// calls are not nested which results into unintended removal of protection
+error_t
+memparcel_unprotect(mem_handle_t handle);
 
 error_t
 memparcel_sanitize(mem_handle_t handle, size_t offset, size_t size);
@@ -79,7 +89,7 @@ bool
 memparcel_is_exclusive(const memparcel_t *mp, vmid_t vmid);
 
 bool
-memparcel_is_private(const memparcel_t *mp, vmid_t vmid);
+memparcel_is_private(const memparcel_t *mp, const vm_t *vm);
 
 error_t
 memparcel_get_shared_vmids(const memparcel_t *mp, vector_t *vmids);
@@ -144,10 +154,17 @@ memparcel_lookup_by_target_vmid(vmid_t vmid, mem_handle_t handle)
 }
 
 rm_error_t
+platform_memparcel_create(memparcel_t *mp, uint16_t acl_entries,
+			  acl_entry_t *acl);
+
+rm_error_t
 platform_memparcel_accept(memparcel_t *mp, vm_t *vm);
 
 rm_error_t
 platform_memparcel_release(memparcel_t *mp, vm_t *vm);
+
+rm_error_t
+platform_memparcel_reclaim(memparcel_t *mp);
 
 bool
 memparcel_get_sanitize_reclaim(const memparcel_t *mp);
@@ -169,6 +186,12 @@ memparcel_get_refcount(memparcel_t *mp);
 
 address_range_tag_t
 memparcel_get_phys_address_tag(const memparcel_t *mp);
+
+void
+memparcel_set_marked_no_map(memparcel_t *mp);
+
+bool
+memparcel_get_marked_no_map(const memparcel_t *mp);
 
 #else
 
