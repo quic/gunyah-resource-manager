@@ -541,9 +541,9 @@ add_sgl_to_mp(vm_t *vm, memparcel_t *mp, vm_meminfo_t *owner_info,
 						  me_cap, paddr, psize, true);
 		if (hyp_err != OK) {
 			(void)printf(
-				"memparcel: donate to mp extent failed %" PRId32
+				"memparcel: donate to mp extent failed %zx %zx %" PRId32
 				"\n",
-				(int32_t)hyp_err);
+				paddr, psize, (int32_t)hyp_err);
 			err = (hyp_err == ERROR_NOMEM) ? RM_ERROR_HYP_NOMEM
 						       : RM_ERROR_MEM_INVALID;
 			goto out;
