@@ -1,6 +1,6 @@
 // Automatically generated. Do not modify.
 //
-// Copyright © Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -2799,6 +2799,8 @@ typedef enum error_e {
 	ERROR_MEMDB_NOT_OWNER		  = 111,
 	ERROR_MEMEXTENT_MAPPINGS_FULL	  = 120,
 	ERROR_MEMEXTENT_TYPE		  = 121,
+	ERROR_LPI_NOT_ASSIGNED		  = 131,
+	ERROR_NO_PENDING_VLPI		  = 132,
 	ERROR_EXISTING_MAPPING		  = 200
 } error_t;
 

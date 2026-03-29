@@ -1,6 +1,6 @@
 // Automatically generated. Do not modify.
 //
-// Copyright © Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -17955,6 +17955,12 @@ error_raw_cast(int32_t val)
 	case (int32_t)ERROR_OBJECT_CONFIGURED:
 		ret = ERROR_OBJECT_CONFIGURED;
 		break;
+	case (int32_t)ERROR_LPI_NOT_ASSIGNED:
+		ret = ERROR_LPI_NOT_ASSIGNED;
+		break;
+	case (int32_t)ERROR_NO_PENDING_VLPI:
+		ret = ERROR_NO_PENDING_VLPI;
+		break;
 	default:
 		// Invalid error
 		__builtin_trap();
@@ -18095,6 +18101,12 @@ error_raw_cast_safe(int32_t val)
 	case (int32_t)ERROR_OBJECT_CONFIGURED:
 		ret = error_result_ok(ERROR_OBJECT_CONFIGURED);
 		break;
+	case (int32_t)ERROR_LPI_NOT_ASSIGNED:
+		ret = error_result_ok(ERROR_LPI_NOT_ASSIGNED);
+		break;
+	case (int32_t)ERROR_NO_PENDING_VLPI:
+		ret = error_result_ok(ERROR_NO_PENDING_VLPI);
+		break;
 	default:
 		ret = error_result_error(ERROR_ARGUMENT_INVALID);
 		break;
@@ -18150,6 +18162,8 @@ error_raw_is_valid(int32_t val)
 	case (int32_t)ERROR_OBJECT_STATE:
 	case (int32_t)ERROR_OBJECT_CONFIG:
 	case (int32_t)ERROR_OBJECT_CONFIGURED:
+	case (int32_t)ERROR_LPI_NOT_ASSIGNED:
+	case (int32_t)ERROR_NO_PENDING_VLPI:
 		ret = true;
 		break;
 	default:
