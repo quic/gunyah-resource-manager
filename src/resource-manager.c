@@ -263,6 +263,8 @@ main(int argc, char *argv[])
 	error_t e =
 		platform_primary_vm_init(priv_env_data, log_buf, log_buf_size);
 	if (e != OK) {
+		(void)printf("Primary VM init failed\n");
+		ret = -ENODEV;
 		goto out;
 	}
 
