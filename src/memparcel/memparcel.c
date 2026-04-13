@@ -1467,7 +1467,13 @@ validate_as_tag(paddr_t phys, size_t size, address_range_tag_t ipa_tag)
 	address_range_tag_t phys_tag =
 		vm_memory_get_phys_address_tag(phys, size);
 
-	return ((ipa_tag & phys_tag) == ipa_tag) ? RM_OK : RM_ERROR_MEM_INVALID;
+	address_range_tag_t effective_tag =
+		ipa_tag &
+		~(address_range_tag_t)ADDRESS_RANGE_TAG_PHYSICAL_DEVICE_REGION;
+
+	return ((effective_tag & phys_tag) == effective_tag)
+		       ? RM_OK
+		       : RM_ERROR_MEM_INVALID;
 }
 
 static void

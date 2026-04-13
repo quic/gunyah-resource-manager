@@ -142,9 +142,6 @@ vm_memory_lookup(vm_t *vm, vm_memuse_t memuse, vmaddr_t ipa, size_t size);
 size_result_t
 vm_address_range_init(vm_t *vm);
 
-error_t
-vm_address_range_permit_normal(vm_t *vm);
-
 void
 vm_address_range_destroy(vm_t *vm);
 

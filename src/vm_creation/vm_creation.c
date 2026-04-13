@@ -2786,13 +2786,6 @@ process_memparcels(vm_t *vm)
 	assert(vm != NULL);
 	assert(vm->vm_config != NULL);
 
-	// Allow allocation of normal & firmware memory
-	error_t as_err = vm_address_range_permit_normal(vm);
-	if (as_err != OK) {
-		LOG_ERR(as_err);
-		goto out_no_mp;
-	}
-
 	// Find the image memparcel and accept it at the base IPA
 	rm_error_t rm_ret = process_image_memparcel(vm);
 	if (rm_ret != RM_OK) {
