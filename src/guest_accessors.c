@@ -54,7 +54,7 @@ addrspace_info_area_entry_data_info_set_size(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffff00000000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffffffU);
 }
 
 size_t
@@ -64,7 +64,7 @@ addrspace_info_area_entry_data_info_get_size(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffffffU);
 	return (size_t)val;
 }
 
@@ -85,7 +85,7 @@ addrspace_info_area_entry_data_info_set_alignment(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffU;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffffffU) << 32U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffffffU) << 32U;
 }
 
 size_t
@@ -95,7 +95,7 @@ addrspace_info_area_entry_data_info_get_alignment(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 32U) & (uint64_t)0xffffffffU) << 0U;
+	val |= ((bf[0] >> 32U) & (uint64_t)0xffffffffU);
 	return (size_t)val;
 }
 
@@ -347,7 +347,7 @@ addrspace_info_area_entry_flags_set_valid(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -357,7 +357,7 @@ addrspace_info_area_entry_flags_get_valid(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -413,7 +413,7 @@ addrspace_info_area_entry_type_set_id(
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffff0000U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffffU) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffffU);
 }
 
 uint32_t
@@ -423,7 +423,7 @@ addrspace_info_area_entry_type_get_id(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffffU);
 	return (uint32_t)val;
 }
 
@@ -445,7 +445,7 @@ addrspace_info_area_entry_type_set_owner(
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffU;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffffU) << 16U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffffU) << 16U;
 }
 
 addrspace_info_area_id_owner_t
@@ -455,7 +455,7 @@ addrspace_info_area_entry_type_get_owner(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint32_t)0xffffU) << 0U;
+	val |= ((bf[0] >> 16U) & (uint32_t)0xffffU);
 	return (addrspace_info_area_id_owner_t)val;
 }
 
@@ -688,7 +688,7 @@ addrspace_map_flags_set_partial(addrspace_map_flags_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -697,7 +697,7 @@ addrspace_map_flags_get_partial(const addrspace_map_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -717,7 +717,7 @@ addrspace_map_flags_set_private(addrspace_map_flags_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -726,7 +726,7 @@ addrspace_map_flags_get_private(const addrspace_map_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -746,7 +746,7 @@ addrspace_map_flags_set_vmmio(addrspace_map_flags_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -755,7 +755,7 @@ addrspace_map_flags_get_vmmio(const addrspace_map_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -775,7 +775,7 @@ addrspace_map_flags_set_whole_extent(addrspace_map_flags_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -784,7 +784,7 @@ addrspace_map_flags_get_whole_extent(const addrspace_map_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -804,7 +804,7 @@ addrspace_map_flags_set_no_sync(addrspace_map_flags_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -813,7 +813,7 @@ addrspace_map_flags_get_no_sync(const addrspace_map_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -843,7 +843,7 @@ addrspace_modify_pages_flags_t
 addrspace_modify_pages_flags_clean(addrspace_modify_pages_flags_t bit_field)
 {
 	return (addrspace_modify_pages_flags_t){ .bf = {
-							 // (0x2U & ~0xdU) |
+							 // (0x2U & ~0xdU) | ...
 							 (uint32_t)(0x2U) |
 								 (bit_field.bf[0] &
 								  0xdU),
@@ -1060,7 +1060,7 @@ addrspace_modify_pages_flags_set_unlock(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -1070,7 +1070,7 @@ addrspace_modify_pages_flags_get_unlock(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1092,7 +1092,7 @@ addrspace_modify_pages_flags_set_no_sync_unlock(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -1102,7 +1102,7 @@ addrspace_modify_pages_flags_get_no_sync_unlock(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1124,7 +1124,7 @@ addrspace_modify_pages_flags_set_do_not_sanitise(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -1134,7 +1134,7 @@ addrspace_modify_pages_flags_get_do_not_sanitise(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1187,7 +1187,7 @@ allocator_memattr_set_type(allocator_memattr_t *bit_field,
 {
 	uint16_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint16_t)0xfff0U;
-	bf[0] |= (((uint16_t)val >> 0U) & (uint16_t)0xfU) << 0U;
+	bf[0] |= (((uint16_t)val) & (uint16_t)0xfU);
 }
 
 allocator_memtype_t
@@ -1196,7 +1196,7 @@ allocator_memattr_get_type(const allocator_memattr_t *bit_field)
 	uint16_t	val = 0;
 	const uint16_t *bf  = (const uint16_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint16_t)0xfU) << 0U;
+	val |= ((bf[0]) & (uint16_t)0xfU);
 	return (allocator_memtype_t)val;
 }
 
@@ -1226,7 +1226,7 @@ allocator_stats_info_t
 allocator_stats_info_clean(allocator_stats_info_t bit_field)
 {
 	return (allocator_stats_info_t){ .bf = {
-						 // (0x1U & ~0xffU) |
+						 // (0x1U & ~0xffU) | ...
 						 (uint32_t)(0x0U) |
 							 (bit_field.bf[0] &
 							  0xffU),
@@ -1252,7 +1252,7 @@ allocator_stats_info_get_version(const allocator_stats_info_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffU);
 	return (uint8_t)val;
 }
 
@@ -1475,7 +1475,7 @@ cap_rights_addrspace_set_attach(cap_rights_addrspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -1484,7 +1484,7 @@ cap_rights_addrspace_get_attach(const cap_rights_addrspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1504,7 +1504,7 @@ cap_rights_addrspace_set_map(cap_rights_addrspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -1513,7 +1513,7 @@ cap_rights_addrspace_get_map(const cap_rights_addrspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1533,7 +1533,7 @@ cap_rights_addrspace_set_lookup(cap_rights_addrspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -1542,7 +1542,7 @@ cap_rights_addrspace_get_lookup(const cap_rights_addrspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1563,7 +1563,7 @@ cap_rights_addrspace_set_configure_range(cap_rights_addrspace_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -1572,7 +1572,7 @@ cap_rights_addrspace_get_configure_range(const cap_rights_addrspace_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1594,7 +1594,7 @@ cap_rights_addrspace_set_map_protected(cap_rights_addrspace_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 4U;
 }
 
 bool
@@ -1603,7 +1603,7 @@ cap_rights_addrspace_get_map_protected(const cap_rights_addrspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1625,7 +1625,7 @@ cap_rights_addrspace_set_modify_protected(cap_rights_addrspace_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffdfU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 5U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 5U;
 }
 
 bool
@@ -1635,7 +1635,7 @@ cap_rights_addrspace_get_modify_protected(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 5U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 5U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1656,7 +1656,7 @@ cap_rights_addrspace_set_add_info(cap_rights_addrspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffbfU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 6U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 6U;
 }
 
 bool
@@ -1665,7 +1665,7 @@ cap_rights_addrspace_get_add_info(const cap_rights_addrspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 6U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 6U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1686,7 +1686,7 @@ cap_rights_addrspace_set_object_activate(cap_rights_addrspace_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -1695,7 +1695,7 @@ cap_rights_addrspace_get_object_activate(const cap_rights_addrspace_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1925,7 +1925,7 @@ cap_rights_cspace_set_cap_create(cap_rights_cspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -1934,7 +1934,7 @@ cap_rights_cspace_get_cap_create(const cap_rights_cspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1954,7 +1954,7 @@ cap_rights_cspace_set_cap_delete(cap_rights_cspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -1963,7 +1963,7 @@ cap_rights_cspace_get_cap_delete(const cap_rights_cspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -1983,7 +1983,7 @@ cap_rights_cspace_set_cap_copy(cap_rights_cspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -1992,7 +1992,7 @@ cap_rights_cspace_get_cap_copy(const cap_rights_cspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2012,7 +2012,7 @@ cap_rights_cspace_set_attach(cap_rights_cspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -2021,7 +2021,7 @@ cap_rights_cspace_get_attach(const cap_rights_cspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2041,7 +2041,7 @@ cap_rights_cspace_set_cap_revoke(cap_rights_cspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 4U;
 }
 
 bool
@@ -2050,7 +2050,7 @@ cap_rights_cspace_get_cap_revoke(const cap_rights_cspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2070,7 +2070,7 @@ cap_rights_cspace_set_object_activate(cap_rights_cspace_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -2079,7 +2079,7 @@ cap_rights_cspace_get_object_activate(const cap_rights_cspace_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2311,7 +2311,7 @@ cap_rights_doorbell_set_send(cap_rights_doorbell_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -2320,7 +2320,7 @@ cap_rights_doorbell_get_send(const cap_rights_doorbell_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2340,7 +2340,7 @@ cap_rights_doorbell_set_receive(cap_rights_doorbell_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -2349,7 +2349,7 @@ cap_rights_doorbell_get_receive(const cap_rights_doorbell_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2369,7 +2369,7 @@ cap_rights_doorbell_set_bind(cap_rights_doorbell_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -2378,7 +2378,7 @@ cap_rights_doorbell_get_bind(const cap_rights_doorbell_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2399,7 +2399,7 @@ cap_rights_doorbell_set_object_activate(cap_rights_doorbell_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -2408,7 +2408,7 @@ cap_rights_doorbell_get_object_activate(const cap_rights_doorbell_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2641,7 +2641,7 @@ cap_rights_generic_set_object_activate(cap_rights_generic_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -2650,7 +2650,7 @@ cap_rights_generic_get_object_activate(const cap_rights_generic_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2885,7 +2885,7 @@ cap_rights_gicv3_its_set_object_activate(cap_rights_gicv3_its_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -2894,7 +2894,7 @@ cap_rights_gicv3_its_get_object_activate(const cap_rights_gicv3_its_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -2916,7 +2916,7 @@ cap_rights_gicv3_its_set_bind_device(cap_rights_gicv3_its_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -2925,7 +2925,7 @@ cap_rights_gicv3_its_get_bind_device(const cap_rights_gicv3_its_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3154,7 +3154,7 @@ cap_rights_hwirq_set_bind_vic(cap_rights_hwirq_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -3163,7 +3163,7 @@ cap_rights_hwirq_get_bind_vic(const cap_rights_hwirq_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3183,7 +3183,7 @@ cap_rights_hwirq_set_object_activate(cap_rights_hwirq_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -3192,7 +3192,7 @@ cap_rights_hwirq_get_object_activate(const cap_rights_hwirq_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3425,7 +3425,7 @@ cap_rights_memextent_set_map(cap_rights_memextent_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -3434,7 +3434,7 @@ cap_rights_memextent_get_map(const cap_rights_memextent_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3454,7 +3454,7 @@ cap_rights_memextent_set_derive(cap_rights_memextent_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -3463,7 +3463,7 @@ cap_rights_memextent_get_derive(const cap_rights_memextent_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3483,7 +3483,7 @@ cap_rights_memextent_set_attach(cap_rights_memextent_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -3492,7 +3492,7 @@ cap_rights_memextent_get_attach(const cap_rights_memextent_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3512,7 +3512,7 @@ cap_rights_memextent_set_lookup(cap_rights_memextent_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -3521,7 +3521,7 @@ cap_rights_memextent_get_lookup(const cap_rights_memextent_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3541,7 +3541,7 @@ cap_rights_memextent_set_donate(cap_rights_memextent_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 4U;
 }
 
 bool
@@ -3550,7 +3550,7 @@ cap_rights_memextent_get_donate(const cap_rights_memextent_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3571,7 +3571,7 @@ cap_rights_memextent_set_protected_host(cap_rights_memextent_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffdfU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 5U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 5U;
 }
 
 bool
@@ -3580,7 +3580,7 @@ cap_rights_memextent_get_protected_host(const cap_rights_memextent_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 5U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 5U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3602,7 +3602,7 @@ cap_rights_memextent_set_protected_guest(cap_rights_memextent_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffbfU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 6U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 6U;
 }
 
 bool
@@ -3611,7 +3611,7 @@ cap_rights_memextent_get_protected_guest(const cap_rights_memextent_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 6U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 6U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3633,7 +3633,7 @@ cap_rights_memextent_set_map_private(cap_rights_memextent_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff7fU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 7U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 7U;
 }
 
 bool
@@ -3642,7 +3642,7 @@ cap_rights_memextent_get_map_private(const cap_rights_memextent_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 7U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 7U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3664,7 +3664,7 @@ cap_rights_memextent_set_object_activate(cap_rights_memextent_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -3673,7 +3673,7 @@ cap_rights_memextent_get_object_activate(const cap_rights_memextent_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3906,7 +3906,7 @@ cap_rights_msgqueue_set_send(cap_rights_msgqueue_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -3915,7 +3915,7 @@ cap_rights_msgqueue_get_send(const cap_rights_msgqueue_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3935,7 +3935,7 @@ cap_rights_msgqueue_set_receive(cap_rights_msgqueue_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -3944,7 +3944,7 @@ cap_rights_msgqueue_get_receive(const cap_rights_msgqueue_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3964,7 +3964,7 @@ cap_rights_msgqueue_set_bind_send(cap_rights_msgqueue_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -3973,7 +3973,7 @@ cap_rights_msgqueue_get_bind_send(const cap_rights_msgqueue_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -3993,7 +3993,7 @@ cap_rights_msgqueue_set_bind_receive(cap_rights_msgqueue_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -4002,7 +4002,7 @@ cap_rights_msgqueue_get_bind_receive(const cap_rights_msgqueue_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4023,7 +4023,7 @@ cap_rights_msgqueue_set_object_activate(cap_rights_msgqueue_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -4032,7 +4032,7 @@ cap_rights_msgqueue_get_object_activate(const cap_rights_msgqueue_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4267,7 +4267,7 @@ cap_rights_partition_set_object_create(cap_rights_partition_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -4276,7 +4276,7 @@ cap_rights_partition_get_object_create(const cap_rights_partition_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4297,7 +4297,7 @@ cap_rights_partition_set_donate(cap_rights_partition_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -4306,7 +4306,7 @@ cap_rights_partition_get_donate(const cap_rights_partition_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4326,7 +4326,7 @@ cap_rights_partition_set_query(cap_rights_partition_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -4335,7 +4335,7 @@ cap_rights_partition_get_query(const cap_rights_partition_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4356,7 +4356,7 @@ cap_rights_partition_set_object_activate(cap_rights_partition_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -4365,7 +4365,7 @@ cap_rights_partition_get_object_activate(const cap_rights_partition_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4605,7 +4605,7 @@ cap_rights_pci_function_set_passthrough(cap_rights_pci_function_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -4615,7 +4615,7 @@ cap_rights_pci_function_get_passthrough(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4637,7 +4637,7 @@ cap_rights_pci_function_set_attach(cap_rights_pci_function_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -4646,7 +4646,7 @@ cap_rights_pci_function_get_attach(const cap_rights_pci_function_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4668,7 +4668,7 @@ cap_rights_pci_function_set_object_activate(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -4678,7 +4678,7 @@ cap_rights_pci_function_get_object_activate(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4912,7 +4912,7 @@ cap_rights_pci_host_set_create_function(cap_rights_pci_host_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -4921,7 +4921,7 @@ cap_rights_pci_host_get_create_function(const cap_rights_pci_host_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4942,7 +4942,7 @@ cap_rights_pci_host_set_set_lockdown(cap_rights_pci_host_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -4951,7 +4951,7 @@ cap_rights_pci_host_get_set_lockdown(const cap_rights_pci_host_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -4972,7 +4972,7 @@ cap_rights_pci_host_set_object_activate(cap_rights_pci_host_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -4981,7 +4981,7 @@ cap_rights_pci_host_get_object_activate(const cap_rights_pci_host_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5210,7 +5210,7 @@ cap_rights_power_set_system_suspend(cap_rights_power_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -5219,7 +5219,7 @@ cap_rights_power_get_system_suspend(const cap_rights_power_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5239,7 +5239,7 @@ cap_rights_power_set_cpu_suspend(cap_rights_power_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -5248,7 +5248,7 @@ cap_rights_power_get_cpu_suspend(const cap_rights_power_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5268,7 +5268,7 @@ cap_rights_power_set_object_activate(cap_rights_power_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -5277,7 +5277,7 @@ cap_rights_power_get_object_activate(const cap_rights_power_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5506,7 +5506,7 @@ cap_rights_smmuv3_set_object_activate(cap_rights_smmuv3_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -5515,7 +5515,7 @@ cap_rights_smmuv3_get_object_activate(const cap_rights_smmuv3_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5535,7 +5535,7 @@ cap_rights_smmuv3_set_configure(cap_rights_smmuv3_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -5544,7 +5544,7 @@ cap_rights_smmuv3_get_configure(const cap_rights_smmuv3_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5564,7 +5564,7 @@ cap_rights_smmuv3_set_manage_streams(cap_rights_smmuv3_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -5573,7 +5573,7 @@ cap_rights_smmuv3_get_manage_streams(const cap_rights_smmuv3_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5802,7 +5802,7 @@ cap_rights_thread_set_yield_to(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 4U;
 }
 
 bool
@@ -5811,7 +5811,7 @@ cap_rights_thread_get_yield_to(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5831,7 +5831,7 @@ cap_rights_thread_set_power(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -5840,7 +5840,7 @@ cap_rights_thread_get_power(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5860,7 +5860,7 @@ cap_rights_thread_set_affinity(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -5869,7 +5869,7 @@ cap_rights_thread_get_affinity(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5889,7 +5889,7 @@ cap_rights_thread_set_priority(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -5898,7 +5898,7 @@ cap_rights_thread_get_priority(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5918,7 +5918,7 @@ cap_rights_thread_set_timeslice(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -5927,7 +5927,7 @@ cap_rights_thread_get_timeslice(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5947,7 +5947,7 @@ cap_rights_thread_set_bind_virq(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffdfU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 5U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 5U;
 }
 
 bool
@@ -5956,7 +5956,7 @@ cap_rights_thread_get_bind_virq(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 5U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 5U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -5976,7 +5976,7 @@ cap_rights_thread_set_state(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffbfU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 6U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 6U;
 }
 
 bool
@@ -5985,7 +5985,7 @@ cap_rights_thread_get_state(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 6U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 6U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6005,7 +6005,7 @@ cap_rights_thread_set_lifecycle(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff7fU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 7U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 7U;
 }
 
 bool
@@ -6014,7 +6014,7 @@ cap_rights_thread_get_lifecycle(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 7U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 7U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6034,7 +6034,7 @@ cap_rights_thread_set_write_context(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffeffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 8U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 8U;
 }
 
 bool
@@ -6043,7 +6043,7 @@ cap_rights_thread_get_write_context(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 8U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6063,7 +6063,7 @@ cap_rights_thread_set_disable(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffdffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 9U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 9U;
 }
 
 bool
@@ -6072,7 +6072,7 @@ cap_rights_thread_get_disable(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 9U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 9U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6092,7 +6092,7 @@ cap_rights_thread_set_bind_local_virq(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffbffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 10U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 10U;
 }
 
 bool
@@ -6101,7 +6101,7 @@ cap_rights_thread_get_bind_local_virq(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 10U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 10U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6121,7 +6121,7 @@ cap_rights_thread_set_object_activate(cap_rights_thread_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -6130,7 +6130,7 @@ cap_rights_thread_get_object_activate(const cap_rights_thread_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6363,7 +6363,7 @@ cap_rights_vgic_its_set_object_activate(cap_rights_vgic_its_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -6372,7 +6372,7 @@ cap_rights_vgic_its_get_object_activate(const cap_rights_vgic_its_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6393,7 +6393,7 @@ cap_rights_vgic_its_set_bind_vic(cap_rights_vgic_its_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -6402,7 +6402,7 @@ cap_rights_vgic_its_get_bind_vic(const cap_rights_vgic_its_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6423,7 +6423,7 @@ cap_rights_vgic_its_set_attach_addrspace(cap_rights_vgic_its_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -6432,7 +6432,7 @@ cap_rights_vgic_its_get_attach_addrspace(const cap_rights_vgic_its_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6453,7 +6453,7 @@ cap_rights_vgic_its_set_bind_devices(cap_rights_vgic_its_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -6462,7 +6462,7 @@ cap_rights_vgic_its_get_bind_devices(const cap_rights_vgic_its_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6483,7 +6483,7 @@ cap_rights_vgic_its_set_unbind_devices(cap_rights_vgic_its_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -6492,7 +6492,7 @@ cap_rights_vgic_its_get_unbind_devices(const cap_rights_vgic_its_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6721,7 +6721,7 @@ cap_rights_vic_set_bind_source(cap_rights_vic_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -6730,7 +6730,7 @@ cap_rights_vic_get_bind_source(const cap_rights_vic_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6750,7 +6750,7 @@ cap_rights_vic_set_object_activate(cap_rights_vic_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -6759,7 +6759,7 @@ cap_rights_vic_get_object_activate(const cap_rights_vic_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6779,7 +6779,7 @@ cap_rights_vic_set_attach_vcpu(cap_rights_vic_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -6788,7 +6788,7 @@ cap_rights_vic_get_attach_vcpu(const cap_rights_vic_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -6808,7 +6808,7 @@ cap_rights_vic_set_attach_vdevice(cap_rights_vic_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -6817,7 +6817,7 @@ cap_rights_vic_get_attach_vdevice(const cap_rights_vic_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7060,7 +7060,7 @@ cap_rights_virtio_backend_set_bind_virq(cap_rights_virtio_backend_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -7070,7 +7070,7 @@ cap_rights_virtio_backend_get_bind_virq(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7092,7 +7092,7 @@ cap_rights_virtio_backend_set_assert_virq(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -7102,7 +7102,7 @@ cap_rights_virtio_backend_get_assert_virq(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7124,7 +7124,7 @@ cap_rights_virtio_backend_set_config(cap_rights_virtio_backend_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -7134,7 +7134,7 @@ cap_rights_virtio_backend_get_config(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7156,7 +7156,7 @@ cap_rights_virtio_backend_set_bind_mmio_frontend_virq(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -7166,7 +7166,7 @@ cap_rights_virtio_backend_get_bind_mmio_frontend_virq(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7188,7 +7188,7 @@ cap_rights_virtio_backend_set_bind_vpci(cap_rights_virtio_backend_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 4U;
 }
 
 bool
@@ -7198,7 +7198,7 @@ cap_rights_virtio_backend_get_bind_vpci(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7220,7 +7220,7 @@ cap_rights_virtio_backend_set_object_activate(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -7230,7 +7230,7 @@ cap_rights_virtio_backend_get_object_activate(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7470,7 +7470,7 @@ cap_rights_virtio_iommu_set_bind_vpci(cap_rights_virtio_iommu_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -7479,7 +7479,7 @@ cap_rights_virtio_iommu_get_bind_vpci(const cap_rights_virtio_iommu_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7501,7 +7501,7 @@ cap_rights_virtio_iommu_set_manage_streams(cap_rights_virtio_iommu_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -7511,7 +7511,7 @@ cap_rights_virtio_iommu_get_manage_streams(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7533,7 +7533,7 @@ cap_rights_virtio_iommu_set_object_activate(
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -7543,7 +7543,7 @@ cap_rights_virtio_iommu_get_object_activate(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7772,7 +7772,7 @@ cap_rights_vpci_set_attach(cap_rights_vpci_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -7781,7 +7781,7 @@ cap_rights_vpci_get_attach(const cap_rights_vpci_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7801,7 +7801,7 @@ cap_rights_vpci_set_bind(cap_rights_vpci_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -7810,7 +7810,7 @@ cap_rights_vpci_get_bind(const cap_rights_vpci_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -7830,7 +7830,7 @@ cap_rights_vpci_set_object_activate(cap_rights_vpci_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -7839,7 +7839,7 @@ cap_rights_vpci_get_object_activate(const cap_rights_vpci_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8073,7 +8073,7 @@ cap_rights_vpm_group_set_attach_vcpu(cap_rights_vpm_group_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -8082,7 +8082,7 @@ cap_rights_vpm_group_get_attach_vcpu(const cap_rights_vpm_group_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8103,7 +8103,7 @@ cap_rights_vpm_group_set_bind_virq(cap_rights_vpm_group_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -8112,7 +8112,7 @@ cap_rights_vpm_group_get_bind_virq(const cap_rights_vpm_group_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8132,7 +8132,7 @@ cap_rights_vpm_group_set_query(cap_rights_vpm_group_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -8141,7 +8141,7 @@ cap_rights_vpm_group_get_query(const cap_rights_vpm_group_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8161,7 +8161,7 @@ cap_rights_vpm_group_set_wakeup(cap_rights_vpm_group_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 3U;
 }
 
 bool
@@ -8170,7 +8170,7 @@ cap_rights_vpm_group_get_wakeup(const cap_rights_vpm_group_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8190,7 +8190,7 @@ cap_rights_vpm_group_set_bind_power(cap_rights_vpm_group_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 4U;
 }
 
 bool
@@ -8199,7 +8199,7 @@ cap_rights_vpm_group_get_bind_power(const cap_rights_vpm_group_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8220,7 +8220,7 @@ cap_rights_vpm_group_set_set_threshold(cap_rights_vpm_group_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffffdfU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 5U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 5U;
 }
 
 bool
@@ -8229,7 +8229,7 @@ cap_rights_vpm_group_get_set_threshold(const cap_rights_vpm_group_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 5U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 5U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8251,7 +8251,7 @@ cap_rights_vpm_group_set_object_activate(cap_rights_vpm_group_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -8260,7 +8260,7 @@ cap_rights_vpm_group_get_object_activate(const cap_rights_vpm_group_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8489,7 +8489,7 @@ cap_rights_vrtc_set_object_activate(cap_rights_vrtc_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -8498,7 +8498,7 @@ cap_rights_vrtc_get_object_activate(const cap_rights_vrtc_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8518,7 +8518,7 @@ cap_rights_vrtc_set_configure(cap_rights_vrtc_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -8527,7 +8527,7 @@ cap_rights_vrtc_get_configure(const cap_rights_vrtc_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8547,7 +8547,7 @@ cap_rights_vrtc_set_attach_addrspace(cap_rights_vrtc_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -8556,7 +8556,7 @@ cap_rights_vrtc_get_attach_addrspace(const cap_rights_vrtc_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8576,7 +8576,7 @@ cap_rights_vrtc_set_set_time_base(cap_rights_vrtc_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -8585,7 +8585,7 @@ cap_rights_vrtc_get_set_time_base(const cap_rights_vrtc_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8816,7 +8816,7 @@ cap_rights_vsmmuv2_set_manage_streams(cap_rights_vsmmuv2_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -8825,7 +8825,7 @@ cap_rights_vsmmuv2_get_manage_streams(const cap_rights_vsmmuv2_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8846,7 +8846,7 @@ cap_rights_vsmmuv2_set_attach_addrspace(cap_rights_vsmmuv2_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -8855,7 +8855,7 @@ cap_rights_vsmmuv2_get_attach_addrspace(const cap_rights_vsmmuv2_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -8877,7 +8877,7 @@ cap_rights_vsmmuv2_set_object_activate(cap_rights_vsmmuv2_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -8886,7 +8886,7 @@ cap_rights_vsmmuv2_get_object_activate(const cap_rights_vsmmuv2_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -9119,7 +9119,7 @@ cap_rights_watchdog_set_attach_vcpu(cap_rights_watchdog_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -9128,7 +9128,7 @@ cap_rights_watchdog_get_attach_vcpu(const cap_rights_watchdog_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -9148,7 +9148,7 @@ cap_rights_watchdog_set_bind_virq(cap_rights_watchdog_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 1U;
 }
 
 bool
@@ -9157,7 +9157,7 @@ cap_rights_watchdog_get_bind_virq(const cap_rights_watchdog_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -9177,7 +9177,7 @@ cap_rights_watchdog_set_manage(cap_rights_watchdog_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 2U;
 }
 
 bool
@@ -9186,7 +9186,7 @@ cap_rights_watchdog_get_manage(const cap_rights_watchdog_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -9207,7 +9207,7 @@ cap_rights_watchdog_set_object_activate(cap_rights_watchdog_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -9216,7 +9216,7 @@ cap_rights_watchdog_get_object_activate(const cap_rights_watchdog_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -9248,7 +9248,7 @@ hyp_api_flags0_clean(hyp_api_flags0_t bit_field)
 {
 	return (hyp_api_flags0_t){ .bf = {
 					   // (0x10006fffU &
-					   // ~0xffffffffffffffffU) |
+					   // ~0xffffffffffffffffU) | ...
 					   (uint64_t)(0x0U) |
 						   (bit_field.bf[0] &
 						    0xffffffffffffffffU),
@@ -9274,7 +9274,7 @@ hyp_api_flags0_get_trace_profile(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 12U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 12U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9284,7 +9284,7 @@ hyp_api_flags0_get_reserved_16(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 16U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9294,7 +9294,7 @@ hyp_api_flags0_get_scheduler(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 28U) & (uint64_t)0xfU) << 0U;
+	val |= ((bf[0] >> 28U) & (uint64_t)0xfU);
 	return (scheduler_variant_t)val;
 }
 
@@ -9304,7 +9304,7 @@ hyp_api_flags0_get_res0_0(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 15U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 15U) & (uint64_t)0x1U);
 	val |= ((bf[0] >> 17U) & (uint64_t)0x7ffU) << 1U;
 	val |= ((bf[0] >> 32U) & (uint64_t)0xffffffffU) << 12U;
 	return (uint64_t)val;
@@ -9316,7 +9316,7 @@ hyp_api_flags0_get_doorbell(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9326,7 +9326,7 @@ hyp_api_flags0_get_msgqueue(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9336,7 +9336,7 @@ hyp_api_flags0_get_partition_cspace(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9346,7 +9346,7 @@ hyp_api_flags0_get_power(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 14U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 14U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9356,7 +9356,7 @@ hyp_api_flags0_get_trace_ctrl(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 7U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 7U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9366,7 +9366,7 @@ hyp_api_flags0_get_vcpu_run(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 11U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 11U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9376,7 +9376,7 @@ hyp_api_flags0_get_vic(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9386,7 +9386,7 @@ hyp_api_flags0_get_virtio_mmio(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 9U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 9U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9396,7 +9396,7 @@ hyp_api_flags0_get_vpci(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 13U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 13U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9406,7 +9406,7 @@ hyp_api_flags0_get_vpm(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9416,7 +9416,7 @@ hyp_api_flags0_get_watchdog(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 8U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9426,7 +9426,7 @@ hyp_api_flags0_get_memextent(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 6U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 6U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9436,7 +9436,7 @@ hyp_api_flags0_get_prng(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 10U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 10U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9446,7 +9446,7 @@ hyp_api_flags0_get_vcpu(const hyp_api_flags0_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 5U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 5U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9466,28 +9466,29 @@ hyp_api_flags1_t
 hyp_api_flags1_clean(hyp_api_flags1_t bit_field)
 {
 	return (hyp_api_flags1_t){ .bf = {
-					   // (0x2U & ~0x7U) |
-					   (uint64_t)(0x0U) |
-						   (bit_field.bf[0] & 0x7U),
+					   // (0x100000002U & ~0x100000007U) |
+					   // ...
+					   (uint64_t)(0x0U) | (bit_field.bf[0] &
+							       0x100000007U),
 				   } };
 }
 
 bool
 hyp_api_flags1_is_equal(hyp_api_flags1_t b1, hyp_api_flags1_t b2)
 {
-	return ((b1.bf[0] & 0x7U) == (b2.bf[0] & 0x7U));
+	return ((b1.bf[0] & 0x100000007U) == (b2.bf[0] & 0x100000007U));
 }
 
 bool
 hyp_api_flags1_is_empty(hyp_api_flags1_t bit_field)
 {
-	return ((bit_field.bf[0] & 0x7U) == 0U);
+	return ((bit_field.bf[0] & 0x100000007U) == 0U);
 }
 
 bool
 hyp_api_flags1_is_clean(hyp_api_flags1_t bit_field)
 {
-	return ((bit_field.bf[0] & 0xfffffffffffffff8U) == 0x0U);
+	return ((bit_field.bf[0] & 0xfffffffefffffff8U) == 0x0U);
 }
 
 hyp_api_flags1_t
@@ -9666,7 +9667,7 @@ hyp_api_flags1_get_arm_v82_sve(const hyp_api_flags1_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9676,7 +9677,7 @@ hyp_api_flags1_get_vgic_ext_spis(const hyp_api_flags1_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9686,7 +9687,17 @@ hyp_api_flags1_get_vgic_ext_ppis(const hyp_api_flags1_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint64_t)0x1U);
+	return val != (uint64_t)0;
+}
+
+bool
+hyp_api_flags1_get_vcpu_run_no_timer_wakeup(const hyp_api_flags1_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 32U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9730,7 +9741,7 @@ hyp_api_flags2_get_res0_0(const hyp_api_flags2_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffffffffffffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffffffffffffffU);
 	return (uint64_t)val;
 }
 
@@ -9751,7 +9762,7 @@ hyp_api_info_clean(hyp_api_info_t bit_field)
 {
 	return (hyp_api_info_t){ .bf = {
 					 // (0x5100000000008001U &
-					 // ~0xff0000000000ffffU) |
+					 // ~0xff0000000000ffffU) | ...
 					 (uint64_t)(0x0U) |
 						 (bit_field.bf[0] &
 						  0xff0000000000ffffU),
@@ -9777,7 +9788,7 @@ hyp_api_info_get_api_version(const hyp_api_info_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x3fffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x3fffU);
 	return (uint16_t)val;
 }
 
@@ -9787,7 +9798,7 @@ hyp_api_info_get_big_endian(const hyp_api_info_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 14U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 14U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9797,7 +9808,7 @@ hyp_api_info_get_is_64bit(const hyp_api_info_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 15U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 15U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -9807,7 +9818,7 @@ hyp_api_info_get_variant(const hyp_api_info_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 56U) & (uint64_t)0xffU) << 0U;
+	val |= ((bf[0] >> 56U) & (uint64_t)0xffU);
 	return (hyp_variant_t)val;
 }
 
@@ -9851,7 +9862,7 @@ memextent_access_attrs_set_user_access(memextent_access_attrs_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff8U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x7U) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x7U);
 }
 
 pgtable_access_t
@@ -9860,7 +9871,7 @@ memextent_access_attrs_get_user_access(const memextent_access_attrs_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x7U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x7U);
 	return (pgtable_access_t)val;
 }
 
@@ -9881,7 +9892,7 @@ memextent_access_attrs_set_kernel_access(memextent_access_attrs_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff8fU;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x7U) << 4U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x7U) << 4U;
 }
 
 pgtable_access_t
@@ -9891,7 +9902,7 @@ memextent_access_attrs_get_kernel_access(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x7U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x7U);
 	return (pgtable_access_t)val;
 }
 
@@ -9912,7 +9923,7 @@ memextent_access_attrs_get_res_0(const memextent_access_attrs_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	val |= ((bf[0] >> 7U) & (uint32_t)0x1ffffffU) << 1U;
 	return (uint64_t)val;
 }
@@ -9954,7 +9965,7 @@ memextent_attrs_set_access(memextent_attrs_t *bit_field, pgtable_access_t val)
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff8U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x7U) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x7U);
 }
 
 pgtable_access_t
@@ -9963,7 +9974,7 @@ memextent_attrs_get_access(const memextent_attrs_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x7U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x7U);
 	return (pgtable_access_t)val;
 }
 
@@ -9983,7 +9994,7 @@ memextent_attrs_set_memtype(memextent_attrs_t  *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffcffU;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x3U) << 8U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x3U) << 8U;
 }
 
 memextent_memtype_t
@@ -9992,7 +10003,7 @@ memextent_attrs_get_memtype(const memextent_attrs_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint32_t)0x3U) << 0U;
+	val |= ((bf[0] >> 8U) & (uint32_t)0x3U);
 	return (memextent_memtype_t)val;
 }
 
@@ -10011,7 +10022,7 @@ memextent_attrs_set_type(memextent_attrs_t *bit_field, memextent_type_t val)
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffcffffU;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x3U) << 16U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x3U) << 16U;
 }
 
 memextent_type_t
@@ -10020,7 +10031,7 @@ memextent_attrs_get_type(const memextent_attrs_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint32_t)0x3U) << 0U;
+	val |= ((bf[0] >> 16U) & (uint32_t)0x3U);
 	return (memextent_type_t)val;
 }
 
@@ -10040,7 +10051,7 @@ memextent_attrs_get_res_0(const memextent_attrs_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1fU) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1fU);
 	val |= ((bf[0] >> 10U) & (uint32_t)0x3fU) << 5U;
 	val |= ((bf[0] >> 18U) & (uint32_t)0x3fffU) << 11U;
 	return (uint64_t)val;
@@ -10086,7 +10097,7 @@ memextent_donate_options_set_type(memextent_donate_options_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff00U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffU) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffU);
 }
 
 memextent_donate_type_t
@@ -10095,7 +10106,7 @@ memextent_donate_options_get_type(const memextent_donate_options_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffU);
 	return (memextent_donate_type_t)val;
 }
 
@@ -10116,7 +10127,7 @@ memextent_donate_options_get_res_0(const memextent_donate_options_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint32_t)0x7fffffU) << 0U;
+	val |= ((bf[0] >> 8U) & (uint32_t)0x7fffffU);
 	return (uint64_t)val;
 }
 
@@ -10127,7 +10138,7 @@ memextent_donate_options_set_no_sync(memextent_donate_options_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -10136,7 +10147,7 @@ memextent_donate_options_get_no_sync(const memextent_donate_options_t *bit_field
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -10191,7 +10202,7 @@ memextent_mapping_attrs_set_user_access(memextent_mapping_attrs_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffff8U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x7U) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x7U);
 }
 
 pgtable_access_t
@@ -10201,7 +10212,7 @@ memextent_mapping_attrs_get_user_access(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x7U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x7U);
 	return (pgtable_access_t)val;
 }
 
@@ -10222,7 +10233,7 @@ memextent_mapping_attrs_set_kernel_access(memextent_mapping_attrs_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff8fU;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x7U) << 4U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x7U) << 4U;
 }
 
 pgtable_access_t
@@ -10232,7 +10243,7 @@ memextent_mapping_attrs_get_kernel_access(
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint32_t)0x7U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint32_t)0x7U);
 	return (pgtable_access_t)val;
 }
 
@@ -10253,7 +10264,7 @@ memextent_mapping_attrs_set_memtype(memextent_mapping_attrs_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xff00ffffU;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffU) << 16U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffU) << 16U;
 }
 
 pgtable_vm_memtype_t
@@ -10262,7 +10273,7 @@ memextent_mapping_attrs_get_memtype(const memextent_mapping_attrs_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint32_t)0xffU) << 0U;
+	val |= ((bf[0] >> 16U) & (uint32_t)0xffU);
 	return (pgtable_vm_memtype_t)val;
 }
 
@@ -10283,7 +10294,7 @@ memextent_mapping_attrs_get_res_0(const memextent_mapping_attrs_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint32_t)0x1U);
 	val |= ((bf[0] >> 7U) & (uint32_t)0x1ffU) << 1U;
 	val |= ((bf[0] >> 24U) & (uint32_t)0xffU) << 10U;
 	return (uint64_t)val;
@@ -10329,7 +10340,7 @@ memextent_modify_flags_set_op(memextent_modify_flags_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff00U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffU) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffU);
 }
 
 memextent_modify_op_t
@@ -10338,7 +10349,7 @@ memextent_modify_flags_get_op(const memextent_modify_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffU);
 	return (memextent_modify_op_t)val;
 }
 
@@ -10358,7 +10369,7 @@ memextent_modify_flags_get_res_0(const memextent_modify_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint32_t)0x7fffffU) << 0U;
+	val |= ((bf[0] >> 8U) & (uint32_t)0x7fffffU);
 	return (uint64_t)val;
 }
 
@@ -10369,7 +10380,7 @@ memextent_modify_flags_set_no_sync(memextent_modify_flags_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -10378,7 +10389,7 @@ memextent_modify_flags_get_no_sync(const memextent_modify_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -10432,7 +10443,7 @@ msgqueue_create_info_set_queue_depth(msgqueue_create_info_t *bit_field,
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffff0000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffU);
 }
 
 uint16_t
@@ -10441,7 +10452,7 @@ msgqueue_create_info_get_queue_depth(const msgqueue_create_info_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffU);
 	return (uint16_t)val;
 }
 
@@ -10462,7 +10473,7 @@ msgqueue_create_info_set_max_msg_size(msgqueue_create_info_t *bit_field,
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffff0000ffffU;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffU) << 16U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffU) << 16U;
 }
 
 uint16_t
@@ -10471,7 +10482,7 @@ msgqueue_create_info_get_max_msg_size(const msgqueue_create_info_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint64_t)0xffffU) << 0U;
+	val |= ((bf[0] >> 16U) & (uint64_t)0xffffU);
 	return (uint16_t)val;
 }
 
@@ -10704,7 +10715,7 @@ msgqueue_send_flags_set_push(msgqueue_send_flags_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -10713,7 +10724,7 @@ msgqueue_send_flags_get_push(const msgqueue_send_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -10767,7 +10778,7 @@ partition_donate_flags_set_type(partition_donate_flags_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff00U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffU) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffU);
 }
 
 partition_donate_type_t
@@ -10776,7 +10787,7 @@ partition_donate_flags_get_type(const partition_donate_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffU);
 	return (partition_donate_type_t)val;
 }
 
@@ -10796,7 +10807,7 @@ partition_donate_flags_get_res0(const partition_donate_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint32_t)0xffffffU) << 0U;
+	val |= ((bf[0] >> 8U) & (uint32_t)0xffffffU);
 	return (uint32_t)val;
 }
 
@@ -10840,7 +10851,7 @@ partition_query_flags_set_type(partition_query_flags_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffffff00U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffU) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffU);
 }
 
 partition_query_type_t
@@ -10849,7 +10860,7 @@ partition_query_flags_get_type(const partition_query_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffU);
 	return (partition_query_type_t)val;
 }
 
@@ -10869,7 +10880,7 @@ partition_query_flags_get_res0(const partition_query_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint32_t)0xffffffU) << 0U;
+	val |= ((bf[0] >> 8U) & (uint32_t)0xffffffU);
 	return (uint32_t)val;
 }
 
@@ -11102,7 +11113,7 @@ pci_capability_access_flags_set_passthrough_visible(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -11112,7 +11123,7 @@ pci_capability_access_flags_get_passthrough_visible(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11134,7 +11145,7 @@ pci_capability_access_flags_set_passthrough_writable(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -11144,7 +11155,7 @@ pci_capability_access_flags_get_passthrough_writable(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11166,7 +11177,7 @@ pci_capability_access_flags_set_lockdown_visible(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 2U;
 }
 
 bool
@@ -11176,7 +11187,7 @@ pci_capability_access_flags_get_lockdown_visible(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11198,7 +11209,7 @@ pci_capability_access_flags_set_lockdown_writable(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 3U;
 }
 
 bool
@@ -11208,7 +11219,7 @@ pci_capability_access_flags_get_lockdown_writable(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11451,7 +11462,7 @@ pci_function_option_flags_set_passthrough(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -11461,7 +11472,7 @@ pci_function_option_flags_get_passthrough(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11483,7 +11494,7 @@ pci_function_option_flags_set_sr_iov_vf(pci_function_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -11493,7 +11504,7 @@ pci_function_option_flags_get_sr_iov_vf(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11524,7 +11535,7 @@ pci_host_option_flags_t
 pci_host_option_flags_clean(pci_host_option_flags_t bit_field)
 {
 	return (pci_host_option_flags_t){ .bf = {
-						  // (0x1U & ~0x3U) |
+						  // (0x1U & ~0x3U) | ...
 						  (uint64_t)(0x0U) |
 							  (bit_field.bf[0] &
 							   0x3U),
@@ -11734,7 +11745,7 @@ pci_host_option_flags_set_pcie(pci_host_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -11743,7 +11754,7 @@ pci_host_option_flags_get_pcie(const pci_host_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11763,7 +11774,7 @@ pci_host_option_flags_set_lockdown(pci_host_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -11772,7 +11783,7 @@ pci_host_option_flags_get_lockdown(const pci_host_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -11823,7 +11834,7 @@ pci_responder_id_set_function(pci_responder_id_t *bit_field, index_t val)
 {
 	uint16_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint16_t)0xfff8U;
-	bf[0] |= (((uint16_t)val >> 0U) & (uint16_t)0x7U) << 0U;
+	bf[0] |= (((uint16_t)val) & (uint16_t)0x7U);
 }
 
 index_t
@@ -11832,7 +11843,7 @@ pci_responder_id_get_function(const pci_responder_id_t *bit_field)
 	uint16_t	val = 0;
 	const uint16_t *bf  = (const uint16_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint16_t)0x7U) << 0U;
+	val |= ((bf[0]) & (uint16_t)0x7U);
 	return (index_t)val;
 }
 
@@ -11851,7 +11862,7 @@ pci_responder_id_set_slot(pci_responder_id_t *bit_field, index_t val)
 {
 	uint16_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint16_t)0xff07U;
-	bf[0] |= (((uint16_t)val >> 0U) & (uint16_t)0x1fU) << 3U;
+	bf[0] |= (((uint16_t)val) & (uint16_t)0x1fU) << 3U;
 }
 
 index_t
@@ -11860,7 +11871,7 @@ pci_responder_id_get_slot(const pci_responder_id_t *bit_field)
 	uint16_t	val = 0;
 	const uint16_t *bf  = (const uint16_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint16_t)0x1fU) << 0U;
+	val |= ((bf[0] >> 3U) & (uint16_t)0x1fU);
 	return (index_t)val;
 }
 
@@ -11879,7 +11890,7 @@ pci_responder_id_set_bus(pci_responder_id_t *bit_field, index_t val)
 {
 	uint16_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint16_t)0xffU;
-	bf[0] |= (((uint16_t)val >> 0U) & (uint16_t)0xffU) << 8U;
+	bf[0] |= (((uint16_t)val) & (uint16_t)0xffU) << 8U;
 }
 
 index_t
@@ -11888,7 +11899,7 @@ pci_responder_id_get_bus(const pci_responder_id_t *bit_field)
 	uint16_t	val = 0;
 	const uint16_t *bf  = (const uint16_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint16_t)0xffU) << 0U;
+	val |= ((bf[0] >> 8U) & (uint16_t)0xffU);
 	return (index_t)val;
 }
 
@@ -11944,7 +11955,7 @@ root_env_mmio_range_properties_set_num_pages(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffff00000000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffffffU);
 }
 
 uint32_t
@@ -11954,7 +11965,7 @@ root_env_mmio_range_properties_get_num_pages(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffffffU);
 	return (uint32_t)val;
 }
 
@@ -11975,7 +11986,7 @@ root_env_mmio_range_properties_set_access(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffff8ffffffffU;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0x7U) << 32U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0x7U) << 32U;
 }
 
 pgtable_access_t
@@ -11985,7 +11996,7 @@ root_env_mmio_range_properties_get_access(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 32U) & (uint64_t)0x7U) << 0U;
+	val |= ((bf[0] >> 32U) & (uint64_t)0x7U);
 	return (pgtable_access_t)val;
 }
 
@@ -12006,7 +12017,7 @@ root_env_mmio_range_properties_set_res_s2pt_attr(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffff00ffffffffffU;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffU) << 40U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffU) << 40U;
 }
 
 uint8_t
@@ -12016,7 +12027,7 @@ root_env_mmio_range_properties_get_res_s2pt_attr(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 40U) & (uint64_t)0xffU) << 0U;
+	val |= ((bf[0] >> 40U) & (uint64_t)0xffU);
 	return (uint8_t)val;
 }
 
@@ -12038,7 +12049,7 @@ root_env_mmio_range_properties_set_pvm_unmapped(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xbfffffffffffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 62U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 62U;
 }
 
 bool
@@ -12048,7 +12059,7 @@ root_env_mmio_range_properties_get_pvm_unmapped(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 62U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 62U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12070,7 +12081,7 @@ root_env_mmio_range_properties_set_non_exclusive(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0x7fffffffffffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 63U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 63U;
 }
 
 bool
@@ -12080,7 +12091,7 @@ root_env_mmio_range_properties_get_non_exclusive(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 63U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 63U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12135,7 +12146,7 @@ scheduler_yield_control_set_hint(scheduler_yield_control_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffff0000U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffffU) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffffU);
 }
 
 scheduler_yield_hint_t
@@ -12144,7 +12155,7 @@ scheduler_yield_control_get_hint(const scheduler_yield_control_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffffU);
 	return (scheduler_yield_hint_t)val;
 }
 
@@ -12165,7 +12176,7 @@ scheduler_yield_control_set_impl_def(scheduler_yield_control_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -12174,7 +12185,7 @@ scheduler_yield_control_get_impl_def(const scheduler_yield_control_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -12229,7 +12240,7 @@ sdei_error_flags_set_reason(sdei_error_flags_t *bit_field,
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffff00000000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffffffU);
 }
 
 sdei_error_reason_t
@@ -12238,7 +12249,7 @@ sdei_error_flags_get_reason(const sdei_error_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffffffU);
 	return (sdei_error_reason_t)val;
 }
 
@@ -12258,7 +12269,7 @@ sdei_error_flags_get_res0(const sdei_error_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 32U) & (uint64_t)0x7fffffffU) << 0U;
+	val |= ((bf[0] >> 32U) & (uint64_t)0x7fffffffU);
 	return (uint32_t)val;
 }
 
@@ -12268,7 +12279,7 @@ sdei_error_flags_set_system_error(sdei_error_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0x7fffffffffffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 63U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 63U;
 }
 
 bool
@@ -12277,7 +12288,7 @@ sdei_error_flags_get_system_error(const sdei_error_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 63U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 63U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12329,7 +12340,7 @@ smccc_function_id_set_function(smccc_function_id_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xffff0000U;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0xffffU) << 0U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0xffffU);
 }
 
 smccc_function_t
@@ -12338,7 +12349,7 @@ smccc_function_id_get_function(const smccc_function_id_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0xffffU) << 0U;
+	val |= ((bf[0]) & (uint32_t)0xffffU);
 	return (smccc_function_t)val;
 }
 
@@ -12359,7 +12370,7 @@ smccc_function_id_set_sve_live_state_hint(smccc_function_id_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffeffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 16U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 16U;
 }
 
 bool
@@ -12368,7 +12379,7 @@ smccc_function_id_get_sve_live_state_hint(const smccc_function_id_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 16U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -12389,7 +12400,7 @@ smccc_function_id_get_res0(const smccc_function_id_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 17U) & (uint32_t)0x7fU) << 0U;
+	val |= ((bf[0] >> 17U) & (uint32_t)0x7fU);
 	return (uint32_t)val;
 }
 
@@ -12399,7 +12410,7 @@ smccc_function_id_set_owner_id(smccc_function_id_t *bit_field,
 {
 	uint32_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xc0ffffffU;
-	bf[0] |= (((uint32_t)val >> 0U) & (uint32_t)0x3fU) << 24U;
+	bf[0] |= (((uint32_t)val) & (uint32_t)0x3fU) << 24U;
 }
 
 smccc_owner_id_t
@@ -12408,7 +12419,7 @@ smccc_function_id_get_owner_id(const smccc_function_id_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 24U) & (uint32_t)0x3fU) << 0U;
+	val |= ((bf[0] >> 24U) & (uint32_t)0x3fU);
 	return (smccc_owner_id_t)val;
 }
 
@@ -12428,7 +12439,7 @@ smccc_function_id_set_is_smc64(smccc_function_id_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xbfffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 30U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 30U;
 }
 
 bool
@@ -12437,7 +12448,7 @@ smccc_function_id_get_is_smc64(const smccc_function_id_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 30U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 30U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -12457,7 +12468,7 @@ smccc_function_id_set_is_fast(smccc_function_id_t *bit_field, bool val)
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0x7fffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 31U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U) << 31U;
 }
 
 bool
@@ -12466,7 +12477,7 @@ smccc_function_id_get_is_fast(const smccc_function_id_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 31U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0] >> 31U) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -12521,7 +12532,7 @@ smccc_vendor_hyp_function_id_set_call_class(
 {
 	uint16_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint16_t)0x3fffU;
-	bf[0] |= (((uint16_t)val >> 0U) & (uint16_t)0x3U) << 14U;
+	bf[0] |= (((uint16_t)val) & (uint16_t)0x3U) << 14U;
 }
 
 smccc_vendor_hyp_function_class_t
@@ -12531,7 +12542,7 @@ smccc_vendor_hyp_function_id_get_call_class(
 	uint16_t	val = 0;
 	const uint16_t *bf  = (const uint16_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 14U) & (uint16_t)0x3U) << 0U;
+	val |= ((bf[0] >> 14U) & (uint16_t)0x3U);
 	return (smccc_vendor_hyp_function_class_t)val;
 }
 
@@ -12552,7 +12563,7 @@ smccc_vendor_hyp_function_id_set_function(
 {
 	uint16_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint16_t)0xc000U;
-	bf[0] |= (((uint16_t)val >> 0U) & (uint16_t)0x3fffU) << 0U;
+	bf[0] |= (((uint16_t)val) & (uint16_t)0x3fffU);
 }
 
 uint16_t
@@ -12562,7 +12573,7 @@ smccc_vendor_hyp_function_id_get_function(
 	uint16_t	val = 0;
 	const uint16_t *bf  = (const uint16_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint16_t)0x3fffU) << 0U;
+	val |= ((bf[0]) & (uint16_t)0x3fffU);
 	return (uint16_t)val;
 }
 
@@ -12594,27 +12605,27 @@ vcpu_option_flags_clean(vcpu_option_flags_t bit_field)
 {
 	return (vcpu_option_flags_t){ .bf = {
 					      (bit_field.bf[0] &
-					       0x8000000000000fbfU),
+					       0x8000000000001fbfU),
 				      } };
 }
 
 bool
 vcpu_option_flags_is_equal(vcpu_option_flags_t b1, vcpu_option_flags_t b2)
 {
-	return ((b1.bf[0] & 0x8000000000000fbfU) ==
-		(b2.bf[0] & 0x8000000000000fbfU));
+	return ((b1.bf[0] & 0x8000000000001fbfU) ==
+		(b2.bf[0] & 0x8000000000001fbfU));
 }
 
 bool
 vcpu_option_flags_is_empty(vcpu_option_flags_t bit_field)
 {
-	return ((bit_field.bf[0] & 0x8000000000000fbfU) == 0U);
+	return ((bit_field.bf[0] & 0x8000000000001fbfU) == 0U);
 }
 
 bool
 vcpu_option_flags_is_clean(vcpu_option_flags_t bit_field)
 {
-	return ((bit_field.bf[0] & 0x7ffffffffffff040U) == 0x0U);
+	return ((bit_field.bf[0] & 0x7fffffffffffe040U) == 0x0U);
 }
 
 vcpu_option_flags_t
@@ -12794,7 +12805,7 @@ vcpu_option_flags_set_pinned(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -12803,7 +12814,7 @@ vcpu_option_flags_get_pinned(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12823,7 +12834,7 @@ vcpu_option_flags_set_critical(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffeffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 8U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 8U;
 }
 
 bool
@@ -12832,7 +12843,7 @@ vcpu_option_flags_get_critical(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 8U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 8U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12853,7 +12864,7 @@ vcpu_option_flags_set_ras_error_handler(vcpu_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -12862,7 +12873,7 @@ vcpu_option_flags_get_ras_error_handler(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12884,7 +12895,7 @@ vcpu_option_flags_set_amu_counting_disabled(vcpu_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 2U;
 }
 
 bool
@@ -12893,7 +12904,7 @@ vcpu_option_flags_get_amu_counting_disabled(const vcpu_option_flags_t *bit_field
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12914,7 +12925,7 @@ vcpu_option_flags_set_sve_allowed(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 3U;
 }
 
 bool
@@ -12923,7 +12934,7 @@ vcpu_option_flags_get_sve_allowed(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12943,7 +12954,7 @@ vcpu_option_flags_set_debug_allowed(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 4U;
 }
 
 bool
@@ -12952,7 +12963,7 @@ vcpu_option_flags_get_debug_allowed(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -12972,7 +12983,7 @@ vcpu_option_flags_set_trace_allowed(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffffffdfU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 5U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 5U;
 }
 
 bool
@@ -12981,7 +12992,7 @@ vcpu_option_flags_get_trace_allowed(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 5U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 5U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13001,7 +13012,7 @@ vcpu_option_flags_set_sme_allowed(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffbffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 10U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 10U;
 }
 
 bool
@@ -13010,7 +13021,7 @@ vcpu_option_flags_get_sme_allowed(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 10U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 10U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13030,7 +13041,7 @@ vcpu_option_flags_set_hlos_vm(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0x7fffffffffffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 63U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 63U;
 }
 
 bool
@@ -13039,7 +13050,7 @@ vcpu_option_flags_get_hlos_vm(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 63U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 63U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13059,7 +13070,7 @@ vcpu_option_flags_set_sdei_allowed(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffff7ffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 11U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 11U;
 }
 
 bool
@@ -13068,7 +13079,7 @@ vcpu_option_flags_get_sdei_allowed(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 11U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 11U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13088,7 +13099,7 @@ vcpu_option_flags_set_mpam_allowed(vcpu_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffffff7fU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 7U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 7U;
 }
 
 bool
@@ -13097,7 +13108,7 @@ vcpu_option_flags_get_mpam_allowed(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 7U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 7U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13118,7 +13129,7 @@ vcpu_option_flags_set_vcpu_run_scheduled(vcpu_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffdffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 9U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 9U;
 }
 
 bool
@@ -13127,7 +13138,7 @@ vcpu_option_flags_get_vcpu_run_scheduled(const vcpu_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 9U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 9U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13140,6 +13151,38 @@ vcpu_option_flags_copy_vcpu_run_scheduled(
 	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
 	bf_dst[0] &= ~(uint64_t)0x200U;
 	bf_dst[0] |= bf_src[0] & (uint64_t)0x200U;
+}
+
+void
+vcpu_option_flags_set_vcpu_run_no_timer_wakeup(vcpu_option_flags_t *bit_field,
+					       bool		    val)
+{
+	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
+	uint64_t *bf	   = &bit_field->bf[0];
+	bf[0] &= (uint64_t)0xffffffffffffefffU;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 12U;
+}
+
+bool
+vcpu_option_flags_get_vcpu_run_no_timer_wakeup(
+	const vcpu_option_flags_t *bit_field)
+{
+	uint64_t	val = 0;
+	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
+
+	val |= ((bf[0] >> 12U) & (uint64_t)0x1U);
+	return val != (uint64_t)0;
+}
+
+void
+vcpu_option_flags_copy_vcpu_run_no_timer_wakeup(
+	vcpu_option_flags_t	  *bit_field_dst,
+	const vcpu_option_flags_t *bit_field_src)
+{
+	uint64_t       *bf_dst = (uint64_t *)&bit_field_dst->bf[0];
+	const uint64_t *bf_src = (const uint64_t *)&bit_field_src->bf[0];
+	bf_dst[0] &= ~(uint64_t)0x1000U;
+	bf_dst[0] |= bf_src[0] & (uint64_t)0x1000U;
 }
 
 void
@@ -13360,7 +13403,7 @@ vcpu_poweroff_flags_set_last_vcpu(vcpu_poweroff_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -13369,7 +13412,7 @@ vcpu_poweroff_flags_get_last_vcpu(const vcpu_poweroff_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13601,7 +13644,7 @@ vcpu_poweron_flags_set_preserve_entry_point(vcpu_poweron_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -13611,7 +13654,7 @@ vcpu_poweron_flags_get_preserve_entry_point(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13633,7 +13676,7 @@ vcpu_poweron_flags_set_preserve_context(vcpu_poweron_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -13642,7 +13685,7 @@ vcpu_poweron_flags_get_preserve_context(const vcpu_poweron_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -13881,7 +13924,7 @@ vcpu_run_poweroff_flags_set_exited(vcpu_run_poweroff_flags_t *bit_field,
 	uint32_t  bool_val = val ? (uint32_t)1 : (uint32_t)0;
 	uint32_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint32_t)0xfffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint32_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint32_t)0x1U);
 }
 
 bool
@@ -13890,7 +13933,7 @@ vcpu_run_poweroff_flags_get_exited(const vcpu_run_poweroff_flags_t *bit_field)
 	uint32_t	val = 0;
 	const uint32_t *bf  = (const uint32_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint32_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint32_t)0x1U);
 	return val != (uint32_t)0;
 }
 
@@ -14129,7 +14172,7 @@ vgic_gicr_attach_flags_set_last_valid(vgic_gicr_attach_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -14138,7 +14181,7 @@ vgic_gicr_attach_flags_get_last_valid(const vgic_gicr_attach_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -14159,7 +14202,7 @@ vgic_gicr_attach_flags_set_last(vgic_gicr_attach_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -14168,7 +14211,7 @@ vgic_gicr_attach_flags_get_last(const vgic_gicr_attach_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -14223,7 +14266,7 @@ vic_msi_source_config_set_index(vic_msi_source_config_t *bit_field,
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffff0000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffU);
 }
 
 uint16_t
@@ -14232,7 +14275,7 @@ vic_msi_source_config_get_index(const vic_msi_source_config_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffU);
 	return (uint16_t)val;
 }
 
@@ -14252,7 +14295,7 @@ vic_msi_source_config_get_res0(const vic_msi_source_config_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint64_t)0xffffffffffffU) << 0U;
+	val |= ((bf[0] >> 16U) & (uint64_t)0xffffffffffffU);
 	return (uint64_t)val;
 }
 
@@ -14273,6 +14316,7 @@ vic_option_flags_clean(vic_option_flags_t bit_field)
 {
 	return (vic_option_flags_t){ .bf = {
 					     // (0x3U & ~0xffffffffffffffffU) |
+					     // ...
 					     (uint64_t)(0x0U) |
 						     (bit_field.bf[0] &
 						      0xffffffffffffffffU),
@@ -14298,7 +14342,7 @@ vic_option_flags_set_max_msis_valid(vic_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -14307,7 +14351,7 @@ vic_option_flags_get_max_msis_valid(const vic_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -14328,7 +14372,7 @@ vic_option_flags_set_disable_default_addr(vic_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -14337,7 +14381,7 @@ vic_option_flags_get_disable_default_addr(const vic_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -14357,7 +14401,7 @@ vic_option_flags_set_res0_0(vic_option_flags_t *bit_field, uint64_t val)
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0x3U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0x3fffffffffffffffU) << 2U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0x3fffffffffffffffU) << 2U;
 }
 
 uint64_t
@@ -14366,7 +14410,7 @@ vic_option_flags_get_res0_0(const vic_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint64_t)0x3fffffffffffffffU) << 0U;
+	val |= ((bf[0] >> 2U) & (uint64_t)0x3fffffffffffffffU);
 	return (uint64_t)val;
 }
 
@@ -14420,7 +14464,7 @@ virtio_backend_interface_type_set_transport(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffff00ffffU;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffU) << 16U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffU) << 16U;
 }
 
 virtio_transport_type_t
@@ -14430,7 +14474,7 @@ virtio_backend_interface_type_get_transport(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint64_t)0xffU) << 0U;
+	val |= ((bf[0] >> 16U) & (uint64_t)0xffU);
 	return (virtio_transport_type_t)val;
 }
 
@@ -14451,7 +14495,7 @@ virtio_backend_interface_type_set_device(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffffff00U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffU);
 }
 
 virtio_device_type_t
@@ -14461,7 +14505,7 @@ virtio_backend_interface_type_get_device(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffU);
 	return (virtio_device_type_t)val;
 }
 
@@ -14522,7 +14566,7 @@ virtio_backend_interrupt_perqueue_set_queues_ready(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffff0000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffU);
 }
 
 uint64_t
@@ -14532,7 +14576,7 @@ virtio_backend_interrupt_perqueue_get_queues_ready(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffU);
 	return (uint64_t)val;
 }
 
@@ -14554,7 +14598,7 @@ virtio_backend_interrupt_perqueue_set_config_update(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0x7fffffffffffffffU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 63U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 63U;
 }
 
 bool
@@ -14564,7 +14608,7 @@ virtio_backend_interrupt_perqueue_get_config_update(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 63U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 63U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -14622,7 +14666,7 @@ virtio_backend_memextent_layout_set_devcfg_offset(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffe0000ffffU;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0x1ffffU) << 16U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0x1ffffU) << 16U;
 }
 
 size_t
@@ -14632,7 +14676,7 @@ virtio_backend_memextent_layout_get_devcfg_offset(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 16U) & (uint64_t)0x1ffffU) << 0U;
+	val |= ((bf[0] >> 16U) & (uint64_t)0x1ffffU);
 	return (size_t)val;
 }
 
@@ -14653,7 +14697,7 @@ virtio_backend_memextent_layout_set_devcfg_size(
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffff0000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffU);
 }
 
 size_t
@@ -14663,7 +14707,7 @@ virtio_backend_memextent_layout_get_devcfg_size(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffU);
 	return (size_t)val;
 }
 
@@ -14694,7 +14738,7 @@ virtio_backend_notify_flags_t
 virtio_backend_notify_flags_clean(virtio_backend_notify_flags_t bit_field)
 {
 	return (virtio_backend_notify_flags_t){ .bf = {
-							// (0x1U & ~0x3U) |
+							// (0x1U & ~0x3U) | ...
 							(uint64_t)(0x0U) |
 								(bit_field.bf[0] &
 								 0x3U),
@@ -14910,7 +14954,7 @@ virtio_backend_notify_flags_set_per_queue(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -14920,7 +14964,7 @@ virtio_backend_notify_flags_get_per_queue(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -14942,7 +14986,7 @@ virtio_backend_notify_flags_set_config_update(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -14952,7 +14996,7 @@ virtio_backend_notify_flags_get_config_update(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15198,7 +15242,7 @@ virtio_backend_notify_reason_set_new_buffer(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -15208,7 +15252,7 @@ virtio_backend_notify_reason_get_new_buffer(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15230,7 +15274,7 @@ virtio_backend_notify_reason_set_reset_request(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -15240,7 +15284,7 @@ virtio_backend_notify_reason_get_reset_request(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15262,7 +15306,7 @@ virtio_backend_notify_reason_get_res0_2(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15273,7 +15317,7 @@ virtio_backend_notify_reason_set_driver_ok(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 3U;
 }
 
 bool
@@ -15283,7 +15327,7 @@ virtio_backend_notify_reason_get_driver_ok(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15305,7 +15349,7 @@ virtio_backend_notify_reason_set_failed(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffffffefU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 4U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 4U;
 }
 
 bool
@@ -15315,7 +15359,7 @@ virtio_backend_notify_reason_get_failed(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 4U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 4U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15560,7 +15604,7 @@ virtio_backend_option_flags_set_sync_reset(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -15570,7 +15614,7 @@ virtio_backend_option_flags_get_sync_reset(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15592,7 +15636,7 @@ virtio_backend_option_flags_set_per_queue_irqs(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -15602,7 +15646,7 @@ virtio_backend_option_flags_get_per_queue_irqs(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15624,7 +15668,7 @@ virtio_backend_option_flags_set_ignore_config_writes(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffbU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 2U;
 }
 
 bool
@@ -15634,7 +15678,7 @@ virtio_backend_option_flags_get_ignore_config_writes(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15656,7 +15700,7 @@ virtio_backend_option_flags_set_valid_me_layout(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffff7U;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 3U;
 }
 
 bool
@@ -15666,7 +15710,7 @@ virtio_backend_option_flags_get_valid_me_layout(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15688,7 +15732,7 @@ virtio_backend_option_flags_set_valid_type(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffffffbfU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 6U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 6U;
 }
 
 bool
@@ -15698,7 +15742,7 @@ virtio_backend_option_flags_get_valid_type(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 6U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 6U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -15927,7 +15971,7 @@ virtio_interrupt_set_queue_ready(virtio_interrupt_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0xfeU;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U);
 }
 
 bool
@@ -15936,7 +15980,7 @@ virtio_interrupt_get_queue_ready(const virtio_interrupt_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -15956,7 +16000,7 @@ virtio_interrupt_set_config_update(virtio_interrupt_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0xfdU;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U) << 1U;
 }
 
 bool
@@ -15965,7 +16009,7 @@ virtio_interrupt_get_config_update(const virtio_interrupt_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -15996,7 +16040,7 @@ virtio_iommu_options_clean(virtio_iommu_options_t bit_field)
 {
 	return (virtio_iommu_options_t){ .bf = {
 						 // (0x100000000U &
-						 // ~0x1ffffffffU) |
+						 // ~0x1ffffffffU) | ...
 						 (uint64_t)(0x0U) |
 							 (bit_field.bf[0] &
 							  0x1ffffffffU),
@@ -16022,7 +16066,7 @@ virtio_iommu_options_set_max_streams(virtio_iommu_options_t *bit_field,
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffff00000000U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0xffffffffU);
 }
 
 count_t
@@ -16031,7 +16075,7 @@ virtio_iommu_options_get_max_streams(const virtio_iommu_options_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0xffffffffU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0xffffffffU);
 	return (count_t)val;
 }
 
@@ -16052,7 +16096,7 @@ virtio_iommu_options_get_addrspace_valid(const virtio_iommu_options_t *bit_field
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 32U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 32U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -16072,7 +16116,7 @@ virtio_status_t
 virtio_status_clean(virtio_status_t bit_field)
 {
 	return (virtio_status_t){ .bf = {
-					  // (0x40U & ~0xcfU) |
+					  // (0x40U & ~0xcfU) | ...
 					  (uint8_t)(0x0U) |
 						  (bit_field.bf[0] & 0xcfU),
 				  } };
@@ -16272,7 +16316,7 @@ virtio_status_set_acknowledge(virtio_status_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0xfeU;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U);
 }
 
 bool
@@ -16281,7 +16325,7 @@ virtio_status_get_acknowledge(const virtio_status_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -16301,7 +16345,7 @@ virtio_status_set_driver(virtio_status_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0xfdU;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U) << 1U;
 }
 
 bool
@@ -16310,7 +16354,7 @@ virtio_status_get_driver(const virtio_status_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -16330,7 +16374,7 @@ virtio_status_set_driver_ok(virtio_status_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0xfbU;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 2U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U) << 2U;
 }
 
 bool
@@ -16339,7 +16383,7 @@ virtio_status_get_driver_ok(const virtio_status_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 2U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0] >> 2U) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -16359,7 +16403,7 @@ virtio_status_set_features_ok(virtio_status_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0xf7U;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 3U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U) << 3U;
 }
 
 bool
@@ -16368,7 +16412,7 @@ virtio_status_get_features_ok(const virtio_status_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 3U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0] >> 3U) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -16388,7 +16432,7 @@ virtio_status_set_device_needs_reset(virtio_status_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0xbfU;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 6U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U) << 6U;
 }
 
 bool
@@ -16397,7 +16441,7 @@ virtio_status_get_device_needs_reset(const virtio_status_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 6U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0] >> 6U) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -16417,7 +16461,7 @@ virtio_status_set_failed(virtio_status_t *bit_field, bool val)
 	uint8_t	 bool_val = val ? (uint8_t)1 : (uint8_t)0;
 	uint8_t *bf	  = &bit_field->bf[0];
 	bf[0] &= (uint8_t)0x7fU;
-	bf[0] |= ((bool_val >> 0U) & (uint8_t)0x1U) << 7U;
+	bf[0] |= ((bool_val) & (uint8_t)0x1U) << 7U;
 }
 
 bool
@@ -16426,7 +16470,7 @@ virtio_status_get_failed(const virtio_status_t *bit_field)
 	uint8_t	       val = 0;
 	const uint8_t *bf  = (const uint8_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 7U) & (uint8_t)0x1U) << 0U;
+	val |= ((bf[0] >> 7U) & (uint8_t)0x1U);
 	return val != (uint8_t)0;
 }
 
@@ -16479,7 +16523,7 @@ vpci_aperture_set_bits(vpci_aperture_t *bit_field, count_t val)
 {
 	uint64_t *bf = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xffffffffffffffc0U;
-	bf[0] |= (((uint64_t)val >> 0U) & (uint64_t)0x3fU) << 0U;
+	bf[0] |= (((uint64_t)val) & (uint64_t)0x3fU);
 }
 
 count_t
@@ -16488,7 +16532,7 @@ vpci_aperture_get_bits(const vpci_aperture_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x3fU) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x3fU);
 	return (count_t)val;
 }
 
@@ -16508,7 +16552,7 @@ vpci_aperture_get_res0(const vpci_aperture_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 6U) & (uint64_t)0x3fU) << 0U;
+	val |= ((bf[0] >> 6U) & (uint64_t)0x3fU);
 	return (uint64_t)val;
 }
 
@@ -16557,6 +16601,7 @@ vpci_option_flags_clean(vpci_option_flags_t bit_field)
 {
 	return (vpci_option_flags_t){ .bf = {
 					      // (0x1U & ~0xffffffffffffffffU) |
+					      // ...
 					      (uint64_t)(0x0U) |
 						      (bit_field.bf[0] &
 						       0xffffffffffffffffU),
@@ -16582,7 +16627,7 @@ vpci_option_flags_set_pcie(vpci_option_flags_t *bit_field, bool val)
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -16591,7 +16636,7 @@ vpci_option_flags_get_pcie(const vpci_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -16611,7 +16656,7 @@ vpci_option_flags_get_res0(const vpci_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x7fffffffffffffffU) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x7fffffffffffffffU);
 	return (uint64_t)val;
 }
 
@@ -16839,7 +16884,7 @@ vpm_group_option_flags_set_no_aggregation(vpm_group_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -16849,7 +16894,7 @@ vpm_group_option_flags_get_no_aggregation(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -16871,7 +16916,7 @@ vpm_group_option_flags_set_explicit_wakeup(vpm_group_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -16881,7 +16926,7 @@ vpm_group_option_flags_get_explicit_wakeup(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -17125,7 +17170,7 @@ watchdog_bind_option_flags_set_bite_virq(
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -17135,7 +17180,7 @@ watchdog_bind_option_flags_get_bite_virq(
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -17374,7 +17419,7 @@ watchdog_option_flags_set_critical_bite(watchdog_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffeU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 0U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U);
 }
 
 bool
@@ -17383,7 +17428,7 @@ watchdog_option_flags_get_critical_bite(const watchdog_option_flags_t *bit_field
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 0U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0]) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -17405,7 +17450,7 @@ watchdog_option_flags_set_fatal_bite(watchdog_option_flags_t *bit_field,
 	uint64_t  bool_val = val ? (uint64_t)1 : (uint64_t)0;
 	uint64_t *bf	   = &bit_field->bf[0];
 	bf[0] &= (uint64_t)0xfffffffffffffffdU;
-	bf[0] |= ((bool_val >> 0U) & (uint64_t)0x1U) << 1U;
+	bf[0] |= ((bool_val) & (uint64_t)0x1U) << 1U;
 }
 
 bool
@@ -17414,7 +17459,7 @@ watchdog_option_flags_get_fatal_bite(const watchdog_option_flags_t *bit_field)
 	uint64_t	val = 0;
 	const uint64_t *bf  = (const uint64_t *)&bit_field->bf[0];
 
-	val |= ((bf[0] >> 1U) & (uint64_t)0x1U) << 0U;
+	val |= ((bf[0] >> 1U) & (uint64_t)0x1U);
 	return val != (uint64_t)0;
 }
 
@@ -20060,6 +20105,9 @@ vcpu_run_state_raw_cast(uint32_t val)
 	case (uint32_t)VCPU_RUN_STATE_FAULT:
 		ret = VCPU_RUN_STATE_FAULT;
 		break;
+	case (uint32_t)VCPU_RUN_STATE_EXPECTS_WAKEUP_OR_TIMEOUT:
+		ret = VCPU_RUN_STATE_EXPECTS_WAKEUP_OR_TIMEOUT;
+		break;
 	case (uint32_t)VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ:
 		ret = VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ;
 		break;
@@ -20104,6 +20152,10 @@ vcpu_run_state_raw_cast_safe(uint32_t val)
 	case (uint32_t)VCPU_RUN_STATE_FAULT:
 		ret = vcpu_run_state_result_ok(VCPU_RUN_STATE_FAULT);
 		break;
+	case (uint32_t)VCPU_RUN_STATE_EXPECTS_WAKEUP_OR_TIMEOUT:
+		ret = vcpu_run_state_result_ok(
+			VCPU_RUN_STATE_EXPECTS_WAKEUP_OR_TIMEOUT);
+		break;
 	case (uint32_t)VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ:
 		ret = vcpu_run_state_result_ok(
 			VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ);
@@ -20139,6 +20191,7 @@ vcpu_run_state_raw_is_valid(uint32_t val)
 	case (uint32_t)VCPU_RUN_STATE_POWERED_OFF:
 	case (uint32_t)VCPU_RUN_STATE_BLOCKED:
 	case (uint32_t)VCPU_RUN_STATE_FAULT:
+	case (uint32_t)VCPU_RUN_STATE_EXPECTS_WAKEUP_OR_TIMEOUT:
 	case (uint32_t)VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ:
 	case (uint32_t)VCPU_RUN_STATE_ADDRSPACE_VMMIO_WRITE:
 	case (uint32_t)VCPU_RUN_STATE_ADDRSPACE_PAGE_FAULT:

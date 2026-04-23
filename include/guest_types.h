@@ -2880,13 +2880,14 @@ typedef struct hyp_api_flags1_b {
 	// 0         const bool arm_v82_sve
 	// 1         const bool vgic_ext_spis
 	// 2         const bool vgic_ext_ppis
+	// 32        const bool vcpu_run_no_timer_wakeup
 	uint64_t bf[1];
 } hyp_api_flags1_t;
 
 #define hyp_api_flags1_default()                                               \
 	(hyp_api_flags1_t)                                                     \
 	{                                                                      \
-		.bf = { 0x2U }                                                 \
+		.bf = { 0x100000002U }                                         \
 	}
 
 #define hyp_api_flags1_cast(val_0)                                             \
@@ -4319,6 +4320,7 @@ typedef struct vcpu_option_flags_b {
 	// 9         bool vcpu_run_scheduled
 	// 10        bool sme_allowed
 	// 11        bool sdei_allowed
+	// 12        bool vcpu_run_no_timer_wakeup
 	// 63        bool hlos_vm
 	uint64_t bf[1];
 } vcpu_option_flags_t;
@@ -4663,15 +4665,16 @@ vcpu_run_poweroff_flags_atomic_difference(_Atomic vcpu_run_poweroff_flags_t *b1,
 					  memory_order order);
 
 typedef enum vcpu_run_state_e {
-	VCPU_RUN_STATE_READY		     = 0,
-	VCPU_RUN_STATE_EXPECTS_WAKEUP	     = 1,
-	VCPU_RUN_STATE_POWERED_OFF	     = 2,
-	VCPU_RUN_STATE_BLOCKED		     = 3,
-	VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ  = 4,
-	VCPU_RUN_STATE_ADDRSPACE_VMMIO_WRITE = 5,
-	VCPU_RUN_STATE_FAULT		     = 6,
-	VCPU_RUN_STATE_ADDRSPACE_PAGE_FAULT  = 7,
-	VCPU_RUN_STATE_PSCI_SYSTEM_RESET     = 256
+	VCPU_RUN_STATE_READY			 = 0,
+	VCPU_RUN_STATE_EXPECTS_WAKEUP		 = 1,
+	VCPU_RUN_STATE_POWERED_OFF		 = 2,
+	VCPU_RUN_STATE_BLOCKED			 = 3,
+	VCPU_RUN_STATE_ADDRSPACE_VMMIO_READ	 = 4,
+	VCPU_RUN_STATE_ADDRSPACE_VMMIO_WRITE	 = 5,
+	VCPU_RUN_STATE_FAULT			 = 6,
+	VCPU_RUN_STATE_ADDRSPACE_PAGE_FAULT	 = 7,
+	VCPU_RUN_STATE_EXPECTS_WAKEUP_OR_TIMEOUT = 8,
+	VCPU_RUN_STATE_PSCI_SYSTEM_RESET	 = 256
 } vcpu_run_state_t;
 
 #define VCPU_RUN_STATE__MAX VCPU_RUN_STATE_PSCI_SYSTEM_RESET
@@ -7342,6 +7345,9 @@ hyp_api_flags1_get_vgic_ext_spis(const hyp_api_flags1_t *bit_field);
 bool
 hyp_api_flags1_get_vgic_ext_ppis(const hyp_api_flags1_t *bit_field);
 
+bool
+hyp_api_flags1_get_vcpu_run_no_timer_wakeup(const hyp_api_flags1_t *bit_field);
+
 uint64_t
 hyp_api_flags2_get_res0_0(const hyp_api_flags2_t *bit_field);
 
@@ -8386,6 +8392,19 @@ vcpu_option_flags_get_sdei_allowed(const vcpu_option_flags_t *bit_field);
 void
 vcpu_option_flags_copy_sdei_allowed(vcpu_option_flags_t	      *bit_field_dst,
 				    const vcpu_option_flags_t *bit_field_src);
+
+void
+vcpu_option_flags_set_vcpu_run_no_timer_wakeup(vcpu_option_flags_t *bit_field,
+					       bool		    val);
+
+bool
+vcpu_option_flags_get_vcpu_run_no_timer_wakeup(
+	const vcpu_option_flags_t *bit_field);
+
+void
+vcpu_option_flags_copy_vcpu_run_no_timer_wakeup(
+	vcpu_option_flags_t	  *bit_field_dst,
+	const vcpu_option_flags_t *bit_field_src);
 
 void
 vcpu_option_flags_set_hlos_vm(vcpu_option_flags_t *bit_field, bool val);
