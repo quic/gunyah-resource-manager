@@ -1224,8 +1224,8 @@ memparcel_handle_accept(vmid_t vmid, uint16_t seq_num, uint8_t *buf, size_t len)
 	vmid_t map_vmid = *(uint16_t *)((uintptr_t)buf + map_vmid_offset);
 
 	if (sgl_entries == 0U) {
-		resp_size = sizeof(memparcel_accept_sgl_resp_t) +
-			    (sizeof(sgl_entry_t) * MAX_LIST_ENTRIES);
+		resp_size      = sizeof(memparcel_accept_sgl_resp_t) +
+				 (sizeof(sgl_entry_t) * MAX_LIST_ENTRIES);
 		char *resp_ptr = calloc(1U, resp_size);
 		if (resp_ptr == NULL) {
 			err = RM_ERROR_RM_NOMEM;
@@ -1253,7 +1253,7 @@ out:
 		resp->err	  = RM_OK;
 		resp->sgl_entries = (uint16_t)resp_entries;
 		resp_size	  = sizeof(memparcel_accept_sgl_resp_t) +
-			    (sizeof(sgl_entry_t) * resp_entries);
+				    (sizeof(sgl_entry_t) * resp_entries);
 
 		err = rm_rpc_fifo_reply(vmid, MEM_ACCEPT, seq_num, resp,
 					resp_size);
@@ -1311,8 +1311,8 @@ memparcel_accept_rm_donation(mem_handle_t handle, uint8_t rights,
 
 	acl_entry_t acl_accept[1U] = { { .vmid = VMID_RM, .rights = rights } };
 	uint8_t	    accept_flags   = MEM_ACCEPT_FLAG_DONE |
-			       MEM_ACCEPT_FLAG_MAP_CONTIGUOUS |
-			       MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
+				     MEM_ACCEPT_FLAG_MAP_CONTIGUOUS |
+				     MEM_ACCEPT_FLAG_VALIDATE_ACL_ATTR;
 
 	sgl_entry_t(*resp_sgl)[MAX_LIST_ENTRIES] =
 		calloc(MAX_LIST_ENTRIES, sizeof(sgl_entry_t));
@@ -1454,9 +1454,9 @@ alloc_as_range(vm_t *vm, uint8_t mem_type, vmaddr_t ipa, paddr_t phys,
 	vm_memuse_t memuse = (mem_type == MEM_TYPE_IO) ? VM_MEMUSE_IO
 						       : VM_MEMUSE_NORMAL;
 	size_t	    alignment =
-		     ((ipa == INVALID_ADDRESS) && (size >= LARGE_PAGE_SIZE))
-			     ? LARGE_PAGE_SIZE
-			     : PAGE_SIZE;
+		((ipa == INVALID_ADDRESS) && (size >= LARGE_PAGE_SIZE))
+			? LARGE_PAGE_SIZE
+			: PAGE_SIZE;
 
 	return vm_address_range_alloc(vm, memuse, ipa, phys, size, alignment);
 }

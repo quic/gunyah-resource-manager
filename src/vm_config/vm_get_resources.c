@@ -1,4 +1,4 @@
-// © 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -56,7 +56,7 @@ vm_get_hyp_resources(vmid_t client_id, uint32_t msg_id, uint16_t seq_num,
 
 	size_t resp_size = (2U * sizeof(uint32_t)) +
 			   (resource_entries * sizeof(rm_hyp_resource_resp_t));
-	char *resp = calloc(1, resp_size);
+	char  *resp	 = calloc(1, resp_size);
 	if (resp == NULL) {
 		ret = RM_ERROR_NOMEM;
 		goto out_deinit;

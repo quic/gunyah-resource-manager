@@ -1837,7 +1837,7 @@ parse_cpus(vm_config_parser_data_t *vd, const void *fdt, int32_t node_ofs,
 	for (index_t i = 0U; i < util_array_size(vd->vcpu_addr_shifts); i++) {
 		count_t	 aff_shift = aff_shifts[i];
 		uint64_t aff_mask  = (vd->vcpu_addr_mask >> aff_shift) &
-				    util_mask(8U);
+				     util_mask(8U);
 		if (aff_mask == 0U) {
 			// No significant bits in this affinity field
 			vd->vcpu_addr_shifts[i] = next_addr_bit;

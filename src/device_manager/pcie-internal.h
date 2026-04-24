@@ -14,7 +14,7 @@
 #define PCIE_BDF_MASK	    0xFFFFU
 #define PCIE_BDF_BUS(bdf)   (((bdf) >> PCIE_BDF_BUS_SHIFT) & PCIE_BDF_BUS_MASK)
 #define PCIE_BDF_DEV(bdf)   (((bdf) >> PCIE_BDF_DEV_SHIFT) & PCIE_BDF_DEV_MASK)
-#define PCIE_BDF_FUNC(bdf)  (((bdf) >> PCIE_BDF_FUNC_SHIFT) & PCIE_BDF_FUNC_MASK)
+#define PCIE_BDF_FUNC(bdf) (((bdf) >> PCIE_BDF_FUNC_SHIFT) & PCIE_BDF_FUNC_MASK)
 
 RM_PADDED(typedef struct {
 	uint16_t bdf; // bus[15:8], device[7:3], function[2:0]

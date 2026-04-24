@@ -201,10 +201,10 @@ vm_passthrough_config_unmap_ioranges(const rm_env_data_t *env_data)
 
 			if (is_mapped && !is_overlap_hlos && !non_exclusive) {
 				size_t offset = io_range.address;
-				err	      = vm_memory_unmap_partial(hlos_vm,
-									VM_MEMUSE_IO,
-									device_me, ipa,
-									offset, size);
+				err = vm_memory_unmap_partial(hlos_vm,
+							      VM_MEMUSE_IO,
+							      device_me, ipa,
+							      offset, size);
 				if (err != OK) {
 					(void)printf(
 						"vm_passthrough_config: Unmapping of %lx %lx failed %d\n",

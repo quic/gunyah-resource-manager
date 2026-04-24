@@ -61,7 +61,7 @@ vm_mgnt_arch_set_cleanup_type(vm_t *vm, const uint32_t *extra_reason)
 		assert(extra_reason != NULL);
 		uint32_t reset_type = extra_reason[0];
 		uint64_t cookie	    = ((uint64_t)extra_reason[2] << 32) |
-				  extra_reason[1];
+				      extra_reason[1];
 		vm->clean_shutdown =
 			platform_psci_get_vm_clean_shutdown(reset_type, cookie);
 		break;

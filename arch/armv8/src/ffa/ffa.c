@@ -210,9 +210,9 @@ fill_memory_access_desc(ffa_memory_access_desc_t *desc)
 	desc->permission.flags	   = 0U;
 	desc->composite_mrd_offset = sizeof(ffa_memory_transaction_desc_t) +
 				     sizeof(ffa_memory_access_desc_t);
-	desc->impl_def[0] = 0UL;
-	desc->impl_def[1] = 0UL;
-	desc->reserved	  = 0UL;
+	desc->impl_def[0]	   = 0UL;
+	desc->impl_def[1]	   = 0UL;
+	desc->reserved		   = 0UL;
 }
 
 static void
@@ -297,7 +297,7 @@ ffa_mem_share(void *addr, size_t size)
 			     sizeof(ffa_memory_access_desc_t) +
 			     sizeof(ffa_composite_memory_region_desc_t) +
 			     sizeof(ffa_constituent_memory_region_desc_t);
-	uint32_t frag_len = total_len;
+	uint32_t frag_len  = total_len;
 
 	params[0] = (uint64_t)total_len;
 	params[1] = (uint64_t)frag_len;

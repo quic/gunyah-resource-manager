@@ -487,11 +487,11 @@ get_vdev_msg_queue_desc(vmid_t self, vmid_t vmid, const vdevice_node_t *node,
 	struct vdevice_msg_queue *mq = node->config.msg_queue;
 	if (mq->peer == vmid) {
 		// Msgqueue from self vdevice list
-		item.resource_type	= (mq->tx) ? (uint8_t)RSC_MSG_QUEUE_SEND
-						   : (uint8_t)RSC_MSG_QUEUE_RECV;
-		item.resource_label	= mq->label;
-		item.resource_capid_low = (uint32_t)(mq->vm_cap & 0xffffffffU);
-		item.resource_capid_high  = (uint32_t)(mq->vm_cap >> 32);
+		item.resource_type  = (mq->tx) ? (uint8_t)RSC_MSG_QUEUE_SEND
+					       : (uint8_t)RSC_MSG_QUEUE_RECV;
+		item.resource_label = mq->label;
+		item.resource_capid_low	 = (uint32_t)(mq->vm_cap & 0xffffffffU);
+		item.resource_capid_high = (uint32_t)(mq->vm_cap >> 32);
 		item.resource_virq_number = virq_get_number(mq->vm_virq);
 		ret			  = vector_push_back(descs, item);
 		if (ret != OK) {
@@ -2136,7 +2136,7 @@ vm_config_add_rm_rpc(vm_config_t *vmcfg, rm_rpc_data_t *data, cap_id_t rx,
 			 rm_rx_virq = VIRQ_DATA_INVALID;
 	interrupt_data_t vm_tx_virq = VIRQ_DATA_INVALID,
 			 vm_rx_virq = VIRQ_DATA_INVALID;
-	error_t ret		    = OK;
+	error_t		 ret	    = OK;
 
 	assert(vmcfg != NULL);
 	assert(vmcfg->vm != NULL);
@@ -3091,10 +3091,10 @@ handle_msgqueue_pair(vm_config_t *vmcfg, vm_config_parser_data_t *data)
 
 		assert(d != NULL);
 
-		cap_id_t rm_tx_cap			= CSPACE_CAP_INVALID,
-			 rm_rx_cap			= CSPACE_CAP_INVALID;
-		struct vdevice_msg_queue_pair *peer_cfg = NULL;
-		vm_t			      *peer_vm	= NULL;
+		cap_id_t		       rm_tx_cap = CSPACE_CAP_INVALID,
+					       rm_rx_cap = CSPACE_CAP_INVALID;
+		struct vdevice_msg_queue_pair *peer_cfg	 = NULL;
+		vm_t			      *peer_vm	 = NULL;
 
 		// handles arguments here if possible
 		if (d->peer_id != NULL) {

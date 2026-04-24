@@ -987,8 +987,8 @@ dto_add_pci_irqs(const vm_config_t *vm_cfg, const struct vdevice_pci *cfg,
 		// are tied together
 		uint32_t interrupt_map_mask[4] = { 0xf800, 0x0, 0x0, 0x0 };
 		e			       = dto_property_add_u32array(
-			     dto, "interrupt-map-mask", interrupt_map_mask,
-			     (count_t)util_array_size(interrupt_map_mask));
+			dto, "interrupt-map-mask", interrupt_map_mask,
+			(count_t)util_array_size(interrupt_map_mask));
 		if (e != OK) {
 			goto err_free_map;
 		}

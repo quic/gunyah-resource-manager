@@ -1796,11 +1796,11 @@ vm_mgnt_handle_set_time_base(vmid_t client_id, uint32_t msg_id,
 			goto out;
 		}
 
-		uint32_t *buf32	    = (uint32_t *)buf;
-		uint64_t  time_base = ((uint64_t)buf32[2] << 32) |
-				     (uint64_t)buf32[1];
-		uint64_t sys_timer_ref = ((uint64_t)buf32[4] << 32) |
-					 (uint64_t)buf32[3];
+		uint32_t *buf32		= (uint32_t *)buf;
+		uint64_t  time_base	= ((uint64_t)buf32[2] << 32) |
+					  (uint64_t)buf32[1];
+		uint64_t  sys_timer_ref = ((uint64_t)buf32[4] << 32) |
+					  (uint64_t)buf32[3];
 
 		const error_t hvc_err = vm_config_vrtc_set_time_base(
 			vm, time_base, sys_timer_ref);

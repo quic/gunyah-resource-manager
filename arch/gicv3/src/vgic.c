@@ -75,7 +75,7 @@ vgic_init(const rm_env_data_t *env_data)
 	assert(gits_count == env_data->gic_xlate_me_count);
 	assert(gits_count <= util_array_size(env_data->gic_xlate_me));
 
-	hlos_vgic_itss = vector_init(vgic_its_t, gits_count, 1u);
+	hlos_vgic_itss = vector_init(vgic_its_t, gits_count, 1U);
 	assert(hlos_vgic_itss != NULL);
 
 	index_t range = 0U, range_index = 0U;
@@ -86,8 +86,8 @@ vgic_init(const rm_env_data_t *env_data)
 		vgic_its_t its = {
 			.msi_source_cap = env_data->its_caps[i],
 			.phys_base	= gits_ranges[range].base +
-				     (range_index * env_data->gits_stride),
-			.xlate_me = env_data->gic_xlate_me[i],
+					  (range_index * env_data->gits_stride),
+			.xlate_me	= env_data->gic_xlate_me[i],
 		};
 
 		if (its.msi_source_cap != CSPACE_CAP_INVALID) {

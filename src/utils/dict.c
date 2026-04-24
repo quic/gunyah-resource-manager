@@ -1,4 +1,4 @@
-// © 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright © Qualcomm Technologies, Inc. and/or its subsidiaries.
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
@@ -125,7 +125,7 @@ dict_get(dict_t *dict, dict_key_t key)
 
 		index_t level_index = (key_index >> shift) &
 				      (TABLE_ENTRIES - 1U);
-		void *entry = tables[level_index];
+		void   *entry	    = tables[level_index];
 
 		if ((depth == 0U) || (entry == NULL)) {
 			ret = entry;
@@ -299,7 +299,7 @@ dict_add(dict_t *dict, dict_key_t key, void *data)
 					shift	    = shift + TABLE_SHIFT;
 					level_index = (key_index >> shift) &
 						      (TABLE_ENTRIES - 1U);
-					tables = stack_tables[depth - 1U];
+					tables	    = stack_tables[depth - 1U];
 					dict_table_t *table =
 						tables[level_index];
 
@@ -376,9 +376,9 @@ dict_remove(dict_t *dict, dict_key_t key, void **data)
 
 			depth = depth + 1U;
 			while (depth < dict->depth) {
-				shift	    = shift + TABLE_SHIFT;
-				level_index = (key_index >> shift) &
-					      (TABLE_ENTRIES - 1U);
+				shift		    = shift + TABLE_SHIFT;
+				level_index	    = (key_index >> shift) &
+						      (TABLE_ENTRIES - 1U);
 				tables		    = stack_tables[depth - 1U];
 				dict_table_t *table = tables[level_index];
 
@@ -476,7 +476,7 @@ dict_iterate(dict_t *dict, dict_iter_callback_t fn, void *arg)
 				shift	    = shift + TABLE_SHIFT;
 				level_index = (key_index >> shift) &
 					      (TABLE_ENTRIES - 1U);
-				tables = stack_tables[depth - 1U];
+				tables	    = stack_tables[depth - 1U];
 
 				table = tables[level_index];
 				assert(table != NULL);
@@ -556,7 +556,7 @@ dict_deinit(dict_t **dict_p)
 				shift	    = shift + TABLE_SHIFT;
 				level_index = (key_index >> shift) &
 					      (TABLE_ENTRIES - 1U);
-				tables = stack_tables[depth - 1U];
+				tables	    = stack_tables[depth - 1U];
 
 				table = tables[level_index];
 				assert(table != NULL);

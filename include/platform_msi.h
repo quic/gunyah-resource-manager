@@ -8,7 +8,7 @@
 typedef uint32_t platform_msi_device_id_t;
 typedef uint32_t platform_msi_event_id_t;
 
-#define PLATFORM_MSI_DEVICE_ID_INVALID 0xffffffffu
+#define PLATFORM_MSI_DEVICE_ID_INVALID 0xffffffffU
 
 typedef struct platform_msi_device {
 	platform_msi_device_id_t device_id;

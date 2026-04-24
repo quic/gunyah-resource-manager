@@ -3260,7 +3260,7 @@ process_cfgcpio(vm_t *vm)
 
 	size_t cfgcpio_size_align = util_balign_up(cfgcpio_size, PAGE_SIZE);
 	uintptr_result_t map_ret  = map_cfgcpio(
-		 cfgcpio_offset, cfgcpio_size_align, mp_handle, ipa_size);
+		cfgcpio_offset, cfgcpio_size_align, mp_handle, ipa_size);
 	ret = map_ret.e;
 	if (ret != OK) {
 		(void)printf("map_cfgcpio: ret %d\n", ret);
